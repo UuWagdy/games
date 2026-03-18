@@ -1,0 +1,14 @@
+import '../entities/question.dart';
+import '../entities/category.dart';
+
+abstract class QuestionRepository {
+  Future<List<Category>> getCategories();
+  Future<int> addCategory(String name);
+  Future<void> updateCategory(Category category);
+  Future<void> deleteCategory(int id);
+
+  Future<List<Question>> getQuestions(int? categoryId);
+  Future<int> addQuestion(Question question);
+  Future<void> updateQuestion(Question question);
+  Future<void> deleteQuestion(int id);
+}
