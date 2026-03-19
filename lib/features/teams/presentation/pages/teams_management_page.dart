@@ -10,6 +10,13 @@ class TeamsManagementPage extends ConsumerWidget {
     final teamsAsync = ref.watch(teamsListProvider);
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('إدارة الفرق', style: TextStyle(fontWeight: FontWeight.bold)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: teamsAsync.when(
         data: (teams) => teams.isEmpty
           ? const Center(child: Text('لا توجد فرق مضافة'))

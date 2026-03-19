@@ -12,6 +12,9 @@ import 'dart:ui';
 import 'dart:async';
 
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+import 'package:games/features/teams/presentation/pages/teams_management_page.dart';
+
+import 'package:games/features/settings/presentation/pages/settings_page.dart';
 
 class WheelGamePage extends ConsumerStatefulWidget {
   const WheelGamePage({super.key});
@@ -316,12 +319,27 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with SingleTicker
     final teamsAsync = ref.watch(teamsListProvider);
     final currentIndex = ref.watch(currentTeamIndexProvider);
     final segmentsAsync = ref.watch(wheelSegmentsProvider);
-    final settingsAsync = ref.watch(generalSettingsProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('عجلة الحظ', style: TextStyle(fontWeight: FontWeight.w900)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.group_add, color: Colors.blueAccent),
+            tooltip: 'إدارة الفرق',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TeamsManagementPage()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.blueGrey),
+            tooltip: 'إعدادات العجلة',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsPage(initialIndex: 3)),
+            ),
+          ),
           IconButton(icon: const Icon(Icons.restart_alt, color: Colors.red), onPressed: _confirmResetScores),
         ],
       ),
@@ -342,12 +360,10 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with SingleTicker
             
             return Row(
               children: [
-                // MAIN AREA: Turn + Wheel + Button
                 Expanded(
                   flex: 3,
                   child: Column(
                     children: [
-                      // TOP: Turn Indicator (Smaller, No Border)
                       Container(
                         margin: const EdgeInsets.only(top: 10, bottom: 5),
                         padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 8),
@@ -367,8 +383,6 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with SingleTicker
                           ],
                         ),
                       ),
-                      
-                      // CENTER: BIG WHEEL
                       Expanded(
                         child: segmentsAsync.when(
                           data: (segments) => Center(
@@ -388,8 +402,6 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with SingleTicker
                           error: (e, s) => Text('Error: $e'),
                         ),
                       ),
-                      
-                      // BOTTOM: SMALL SPIN BUTTON (Right Aligned in Bottom Bar)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 30, right: 40),
                         child: Align(
@@ -423,8 +435,6 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with SingleTicker
                     ],
                   ),
                 ),
-                
-                // RIGHT SIDEBAR: Scrollable teams list
                 Container(
                   width: 250,
                   color: Colors.white12,

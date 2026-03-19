@@ -8,6 +8,8 @@ import '../../../../teams/presentation/providers/team_providers.dart';
 import '../widgets/three_d_dice.dart';
 import '../widgets/player_piece.dart';
 import '../../../../questions/domain/entities/question.dart';
+import '../../../../teams/presentation/pages/teams_management_page.dart';
+import '../../../../settings/presentation/pages/settings_page.dart';
 import 'dart:math' as math;
 import 'dart:async';
 
@@ -65,6 +67,14 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     final engine = ref.read(gameEngineProvider.notifier);
 
     if (gameState.board.isEmpty) return _buildPreparationScreen(context, ref);
+
+    // Sync players if teams list changes (newly added teams)
+    ref.listen(teamsListProvider, (prev, next) {
+      next.whenData((teams) {
+        final names = teams.map((t) => t.name).toList();
+        ref.read(gameEngineProvider.notifier).syncPlayers(names);
+      });
+    });
 
     // Listen for landing — use Timer to guarantee clean event loop
     ref.listen<Station?>(
@@ -654,17 +664,39 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              color: Colors.white70,
-              size: 20,
-            ),
-            onPressed: () => Navigator.pop(context),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white70,
+                  size: 20,
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+              IconButton(
+                icon: const Icon(Icons.group_add, color: Colors.blueAccent, size: 22),
+                tooltip: 'إدارة الفرق',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TeamsManagementPage()),
+                ),
+              ),
+            ],
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              IconButton(
+                icon: const Icon(Icons.settings, color: Colors.white70, size: 22),
+                tooltip: 'الإعدادات',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+                ),
+              ),
+              const SizedBox(width: 8),
               _buildDynamicStat(
                 Icons.timer_outlined,
                 _timeElapsedStr,
@@ -852,7 +884,9 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
               ),
               const SizedBox(width: 15),
               // Dice — IgnorePointer so rotating faces don't trigger MouseTracker
-              IgnorePointer(
+              // Dice — Interactive roll
+              GestureDetector(
+                onTap: (!isLock && !hasPending) ? () => engine.rollDice() : null,
                 child: ThreeDDice(
                   value: gameState.currentDiceValue,
                   rollCounter: gameState.rollCounter,

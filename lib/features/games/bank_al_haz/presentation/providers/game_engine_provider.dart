@@ -108,6 +108,38 @@ class GameEngine extends Notifier<GameState> {
     );
   }
 
+  void syncPlayers(List<String> currentNames) {
+    if (state.players.isEmpty) return;
+    
+    final existingPlayerNames = state.players.map((p) => p.name).toSet();
+    final newPlayersToAdd = <BankAlHazPlayer>[];
+    
+    // Initial money from first player as fallback
+    double initialMoney = state.players.isNotEmpty ? state.players[0].money : 1000;
+    
+    int maxId = 0;
+    for (var p in state.players) {
+       if (p.id > maxId) maxId = p.id;
+    }
+    
+    for (var name in currentNames) {
+      if (!existingPlayerNames.contains(name)) {
+        maxId++;
+        newPlayersToAdd.add(BankAlHazPlayer(
+          id: maxId,
+          name: name,
+          money: initialMoney,
+          currentPosition: 0,
+        ));
+      }
+    }
+    
+    if (newPlayersToAdd.isNotEmpty) {
+      state = state.copyWith(players: [...state.players, ...newPlayersToAdd]);
+    }
+  }
+
+
   Future<void> rollDice() async {
     if (state.isGameOver || state.isMovingPlayer || state.isRollingDice || state.pendingLandingStation != null || state.isEndingTurn) return;
 

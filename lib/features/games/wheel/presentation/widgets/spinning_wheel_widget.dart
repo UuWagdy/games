@@ -19,8 +19,9 @@ class SpinningWheelWidget extends StatefulWidget {
 class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _angleAnimation;
-  int _lastSelected = 0;
   bool _isSpinning = false;
+  double _manualAngle = 0;
+  double _dragStartAngle = 0;
 
   @override
   void initState() {
@@ -30,14 +31,23 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
       duration: const Duration(seconds: 5),
     );
 
-    _angleAnimation = Tween<double>(begin: 0, end: 0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCirc),
-    );
+    _angleAnimation = AlwaysStoppedAnimation(0);
 
     _animationController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        setState(() => _isSpinning = false);
-        widget.onResult(widget.segments[_lastSelected]);
+        setState(() {
+          _isSpinning = false;
+          _manualAngle = _angleAnimation.value;
+        });
+        
+        final double finalAngle = _angleAnimation.value;
+        final double sweep = (2 * math.pi) / widget.segments.length;
+        
+        double normalizedTop = (1.5 * math.pi - finalAngle) % (2 * math.pi);
+        if (normalizedTop < 0) normalizedTop += 2 * math.pi;
+        
+        int indexAtTop = (normalizedTop / sweep).floor() % widget.segments.length;
+        widget.onResult(widget.segments[indexAtTop]);
       }
     });
   }
@@ -55,18 +65,17 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
       _isSpinning = true;
       _animationController.reset();
 
-      // Calculate target angle
       final double totalRevolutions = 5 + math.Random().nextDouble() * 3; 
-      _lastSelected = math.Random().nextInt(widget.segments.length);
+      final int randomIndex = math.Random().nextInt(widget.segments.length);
       final double segmentAngle = (2 * math.pi) / widget.segments.length;
       
-      // Target angle relative to the top pointer
-      final double targetAngleForSegment = (2 * math.pi) - (_lastSelected * segmentAngle + segmentAngle / 2);
+      final double targetAngle = (1.5 * math.pi) - (randomIndex * segmentAngle + segmentAngle / 2);
 
-      final double endAngle = (totalRevolutions * 2 * math.pi) + targetAngleForSegment;
+      final double startAngle = _manualAngle;
+      final double endAngle = startAngle + (totalRevolutions * 2 * math.pi) + (targetAngle - (startAngle % (2 * math.pi)));
 
       _angleAnimation = Tween<double>(
-        begin: _angleAnimation.value % (2 * math.pi),
+        begin: startAngle,
         end: endAngle,
       ).animate(
         CurvedAnimation(parent: _animationController, curve: Curves.easeOutCirc),
@@ -87,51 +96,74 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
         final radius = math.min(constraints.maxWidth, constraints.maxHeight) * 0.49;
         final center = Offset(constraints.maxWidth / 2, constraints.maxHeight / 2);
 
-        return AnimatedBuilder(
-          animation: _angleAnimation,
-          builder: (context, child) {
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                CustomPaint(
-                  size: Size(radius * 2, radius * 2),
-                  painter: _WheelPainter(
-                    segments: widget.segments,
-                    angle: _angleAnimation.value,
-                  ),
-                ),
-                // Center Pin
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 15,
-                      ),
-                    ],
-                    border: Border.all(color: Colors.amber, width: 3),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Image.asset('assets/images/logo.png'),
-                  ),
-                ),
-                // Pointer
-                Positioned(
-                  top: (constraints.maxHeight / 2) - radius - 20,
-                  child: const Icon(
-                    Icons.arrow_drop_down,
-                    size: 90,
-                    color: Colors.amber,
-                  ),
-                ),
-              ],
-            );
+        return GestureDetector(
+          onPanDown: (details) {
+            if (_isSpinning) return;
+            _animationController.stop();
+            final pos = details.localPosition - center;
+            _dragStartAngle = math.atan2(pos.dy, pos.dx) - _manualAngle;
           },
+          onPanUpdate: (details) {
+            if (_isSpinning) return;
+            final pos = details.localPosition - center;
+            setState(() {
+              _manualAngle = math.atan2(pos.dy, pos.dx) - _dragStartAngle;
+              _angleAnimation = AlwaysStoppedAnimation(_manualAngle);
+            });
+          },
+          onPanEnd: (details) {
+            if (_isSpinning) return;
+            // If flicked fast enough, start auto spin
+            if (details.velocity.pixelsPerSecond.distance > 500) {
+              spin();
+            }
+          },
+          child: AnimatedBuilder(
+            animation: _angleAnimation,
+            builder: (context, child) {
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  CustomPaint(
+                    size: Size(radius * 2, radius * 2),
+                    painter: _WheelPainter(
+                      segments: widget.segments,
+                      angle: _angleAnimation.value,
+                    ),
+                  ),
+                  // Center Pin
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 15,
+                        ),
+                      ],
+                      border: Border.all(color: Colors.amber, width: 3),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Image.asset('assets/images/logo.png', errorBuilder: (_, __, ___) => const Icon(Icons.stars, color: Colors.amber)),
+                    ),
+                  ),
+                  // Pointer arrow
+                  Positioned(
+                    top: (constraints.maxHeight / 2) - radius - 20,
+                    child: const Icon(
+                      Icons.arrow_drop_down,
+                      size: 90,
+                      color: Colors.amber,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         );
       },
     );
@@ -174,7 +206,6 @@ class _WheelPainter extends CustomPainter {
         paint,
       );
 
-      // Draw text with upright logic
       canvas.save();
       canvas.translate(center.dx, center.dy);
       
@@ -182,7 +213,6 @@ class _WheelPainter extends CustomPainter {
       double normalizedAngle = rotationAngle % (2 * math.pi);
       if (normalizedAngle < 0) normalizedAngle += 2 * math.pi;
       
-      // Flip text if it's on bottom/left side to keep it upright
       bool shouldFlip = normalizedAngle > math.pi / 2 && normalizedAngle < 3 * math.pi / 2;
 
       canvas.rotate(rotationAngle);
@@ -192,7 +222,7 @@ class _WheelPainter extends CustomPainter {
           text: segments[i].text,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 55, // BIG FONT 55
+            fontSize: 55, 
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -203,8 +233,8 @@ class _WheelPainter extends CustomPainter {
       textPainter.layout(maxWidth: radius * 0.85);
       
       if (shouldFlip) {
-        canvas.translate(radius * 0.55, 0); // Position text
-        canvas.rotate(math.pi); // Flip 180 degrees
+        canvas.translate(radius * 0.55, 0); 
+        canvas.rotate(math.pi); 
         textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
       } else {
         textPainter.paint(
@@ -216,7 +246,6 @@ class _WheelPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // Outer thick gold border
     final borderPaint = Paint()
       ..color = Colors.amber
       ..style = PaintingStyle.stroke

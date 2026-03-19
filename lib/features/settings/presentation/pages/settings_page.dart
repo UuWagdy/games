@@ -9,12 +9,14 @@ import 'package:games/features/settings/presentation/pages/general_settings_page
 import 'package:games/features/settings/presentation/pages/about_page.dart';
 
 class SettingsPage extends ConsumerWidget {
-  const SettingsPage({super.key});
+  final int initialIndex;
+  const SettingsPage({super.key, this.initialIndex = 0});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
       length: 5,
+      initialIndex: initialIndex,
       child: Scaffold(
         appBar: AppBar(
           leading: Navigator.of(context).canPop()

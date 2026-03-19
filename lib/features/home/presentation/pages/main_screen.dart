@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../features/games/bank_al_haz/presentation/pages/bank_al_haz_settings_page.dart';
 import '../../../../features/games/wheel/presentation/pages/wheel_game_page.dart';
+import '../../../../features/games/penalty_shootout/presentation/pages/penalty_shootout_page.dart';
 import '../../../../features/settings/presentation/pages/settings_page.dart';
 
 class MainScreen extends StatelessWidget {
@@ -74,6 +75,16 @@ class MainScreen extends StatelessWidget {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const BankAlHazSettingsPage()),
+                  ),
+                ),
+                _GameCard(
+                  icon: Icons.sports_soccer,
+                  title: 'ضربات الجزاء',
+                  subtitle: 'الجولة الحاسمة',
+                  gradient: const [Color(0xFF2D6A4F), Color(0xFF52B788)],
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PenaltyShootoutPage()),
                   ),
                 ),
               ],
