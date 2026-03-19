@@ -74,7 +74,7 @@ final class TeamsListProvider
   TeamsList create() => TeamsList();
 }
 
-String _$teamsListHash() => r'205aca77a4ba80e7afb495a24de7321f04099afa';
+String _$teamsListHash() => r'9688168d29e5a36f01c42de7b1c322b23fcfadbd';
 
 abstract class _$TeamsList extends $AsyncNotifier<List<Team>> {
   FutureOr<List<Team>> build();
@@ -126,7 +126,7 @@ final class CurrentTeamIndexProvider
   }
 }
 
-String _$currentTeamIndexHash() => r'fed93764097f14191ae85a058ef191c3a56746ef';
+String _$currentTeamIndexHash() => r'25e72513a0fb47967bbbd27630ddbe7c107f0b0b';
 
 abstract class _$CurrentTeamIndex extends $Notifier<int> {
   int build();
@@ -144,4 +144,79 @@ abstract class _$CurrentTeamIndex extends $Notifier<int> {
             >;
     element.handleCreate(ref, build);
   }
+}
+
+@ProviderFor(scoreLogs)
+final scoreLogsProvider = ScoreLogsFamily._();
+
+final class ScoreLogsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<ScoreLog>>,
+          List<ScoreLog>,
+          FutureOr<List<ScoreLog>>
+        >
+    with $FutureModifier<List<ScoreLog>>, $FutureProvider<List<ScoreLog>> {
+  ScoreLogsProvider._({
+    required ScoreLogsFamily super.from,
+    required int super.argument,
+  }) : super(
+         retry: null,
+         name: r'scoreLogsProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$scoreLogsHash();
+
+  @override
+  String toString() {
+    return r'scoreLogsProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  $FutureProviderElement<List<ScoreLog>> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<List<ScoreLog>> create(Ref ref) {
+    final argument = this.argument as int;
+    return scoreLogs(ref, argument);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is ScoreLogsProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$scoreLogsHash() => r'80c36f6d5b1712021e790567bd3cdbd3c5f87a26';
+
+final class ScoreLogsFamily extends $Family
+    with $FunctionalFamilyOverride<FutureOr<List<ScoreLog>>, int> {
+  ScoreLogsFamily._()
+    : super(
+        retry: null,
+        name: r'scoreLogsProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  ScoreLogsProvider call(int teamId) =>
+      ScoreLogsProvider._(argument: teamId, from: this);
+
+  @override
+  String toString() => r'scoreLogsProvider';
 }

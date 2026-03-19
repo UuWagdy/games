@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/wheel_providers.dart';
-import '../../../questions/presentation/providers/question_providers.dart';
+import 'package:games/features/questions/presentation/providers/question_providers.dart';
 import '../../domain/entities/wheel_segment.dart';
 
 class WheelSettingsPage extends ConsumerWidget {
@@ -41,74 +41,130 @@ class WheelSettingsPage extends ConsumerWidget {
   }
 
   void _showAddEditSegmentDialog(BuildContext context, WidgetRef ref, {WheelSegment? segment}) {
-    final textController = TextEditingController(text: segment?.text ?? '');
-    final pointsController = TextEditingController(text: segment?.points.toString() ?? '10');
-    bool isQuestion = segment?.isQuestion ?? false;
-    int? selectedCategoryId = segment?.categoryId;
-
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          final categoriesAsync = ref.watch(categoriesProvider);
+      builder: (context) => _SegmentDialog(segment: segment),
+    );
+  }
+}
 
-          return AlertDialog(
-            title: Text(segment == null ? 'إضافة قسم جديد' : 'تعديل القسم'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(controller: textController, decoration: const InputDecoration(labelText: 'النص (مثلاً: سؤال سهل)')),
-                  TextField(controller: pointsController, decoration: const InputDecoration(labelText: 'النقاط'), keyboardType: TextInputType.number),
-                  SwitchListTile(
-                    title: const Text('مرتبط بسؤال؟'),
-                    value: isQuestion,
-                    onChanged: (val) => setState(() => isQuestion = val),
-                  ),
-                  if (isQuestion)
-                    categoriesAsync.when(
-                      data: (categories) => DropdownButton<int>(
-                        isExpanded: true,
-                        value: selectedCategoryId,
-                        hint: const Text('اختر النوع'),
-                        items: categories
-                            .map((c) => DropdownMenuItem<int>(
-                                  value: c.id,
-                                  child: Text(c.name),
-                                ))
-                            .toList(),
-                        onChanged: (val) => setState(() => selectedCategoryId = val),
-                      ),
-                      loading: () => const CircularProgressIndicator(),
-                      error: (err, stack) => Text('خطأ في تحميل الأنواع: $err'),
-                    ),
-                ],
+class _SegmentDialog extends ConsumerStatefulWidget {
+  final WheelSegment? segment;
+  const _SegmentDialog({this.segment});
+
+  @override
+  ConsumerState<_SegmentDialog> createState() => _SegmentDialogState();
+}
+
+class _SegmentDialogState extends ConsumerState<_SegmentDialog> {
+  late TextEditingController _textController;
+  late TextEditingController _pointsController;
+  late bool _isQuestion;
+  List<int> _selectedCategoryIds = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.segment?.text ?? '');
+    _pointsController = TextEditingController(text: widget.segment?.points.toString() ?? '10');
+    _isQuestion = widget.segment?.isQuestion ?? false;
+    _selectedCategoryIds = List.from(widget.segment?.categoryIds ?? []);
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _pointsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categoriesAsync = ref.watch(categoriesProvider);
+
+    return AlertDialog(
+      title: Text(widget.segment == null ? 'إضافة قسم جديد' : 'تعديل القسم'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _textController,
+                decoration: const InputDecoration(labelText: 'النص (مثلاً: سؤال سهل)'),
               ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-              ElevatedButton(
-                onPressed: () {
-                  final newSegment = WheelSegment(
-                    id: segment?.id,
-                    text: textController.text,
-                    points: int.tryParse(pointsController.text) ?? 10,
-                    isQuestion: isQuestion,
-                    categoryId: isQuestion ? selectedCategoryId : null,
-                  );
-                  if (segment == null) {
-                    ref.read(wheelSegmentsProvider.notifier).addSegment(newSegment);
-                  } else {
-                    ref.read(wheelSegmentsProvider.notifier).updateSegment(newSegment);
-                  }
-                  Navigator.pop(context);
-                },
-                child: Text(segment == null ? 'إضافة' : 'حفظ'),
+              TextField(
+                controller: _pointsController,
+                decoration: const InputDecoration(labelText: 'النقاط'),
+                keyboardType: TextInputType.number,
               ),
+              SwitchListTile(
+                title: const Text('مرتبط بسؤال؟'),
+                value: _isQuestion,
+                onChanged: (val) => setState(() => _isQuestion = val),
+              ),
+              if (_isQuestion) ...[
+                const Divider(),
+                const Text('اختر الأنواع (للتحكم في الأسئلة العشوائية):', style: TextStyle(fontWeight: FontWeight.bold)),
+                categoriesAsync.when(
+                  data: (categories) {
+                    if (categories.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Text('لا توجد أنواع أسئلة. يرجى إضافتها من التبويب الثاني.', style: TextStyle(color: Colors.red)),
+                      );
+                    }
+                    return Column(
+                      children: categories.map((category) {
+                        return CheckboxListTile(
+                          title: Text(category.name),
+                          value: _selectedCategoryIds.contains(category.id),
+                          onChanged: (bool? checked) {
+                            setState(() {
+                              if (checked == true) {
+                                _selectedCategoryIds.add(category.id!);
+                              } else {
+                                _selectedCategoryIds.remove(category.id);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    );
+                  },
+                  loading: () => const Center(child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  )),
+                  error: (err, stack) => Text('خطأ في تحميل الأنواع: $err'),
+                ),
+              ],
             ],
-          );
-        },
+          ),
+        ),
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+        ElevatedButton(
+          onPressed: () {
+            final newSegment = WheelSegment(
+              id: widget.segment?.id,
+              text: _textController.text,
+              points: int.tryParse(_pointsController.text) ?? 10,
+              isQuestion: _isQuestion,
+              categoryIds: _isQuestion ? _selectedCategoryIds : [],
+            );
+            if (widget.segment == null) {
+              ref.read(wheelSegmentsProvider.notifier).addSegment(newSegment);
+            } else {
+              ref.read(wheelSegmentsProvider.notifier).updateSegment(newSegment);
+            }
+            Navigator.pop(context);
+          },
+          child: Text(widget.segment == null ? 'إضافة' : 'حفظ'),
+        ),
+      ],
     );
   }
 }

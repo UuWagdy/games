@@ -11,4 +11,6 @@ abstract class QuestionRepository {
   Future<int> addQuestion(Question question);
   Future<void> updateQuestion(Question question);
   Future<void> deleteQuestion(int id);
+  Future<void> setQuestionUsed(int id, bool used, {int? categoryId});
+  Future<void> resetAllQuestionsUsed();
 }

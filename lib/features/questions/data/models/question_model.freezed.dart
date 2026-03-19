@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$QuestionModel {
 
- int? get id; String get text; String get answer;@JsonKey(name: 'category_id') int get categoryId;
+ int? get id; String get text; String get answer;@JsonKey(name: 'category_id') int get categoryId;@JsonKey(name: 'is_used') bool get isUsed;
 /// Create a copy of QuestionModel
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $QuestionModelCopyWith<QuestionModel> get copyWith => _$QuestionModelCopyWithImp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is QuestionModel&&(identical(other.id, id) || other.id == id)&&(identical(other.text, text) || other.text == text)&&(identical(other.answer, answer) || other.answer == answer)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is QuestionModel&&(identical(other.id, id) || other.id == id)&&(identical(other.text, text) || other.text == text)&&(identical(other.answer, answer) || other.answer == answer)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.isUsed, isUsed) || other.isUsed == isUsed));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,text,answer,categoryId);
+int get hashCode => Object.hash(runtimeType,id,text,answer,categoryId,isUsed);
 
 @override
 String toString() {
-  return 'QuestionModel(id: $id, text: $text, answer: $answer, categoryId: $categoryId)';
+  return 'QuestionModel(id: $id, text: $text, answer: $answer, categoryId: $categoryId, isUsed: $isUsed)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $QuestionModelCopyWith<$Res>  {
   factory $QuestionModelCopyWith(QuestionModel value, $Res Function(QuestionModel) _then) = _$QuestionModelCopyWithImpl;
 @useResult
 $Res call({
- int? id, String text, String answer,@JsonKey(name: 'category_id') int categoryId
+ int? id, String text, String answer,@JsonKey(name: 'category_id') int categoryId,@JsonKey(name: 'is_used') bool isUsed
 });
 
 
@@ -65,13 +65,14 @@ class _$QuestionModelCopyWithImpl<$Res>
 
 /// Create a copy of QuestionModel
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? text = null,Object? answer = null,Object? categoryId = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? text = null,Object? answer = null,Object? categoryId = null,Object? isUsed = null,}) {
   return _then(_self.copyWith(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int?,text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
 as String,answer: null == answer ? _self.answer : answer // ignore: cast_nullable_to_non_nullable
 as String,categoryId: null == categoryId ? _self.categoryId : categoryId // ignore: cast_nullable_to_non_nullable
-as int,
+as int,isUsed: null == isUsed ? _self.isUsed : isUsed // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -156,10 +157,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int? id,  String text,  String answer, @JsonKey(name: 'category_id')  int categoryId)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int? id,  String text,  String answer, @JsonKey(name: 'category_id')  int categoryId, @JsonKey(name: 'is_used')  bool isUsed)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _QuestionModel() when $default != null:
-return $default(_that.id,_that.text,_that.answer,_that.categoryId);case _:
+return $default(_that.id,_that.text,_that.answer,_that.categoryId,_that.isUsed);case _:
   return orElse();
 
 }
@@ -177,10 +178,10 @@ return $default(_that.id,_that.text,_that.answer,_that.categoryId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int? id,  String text,  String answer, @JsonKey(name: 'category_id')  int categoryId)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int? id,  String text,  String answer, @JsonKey(name: 'category_id')  int categoryId, @JsonKey(name: 'is_used')  bool isUsed)  $default,) {final _that = this;
 switch (_that) {
 case _QuestionModel():
-return $default(_that.id,_that.text,_that.answer,_that.categoryId);case _:
+return $default(_that.id,_that.text,_that.answer,_that.categoryId,_that.isUsed);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -197,10 +198,10 @@ return $default(_that.id,_that.text,_that.answer,_that.categoryId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int? id,  String text,  String answer, @JsonKey(name: 'category_id')  int categoryId)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int? id,  String text,  String answer, @JsonKey(name: 'category_id')  int categoryId, @JsonKey(name: 'is_used')  bool isUsed)?  $default,) {final _that = this;
 switch (_that) {
 case _QuestionModel() when $default != null:
-return $default(_that.id,_that.text,_that.answer,_that.categoryId);case _:
+return $default(_that.id,_that.text,_that.answer,_that.categoryId,_that.isUsed);case _:
   return null;
 
 }
@@ -212,13 +213,14 @@ return $default(_that.id,_that.text,_that.answer,_that.categoryId);case _:
 @JsonSerializable()
 
 class _QuestionModel implements QuestionModel {
-  const _QuestionModel({this.id, required this.text, required this.answer, @JsonKey(name: 'category_id') required this.categoryId});
+  const _QuestionModel({this.id, required this.text, required this.answer, @JsonKey(name: 'category_id') required this.categoryId, @JsonKey(name: 'is_used') this.isUsed = false});
   factory _QuestionModel.fromJson(Map<String, dynamic> json) => _$QuestionModelFromJson(json);
 
 @override final  int? id;
 @override final  String text;
 @override final  String answer;
 @override@JsonKey(name: 'category_id') final  int categoryId;
+@override@JsonKey(name: 'is_used') final  bool isUsed;
 
 /// Create a copy of QuestionModel
 /// with the given fields replaced by the non-null parameter values.
@@ -233,16 +235,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _QuestionModel&&(identical(other.id, id) || other.id == id)&&(identical(other.text, text) || other.text == text)&&(identical(other.answer, answer) || other.answer == answer)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _QuestionModel&&(identical(other.id, id) || other.id == id)&&(identical(other.text, text) || other.text == text)&&(identical(other.answer, answer) || other.answer == answer)&&(identical(other.categoryId, categoryId) || other.categoryId == categoryId)&&(identical(other.isUsed, isUsed) || other.isUsed == isUsed));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,text,answer,categoryId);
+int get hashCode => Object.hash(runtimeType,id,text,answer,categoryId,isUsed);
 
 @override
 String toString() {
-  return 'QuestionModel(id: $id, text: $text, answer: $answer, categoryId: $categoryId)';
+  return 'QuestionModel(id: $id, text: $text, answer: $answer, categoryId: $categoryId, isUsed: $isUsed)';
 }
 
 
@@ -253,7 +255,7 @@ abstract mixin class _$QuestionModelCopyWith<$Res> implements $QuestionModelCopy
   factory _$QuestionModelCopyWith(_QuestionModel value, $Res Function(_QuestionModel) _then) = __$QuestionModelCopyWithImpl;
 @override @useResult
 $Res call({
- int? id, String text, String answer,@JsonKey(name: 'category_id') int categoryId
+ int? id, String text, String answer,@JsonKey(name: 'category_id') int categoryId,@JsonKey(name: 'is_used') bool isUsed
 });
 
 
@@ -270,13 +272,14 @@ class __$QuestionModelCopyWithImpl<$Res>
 
 /// Create a copy of QuestionModel
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? text = null,Object? answer = null,Object? categoryId = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? text = null,Object? answer = null,Object? categoryId = null,Object? isUsed = null,}) {
   return _then(_QuestionModel(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int?,text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
 as String,answer: null == answer ? _self.answer : answer // ignore: cast_nullable_to_non_nullable
 as String,categoryId: null == categoryId ? _self.categoryId : categoryId // ignore: cast_nullable_to_non_nullable
-as int,
+as int,isUsed: null == isUsed ? _self.isUsed : isUsed // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 

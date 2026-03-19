@@ -10,7 +10,7 @@ abstract class WheelSegmentModel with _$WheelSegmentModel {
     required String text,
     required int points,
     @Default(false) @JsonKey(name: 'is_question') bool isQuestion,
-    @JsonKey(name: 'category_id') int? categoryId,
+    @Default([]) @JsonKey(name: 'category_ids') List<int> categoryIds,
   }) = _WheelSegmentModel;
 
   factory WheelSegmentModel.fromJson(Map<String, dynamic> json) =>

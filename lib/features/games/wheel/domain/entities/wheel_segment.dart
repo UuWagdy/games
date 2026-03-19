@@ -3,13 +3,13 @@ class WheelSegment {
   final String text;
   final int points;
   final bool isQuestion;
-  final int? categoryId;
+  final List<int> categoryIds;
 
   WheelSegment({
     this.id,
     required this.text,
     required this.points,
     this.isQuestion = false,
-    this.categoryId,
+    this.categoryIds = const [],
   });
 }

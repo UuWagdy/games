@@ -4,7 +4,7 @@ import 'package:games/features/games/wheel/domain/entities/wheel_segment.dart';
 import 'package:games/features/games/wheel/domain/repositories/wheel_repository.dart';
 
 class WheelRepositoryImpl implements WheelRepository {
-  final DatabaseService _dbService = DatabaseService();
+  final DatabaseService _dbService = DatabaseService.instance;
 
   @override
   Future<List<WheelSegment>> getSegments() async {
@@ -12,13 +12,22 @@ class WheelRepositoryImpl implements WheelRepository {
     final List<Map<String, dynamic>> result = await db.query('wheel_segments');
     
     return result.map((json) {
-      final model = WheelSegmentModel.fromJson(json);
+      final map = Map<String, dynamic>.from(json);
+      map['is_question'] = map['is_question'] == 1;
+      
+      // Convert '1,2,3' to [1, 2, 3]
+      final idsString = map['category_ids'] as String?;
+      map['category_ids'] = idsString != null && idsString.isNotEmpty
+          ? idsString.split(',').map((e) => int.parse(e)).toList()
+          : [];
+          
+      final model = WheelSegmentModel.fromJson(map);
       return WheelSegment(
         id: model.id,
         text: model.text,
         points: model.points,
         isQuestion: model.isQuestion,
-        categoryId: model.categoryId,
+        categoryIds: model.categoryIds,
       );
     }).toList();
   }
@@ -30,9 +39,13 @@ class WheelRepositoryImpl implements WheelRepository {
       text: segment.text,
       points: segment.points,
       isQuestion: segment.isQuestion,
-      categoryId: segment.categoryId,
+      categoryIds: segment.categoryIds,
     );
-    await db.insert('wheel_segments', model.toJson());
+    final map = model.toJson();
+    map['is_question'] = model.isQuestion ? 1 : 0;
+    // Store as '1,2,3'
+    map['category_ids'] = model.categoryIds.join(',');
+    await db.insert('wheel_segments', map);
   }
 
   @override
@@ -43,11 +56,15 @@ class WheelRepositoryImpl implements WheelRepository {
       text: segment.text,
       points: segment.points,
       isQuestion: segment.isQuestion,
-      categoryId: segment.categoryId,
+      categoryIds: segment.categoryIds,
     );
+    final map = model.toJson();
+    map['is_question'] = model.isQuestion ? 1 : 0;
+    // Store as '1,2,3'
+    map['category_ids'] = model.categoryIds.join(',');
     await db.update(
       'wheel_segments',
-      model.toJson(),
+      map,
       where: 'id = ?',
       whereArgs: [segment.id],
     );

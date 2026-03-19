@@ -10,6 +10,7 @@ abstract class QuestionModel with _$QuestionModel {
     required String text,
     required String answer,
     @JsonKey(name: 'category_id') required int categoryId,
+    @Default(false) @JsonKey(name: 'is_used') bool isUsed,
   }) = _QuestionModel;
 
   factory QuestionModel.fromJson(Map<String, dynamic> json) =>

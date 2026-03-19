@@ -81,7 +81,7 @@ final class CategoriesProvider
   Categories create() => Categories();
 }
 
-String _$categoriesHash() => r'0c41a7fb65c9bf5660a30f517024eace11a26f70';
+String _$categoriesHash() => r'38e35f927490748c1dd2836648400b22041137fc';
 
 abstract class _$Categories extends $AsyncNotifier<List<Category>> {
   FutureOr<List<Category>> build();
@@ -142,7 +142,7 @@ final class QuestionsProvider
   }
 }
 
-String _$questionsHash() => r'5cc0266afccf2935e83f881a7a2c7d0d5f4df322';
+String _$questionsHash() => r'b356b5a9b611c9e5e61b288871bf3160531afa00';
 
 final class QuestionsFamily extends $Family
     with

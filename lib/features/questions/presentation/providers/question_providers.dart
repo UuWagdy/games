@@ -1,8 +1,8 @@
+import 'package:games/features/questions/domain/entities/question.dart';
+import 'package:games/features/questions/domain/entities/category.dart';
+import 'package:games/features/questions/domain/repositories/question_repository.dart';
+import 'package:games/features/questions/data/repositories/question_repository_impl.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../domain/entities/category.dart';
-import '../../domain/entities/question.dart';
-import '../../data/repositories/question_repository_impl.dart';
-import '../../domain/repositories/question_repository.dart';
 
 part 'question_providers.g.dart';
 
@@ -23,6 +23,11 @@ class Categories extends _$Categories {
     ref.invalidateSelf();
   }
 
+  Future<void> updateCategory(Category category) async {
+    await ref.read(questionRepositoryProvider).updateCategory(category);
+    ref.invalidateSelf();
+  }
+
   Future<void> deleteCategory(int id) async {
     await ref.read(questionRepositoryProvider).deleteCategory(id);
     ref.invalidateSelf();
@@ -38,11 +43,26 @@ class Questions extends _$Questions {
 
   Future<void> addQuestion(Question question) async {
     await ref.read(questionRepositoryProvider).addQuestion(question);
-    ref.invalidateSelf();
+    ref.invalidate(questionsProvider);
+  }
+
+  Future<void> updateQuestion(Question question) async {
+    await ref.read(questionRepositoryProvider).updateQuestion(question);
+    ref.invalidate(questionsProvider);
   }
 
   Future<void> deleteQuestion(int id) async {
     await ref.read(questionRepositoryProvider).deleteQuestion(id);
-    ref.invalidateSelf();
+    ref.invalidate(questionsProvider);
+  }
+
+  Future<void> setQuestionUsed(int id, bool used, {int? categoryId}) async {
+    await ref.read(questionRepositoryProvider).setQuestionUsed(id, used, categoryId: categoryId);
+    ref.invalidate(questionsProvider);
+  }
+
+  Future<void> resetAllQuestionsUsed() async {
+    await ref.read(questionRepositoryProvider).resetAllQuestionsUsed();
+    ref.invalidate(questionsProvider);
   }
 }
