@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import '../providers/bank_al_haz_providers.dart';
 import '../../../../questions/presentation/providers/question_providers.dart';
+import 'package:games/core/design/app_design.dart';
 
 class StationManagementPage extends ConsumerWidget {
   const StationManagementPage({super.key});
@@ -15,94 +16,109 @@ class StationManagementPage extends ConsumerWidget {
     final stationsAsync = ref.watch(stationsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('إدارة محطات بنك الحظ'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showStationDialog(context, ref),
-          ),
-        ],
-      ),
-      body: stationsAsync.when(
-        data: (stations) => stations.isEmpty
-            ? _buildEmptyState(context)
-            : ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: stations.length,
-                itemBuilder: (context, index) {
-                  final station = stations[index];
-                  return Card(
-                    elevation: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(15),
-                        gradient: LinearGradient(
-                          colors: [Colors.blue.shade50, Colors.white],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue.shade100,
-                          radius: 25,
-                          child: station.imageData != null
-                              ? ClipOval(
-                                  child: Image.memory(
-                                    station.imageData!,
-                                    width: 50,
-                                    height: 50,
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : Icon(
-                                  station.type == StationType.question
-                                      ? Icons.help_outline
-                                      : station.type == StationType.card
-                                      ? Icons.style
-                                      : Icons.location_city,
-                                  color: Colors.blue.shade800,
+      backgroundColor: Colors.transparent,
+      body: AppDesign.backgroundWrapper(
+        child: Column(
+          children: [
+            AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Text('إدارة محطات بنك الحظ', style: AppDesign.titleStyle.copyWith(fontSize: 22)),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.add_circle, color: Colors.blueAccent, size: 30),
+                  onPressed: () => _showStationDialog(context, ref),
+                ),
+              ],
+            ),
+            Expanded(
+              child: stationsAsync.when(
+                data: (stations) => stations.isEmpty
+                    ? _buildEmptyState(context)
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        itemCount: stations.length,
+                        itemBuilder: (context, index) {
+                          final station = stations[index];
+                          final color = _getCityColor(index);
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: AppDesign.glassDecorationWithColor(color),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              leading: Container(
+                                width: 55, height: 55,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: color.withOpacity(0.3), width: 2),
                                 ),
-                        ),
-                        title: Text(
-                          station.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          '${_getTypeLabel(station.type)} - السعر: ${station.buyPrice}',
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _showStationDialog(
-                                context,
-                                ref,
-                                station: station,
+                                child: station.imageData != null
+                                    ? ClipOval(
+                                        child: Image.memory(
+                                          station.imageData!,
+                                          width: 55, height: 55,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    : Icon(
+                                        station.type == StationType.question
+                                            ? Icons.help_center_outlined
+                                            : station.type == StationType.card
+                                            ? Icons.auto_awesome_motion
+                                            : Icons.location_on_outlined,
+                                        color: color,
+                                        size: 28,
+                                      ),
+                              ),
+                              title: Text(
+                                station.name,
+                                style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 18),
+                              ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  '${_getTypeLabel(station.type)} • السعر: ${station.buyPrice.toInt()}',
+                                  style: TextStyle(color: Colors.white60, fontSize: 14),
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_note, color: Colors.blueAccent),
+                                    onPressed: () => _showStationDialog(context, ref, station: station),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                    onPressed: () => _deleteStation(context, ref, station.id!),
+                                  ),
+                                ],
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () =>
-                                  _deleteStation(context, ref, station.id!),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
-                    ),
-                  );
-                },
+                loading: () => const Center(child: CircularProgressIndicator(color: Colors.blueAccent)),
+                error: (err, stack) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.redAccent))),
               ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Color _getCityColor(int index) {
+    final colors = [
+      Colors.blueAccent,
+      Colors.purpleAccent,
+      Colors.greenAccent,
+      Colors.orangeAccent,
+      Colors.redAccent,
+      Colors.cyanAccent,
+      Colors.amberAccent,
+    ];
+    return colors[index % colors.length];
   }
 
   String _getTypeLabel(StationType type) {
@@ -161,6 +177,7 @@ class StationManagementPage extends ConsumerWidget {
           content: SizedBox(
             width: 500,
             child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 10),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -177,7 +194,7 @@ class StationManagementPage extends ConsumerWidget {
                       onChanged: (val) =>
                           setState(() => requiresQuestion = val),
                     ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 12),
                   TextField(
                     controller: nameController,
                     decoration: InputDecoration(
@@ -194,7 +211,7 @@ class StationManagementPage extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
                   DropdownButtonFormField<StationType>(
                     initialValue: selectedType,
                     decoration: InputDecoration(
@@ -229,7 +246,7 @@ class StationManagementPage extends ConsumerWidget {
                   ),
 
                   if (requiresQuestion && selectedType != StationType.card) ...[
-                    const SizedBox(height: 16),
+                    SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
                     const Text(
                       'تحديد فئات الأسئلة:',
                       style: TextStyle(
@@ -237,16 +254,18 @@ class StationManagementPage extends ConsumerWidget {
                         color: Colors.blue,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 8),
                     _buildCategoryDropdown(
+                      context: context,
                       label: 'سؤال المالك (عند الشراء)',
                       icon: Icons.shopping_bag,
                       value: selectedOwnerCategoryId,
                       onChanged: (val) =>
                           setState(() => selectedOwnerCategoryId = val),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppDesign.isSmallScreen(context) ? 6 : 12),
                     _buildCategoryDropdown(
+                      context: context,
                       label: 'سؤال المار (عند العبور)',
                       icon: Icons.directions_walk,
                       value: selectedPasserCategoryId,
@@ -285,7 +304,7 @@ class StationManagementPage extends ConsumerWidget {
                     ),
                   ],
 
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
                   // Image Picker Section
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -333,7 +352,7 @@ class StationManagementPage extends ConsumerWidget {
                     ),
                   ),
 
-                  const SizedBox(height: 16),
+                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
                   Row(
                     children: [
                       Expanded(
@@ -366,7 +385,7 @@ class StationManagementPage extends ConsumerWidget {
                     ],
                   ),
 
-                  const SizedBox(height: 12),
+                  SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 12),
                   SwitchListTile(
                     title: const Text(
                       'غير قابلة للشراء (شخصية)',
@@ -445,6 +464,7 @@ class StationManagementPage extends ConsumerWidget {
   }
 
   Widget _buildCategoryDropdown({
+    required BuildContext context,
     required String label,
     IconData? icon,
     required int? value,
@@ -454,27 +474,51 @@ class StationManagementPage extends ConsumerWidget {
       builder: (context, ref, _) {
         final catsAsync = ref.watch(categoriesProvider);
         return catsAsync.when(
-          data: (cats) => DropdownButtonFormField<int?>(
-            initialValue: value,
-            decoration: InputDecoration(
-              labelText: label,
-              prefixIcon: Icon(icon ?? Icons.help),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+          data: (cats) {
+            String currentName = value == null ? 'جميع الفئات' : (cats.any((c) => c.id == value) ? cats.firstWhere((c) => c.id == value).name : 'فئة غير معروفة');
+
+            return InkWell(
+              onTap: () => _showSearchableCategoryPicker(context, cats, value, onChanged),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(icon ?? Icons.help, color: Colors.blueAccent),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                          Text(currentName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_drop_down),
+                  ],
+                ),
               ),
-            ),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('جميع الفئات')),
-              ...cats.map(
-                (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
-              ),
-            ],
-            onChanged: onChanged,
-          ),
+            );
+          },
           loading: () => const LinearProgressIndicator(),
-          error: (_, _) => const Text('خطأ في تحميل الفئات'),
+          error: (_, __) => const Text('خطأ في تحميل الفئات'),
         );
       },
+    );
+  }
+
+  void _showSearchableCategoryPicker(BuildContext context, List categories, int? currentValue, ValueChanged<int?> onSelected) {
+    showDialog(
+      context: context,
+      builder: (context) => _SearchableCategoryDialog(
+        categories: categories,
+        initialValue: currentValue,
+        onSelected: onSelected,
+      ),
     );
   }
 
@@ -520,6 +564,79 @@ class StationManagementPage extends ConsumerWidget {
           const SizedBox(height: 8),
           const Text('اضغط على + لإضافة أول مدينة في اللعبة'),
         ],
+      ),
+    );
+  }
+}
+
+class _SearchableCategoryDialog extends StatefulWidget {
+  final List categories;
+  final int? initialValue;
+  final ValueChanged<int?> onSelected;
+
+  const _SearchableCategoryDialog({
+    required this.categories,
+    this.initialValue,
+    required this.onSelected,
+  });
+
+  @override
+  State<_SearchableCategoryDialog> createState() => _SearchableCategoryDialogState();
+}
+
+class _SearchableCategoryDialogState extends State<_SearchableCategoryDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = [
+      null, // For "All Categories"
+      ...widget.categories.where((c) => c.name.toLowerCase().contains(_searchQuery.toLowerCase())),
+    ];
+
+    return AlertDialog(
+      title: const Text('اختر الفئة', textAlign: TextAlign.right),
+      content: SizedBox(
+        width: 400,
+        height: 500,
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchController,
+              onChanged: (v) => setState(() => _searchQuery = v),
+              decoration: InputDecoration(
+                hintText: 'بحث...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final cat = filtered[index];
+                  final bool isAll = cat == null;
+                  return ListTile(
+                    title: Text(isAll ? 'جميع الفئات' : cat.name),
+                    selected: isAll ? widget.initialValue == null : widget.initialValue == cat.id,
+                    onTap: () {
+                      widget.onSelected(isAll ? null : cat.id);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

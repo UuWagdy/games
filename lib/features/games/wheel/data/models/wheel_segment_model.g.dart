@@ -17,6 +17,8 @@ _WheelSegmentModel _$WheelSegmentModelFromJson(Map<String, dynamic> json) =>
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [],
+      isSwitch: json['is_switch'] as bool? ?? false,
+      isJoker: json['is_joker'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$WheelSegmentModelToJson(_WheelSegmentModel instance) =>
@@ -26,4 +28,6 @@ Map<String, dynamic> _$WheelSegmentModelToJson(_WheelSegmentModel instance) =>
       'points': instance.points,
       'is_question': instance.isQuestion,
       'category_ids': instance.categoryIds,
+      'is_switch': instance.isSwitch,
+      'is_joker': instance.isJoker,
     };

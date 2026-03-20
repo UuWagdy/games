@@ -24,4 +24,16 @@ class Team {
       playersCount: playersCount ?? this.playersCount,
     );
   }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Team &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          score == other.score &&
+          playersCount == other.playersCount;
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode ^ score.hashCode ^ playersCount.hashCode;
 }

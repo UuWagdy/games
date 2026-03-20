@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$WheelSegmentModel {
 
- int? get id; String get text; int get points;@JsonKey(name: 'is_question') bool get isQuestion;@JsonKey(name: 'category_ids') List<int> get categoryIds;
+ int? get id; String get text; int get points;@JsonKey(name: 'is_question') bool get isQuestion;@JsonKey(name: 'category_ids') List<int> get categoryIds;@JsonKey(name: 'is_switch') bool get isSwitch;@JsonKey(name: 'is_joker') bool get isJoker;
 /// Create a copy of WheelSegmentModel
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $WheelSegmentModelCopyWith<WheelSegmentModel> get copyWith => _$WheelSegmentMode
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is WheelSegmentModel&&(identical(other.id, id) || other.id == id)&&(identical(other.text, text) || other.text == text)&&(identical(other.points, points) || other.points == points)&&(identical(other.isQuestion, isQuestion) || other.isQuestion == isQuestion)&&const DeepCollectionEquality().equals(other.categoryIds, categoryIds));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is WheelSegmentModel&&(identical(other.id, id) || other.id == id)&&(identical(other.text, text) || other.text == text)&&(identical(other.points, points) || other.points == points)&&(identical(other.isQuestion, isQuestion) || other.isQuestion == isQuestion)&&const DeepCollectionEquality().equals(other.categoryIds, categoryIds)&&(identical(other.isSwitch, isSwitch) || other.isSwitch == isSwitch)&&(identical(other.isJoker, isJoker) || other.isJoker == isJoker));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,text,points,isQuestion,const DeepCollectionEquality().hash(categoryIds));
+int get hashCode => Object.hash(runtimeType,id,text,points,isQuestion,const DeepCollectionEquality().hash(categoryIds),isSwitch,isJoker);
 
 @override
 String toString() {
-  return 'WheelSegmentModel(id: $id, text: $text, points: $points, isQuestion: $isQuestion, categoryIds: $categoryIds)';
+  return 'WheelSegmentModel(id: $id, text: $text, points: $points, isQuestion: $isQuestion, categoryIds: $categoryIds, isSwitch: $isSwitch, isJoker: $isJoker)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $WheelSegmentModelCopyWith<$Res>  {
   factory $WheelSegmentModelCopyWith(WheelSegmentModel value, $Res Function(WheelSegmentModel) _then) = _$WheelSegmentModelCopyWithImpl;
 @useResult
 $Res call({
- int? id, String text, int points,@JsonKey(name: 'is_question') bool isQuestion,@JsonKey(name: 'category_ids') List<int> categoryIds
+ int? id, String text, int points,@JsonKey(name: 'is_question') bool isQuestion,@JsonKey(name: 'category_ids') List<int> categoryIds,@JsonKey(name: 'is_switch') bool isSwitch,@JsonKey(name: 'is_joker') bool isJoker
 });
 
 
@@ -65,14 +65,16 @@ class _$WheelSegmentModelCopyWithImpl<$Res>
 
 /// Create a copy of WheelSegmentModel
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? text = null,Object? points = null,Object? isQuestion = null,Object? categoryIds = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? text = null,Object? points = null,Object? isQuestion = null,Object? categoryIds = null,Object? isSwitch = null,Object? isJoker = null,}) {
   return _then(_self.copyWith(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int?,text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
 as String,points: null == points ? _self.points : points // ignore: cast_nullable_to_non_nullable
 as int,isQuestion: null == isQuestion ? _self.isQuestion : isQuestion // ignore: cast_nullable_to_non_nullable
 as bool,categoryIds: null == categoryIds ? _self.categoryIds : categoryIds // ignore: cast_nullable_to_non_nullable
-as List<int>,
+as List<int>,isSwitch: null == isSwitch ? _self.isSwitch : isSwitch // ignore: cast_nullable_to_non_nullable
+as bool,isJoker: null == isJoker ? _self.isJoker : isJoker // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -157,10 +159,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int? id,  String text,  int points, @JsonKey(name: 'is_question')  bool isQuestion, @JsonKey(name: 'category_ids')  List<int> categoryIds)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int? id,  String text,  int points, @JsonKey(name: 'is_question')  bool isQuestion, @JsonKey(name: 'category_ids')  List<int> categoryIds, @JsonKey(name: 'is_switch')  bool isSwitch, @JsonKey(name: 'is_joker')  bool isJoker)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _WheelSegmentModel() when $default != null:
-return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.categoryIds);case _:
+return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.categoryIds,_that.isSwitch,_that.isJoker);case _:
   return orElse();
 
 }
@@ -178,10 +180,10 @@ return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.category
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int? id,  String text,  int points, @JsonKey(name: 'is_question')  bool isQuestion, @JsonKey(name: 'category_ids')  List<int> categoryIds)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int? id,  String text,  int points, @JsonKey(name: 'is_question')  bool isQuestion, @JsonKey(name: 'category_ids')  List<int> categoryIds, @JsonKey(name: 'is_switch')  bool isSwitch, @JsonKey(name: 'is_joker')  bool isJoker)  $default,) {final _that = this;
 switch (_that) {
 case _WheelSegmentModel():
-return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.categoryIds);case _:
+return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.categoryIds,_that.isSwitch,_that.isJoker);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -198,10 +200,10 @@ return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.category
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int? id,  String text,  int points, @JsonKey(name: 'is_question')  bool isQuestion, @JsonKey(name: 'category_ids')  List<int> categoryIds)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int? id,  String text,  int points, @JsonKey(name: 'is_question')  bool isQuestion, @JsonKey(name: 'category_ids')  List<int> categoryIds, @JsonKey(name: 'is_switch')  bool isSwitch, @JsonKey(name: 'is_joker')  bool isJoker)?  $default,) {final _that = this;
 switch (_that) {
 case _WheelSegmentModel() when $default != null:
-return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.categoryIds);case _:
+return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.categoryIds,_that.isSwitch,_that.isJoker);case _:
   return null;
 
 }
@@ -213,7 +215,7 @@ return $default(_that.id,_that.text,_that.points,_that.isQuestion,_that.category
 @JsonSerializable()
 
 class _WheelSegmentModel implements WheelSegmentModel {
-  const _WheelSegmentModel({this.id, required this.text, required this.points, @JsonKey(name: 'is_question') this.isQuestion = false, @JsonKey(name: 'category_ids') final  List<int> categoryIds = const []}): _categoryIds = categoryIds;
+  const _WheelSegmentModel({this.id, required this.text, required this.points, @JsonKey(name: 'is_question') this.isQuestion = false, @JsonKey(name: 'category_ids') final  List<int> categoryIds = const [], @JsonKey(name: 'is_switch') this.isSwitch = false, @JsonKey(name: 'is_joker') this.isJoker = false}): _categoryIds = categoryIds;
   factory _WheelSegmentModel.fromJson(Map<String, dynamic> json) => _$WheelSegmentModelFromJson(json);
 
 @override final  int? id;
@@ -227,6 +229,8 @@ class _WheelSegmentModel implements WheelSegmentModel {
   return EqualUnmodifiableListView(_categoryIds);
 }
 
+@override@JsonKey(name: 'is_switch') final  bool isSwitch;
+@override@JsonKey(name: 'is_joker') final  bool isJoker;
 
 /// Create a copy of WheelSegmentModel
 /// with the given fields replaced by the non-null parameter values.
@@ -241,16 +245,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _WheelSegmentModel&&(identical(other.id, id) || other.id == id)&&(identical(other.text, text) || other.text == text)&&(identical(other.points, points) || other.points == points)&&(identical(other.isQuestion, isQuestion) || other.isQuestion == isQuestion)&&const DeepCollectionEquality().equals(other._categoryIds, _categoryIds));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _WheelSegmentModel&&(identical(other.id, id) || other.id == id)&&(identical(other.text, text) || other.text == text)&&(identical(other.points, points) || other.points == points)&&(identical(other.isQuestion, isQuestion) || other.isQuestion == isQuestion)&&const DeepCollectionEquality().equals(other._categoryIds, _categoryIds)&&(identical(other.isSwitch, isSwitch) || other.isSwitch == isSwitch)&&(identical(other.isJoker, isJoker) || other.isJoker == isJoker));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,text,points,isQuestion,const DeepCollectionEquality().hash(_categoryIds));
+int get hashCode => Object.hash(runtimeType,id,text,points,isQuestion,const DeepCollectionEquality().hash(_categoryIds),isSwitch,isJoker);
 
 @override
 String toString() {
-  return 'WheelSegmentModel(id: $id, text: $text, points: $points, isQuestion: $isQuestion, categoryIds: $categoryIds)';
+  return 'WheelSegmentModel(id: $id, text: $text, points: $points, isQuestion: $isQuestion, categoryIds: $categoryIds, isSwitch: $isSwitch, isJoker: $isJoker)';
 }
 
 
@@ -261,7 +265,7 @@ abstract mixin class _$WheelSegmentModelCopyWith<$Res> implements $WheelSegmentM
   factory _$WheelSegmentModelCopyWith(_WheelSegmentModel value, $Res Function(_WheelSegmentModel) _then) = __$WheelSegmentModelCopyWithImpl;
 @override @useResult
 $Res call({
- int? id, String text, int points,@JsonKey(name: 'is_question') bool isQuestion,@JsonKey(name: 'category_ids') List<int> categoryIds
+ int? id, String text, int points,@JsonKey(name: 'is_question') bool isQuestion,@JsonKey(name: 'category_ids') List<int> categoryIds,@JsonKey(name: 'is_switch') bool isSwitch,@JsonKey(name: 'is_joker') bool isJoker
 });
 
 
@@ -278,14 +282,16 @@ class __$WheelSegmentModelCopyWithImpl<$Res>
 
 /// Create a copy of WheelSegmentModel
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? text = null,Object? points = null,Object? isQuestion = null,Object? categoryIds = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? text = null,Object? points = null,Object? isQuestion = null,Object? categoryIds = null,Object? isSwitch = null,Object? isJoker = null,}) {
   return _then(_WheelSegmentModel(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int?,text: null == text ? _self.text : text // ignore: cast_nullable_to_non_nullable
 as String,points: null == points ? _self.points : points // ignore: cast_nullable_to_non_nullable
 as int,isQuestion: null == isQuestion ? _self.isQuestion : isQuestion // ignore: cast_nullable_to_non_nullable
 as bool,categoryIds: null == categoryIds ? _self._categoryIds : categoryIds // ignore: cast_nullable_to_non_nullable
-as List<int>,
+as List<int>,isSwitch: null == isSwitch ? _self.isSwitch : isSwitch // ignore: cast_nullable_to_non_nullable
+as bool,isJoker: null == isJoker ? _self.isJoker : isJoker // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 

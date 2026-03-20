@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'features/home/presentation/pages/main_screen.dart';
+import 'features/splash/presentation/pages/splash_screen.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 
@@ -32,9 +32,10 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0F52BA), // Sapphire Blue to match logo
-          brightness: Brightness.light,
+          seedColor: const Color(0xFF0F52BA),
+          brightness: Brightness.dark,
         ),
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
       ),
       // Arabic RTL Support
       localizationsDelegates: [
@@ -46,7 +47,7 @@ class MyApp extends StatelessWidget {
         Locale('ar', 'EG'), // Arabic
       ],
       locale: const Locale('ar', 'EG'),
-      home: const MainScreen(),
+      home: const SplashScreen(),
     );
   }
 }

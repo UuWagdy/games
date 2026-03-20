@@ -11,6 +11,8 @@ abstract class WheelSegmentModel with _$WheelSegmentModel {
     required int points,
     @Default(false) @JsonKey(name: 'is_question') bool isQuestion,
     @Default([]) @JsonKey(name: 'category_ids') List<int> categoryIds,
+    @Default(false) @JsonKey(name: 'is_switch') bool isSwitch,
+    @Default(false) @JsonKey(name: 'is_joker') bool isJoker,
   }) = _WheelSegmentModel;
 
   factory WheelSegmentModel.fromJson(Map<String, dynamic> json) =>

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
+import 'package:flutter/services.dart';
 import 'package:games/features/games/wheel/domain/entities/wheel_segment.dart';
 
 class SpinningWheelWidget extends StatefulWidget {
   final List<WheelSegment> segments;
+  final List<int> exhaustedIds;
   final Function(WheelSegment) onResult;
 
   const SpinningWheelWidget({
     super.key,
     required this.segments,
+    this.exhaustedIds = const [],
     required this.onResult,
   });
 
@@ -22,6 +26,7 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
   bool _isSpinning = false;
   double _manualAngle = 0;
   double _dragStartAngle = 0;
+  ui.Image? _jokerImage;
 
   @override
   void initState() {
@@ -31,7 +36,7 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
       duration: const Duration(seconds: 5),
     );
 
-    _angleAnimation = AlwaysStoppedAnimation(0);
+    _angleAnimation = const AlwaysStoppedAnimation(0);
 
     _animationController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -50,6 +55,21 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
         widget.onResult(widget.segments[indexAtTop]);
       }
     });
+
+    _loadJokerImage();
+  }
+
+  Future<void> _loadJokerImage() async {
+    try {
+      final ByteData data = await rootBundle.load('assets/images/joker-hat.png');
+      final ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final ui.FrameInfo fi = await codec.getNextFrame();
+      setState(() {
+        _jokerImage = fi.image;
+      });
+    } catch (e) {
+      debugPrint('Error loading joker hat image: $e');
+    }
   }
 
   @override
@@ -98,23 +118,28 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
 
         return GestureDetector(
           onPanDown: (details) {
-            if (_isSpinning) return;
-            _animationController.stop();
-            final pos = details.localPosition - center;
-            _dragStartAngle = math.atan2(pos.dy, pos.dx) - _manualAngle;
+            if (!_isSpinning) {
+              _dragStartAngle = math.atan2(
+                details.localPosition.dy - center.dy,
+                details.localPosition.dx - center.dx,
+              );
+            }
           },
           onPanUpdate: (details) {
-            if (_isSpinning) return;
-            final pos = details.localPosition - center;
-            setState(() {
-              _manualAngle = math.atan2(pos.dy, pos.dx) - _dragStartAngle;
-              _angleAnimation = AlwaysStoppedAnimation(_manualAngle);
-            });
+            if (!_isSpinning) {
+              final currentAngle = math.atan2(
+                details.localPosition.dy - center.dy,
+                details.localPosition.dx - center.dx,
+              );
+              setState(() {
+                _manualAngle += (currentAngle - _dragStartAngle);
+                _dragStartAngle = currentAngle;
+                _angleAnimation = AlwaysStoppedAnimation(_manualAngle);
+              });
+            }
           },
           onPanEnd: (details) {
-            if (_isSpinning) return;
-            // If flicked fast enough, start auto spin
-            if (details.velocity.pixelsPerSecond.distance > 500) {
+            if (!_isSpinning && details.velocity.pixelsPerSecond.distance > 800) {
               spin();
             }
           },
@@ -127,37 +152,47 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
                   CustomPaint(
                     size: Size(radius * 2, radius * 2),
                     painter: _WheelPainter(
-                      segments: widget.segments,
-                      angle: _angleAnimation.value,
+                      widget.segments,
+                      widget.exhaustedIds,
+                      _angleAnimation.value,
+                      _jokerImage,
                     ),
                   ),
-                  // Center Pin
                   Container(
-                    width: 80,
-                    height: 80,
+                    width: 70,
+                    height: 70,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Colors.white.withOpacity(0.1),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.blueAccent.withOpacity(0.3),
                           blurRadius: 15,
+                          spreadRadius: 2,
                         ),
                       ],
-                      border: Border.all(color: Colors.amber, width: 3),
+                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Image.asset('assets/images/logo.png', errorBuilder: (_, __, ___) => const Icon(Icons.stars, color: Colors.amber)),
+                    clipBehavior: Clip.antiAlias,
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: _isSpinning 
+                          ? const CircularProgressIndicator(strokeWidth: 3, color: Colors.blueAccent)
+                          : Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                      ),
                     ),
                   ),
-                  // Pointer arrow
                   Positioned(
-                    top: (constraints.maxHeight / 2) - radius - 20,
-                    child: const Icon(
-                      Icons.arrow_drop_down,
-                      size: 90,
-                      color: Colors.amber,
+                    top: (constraints.maxHeight / 2) - radius - 25,
+                    child: Icon(
+                      Icons.arrow_drop_down_rounded,
+                      size: 70,
+                      color: Colors.blueAccent,
+                      shadows: [
+                        Shadow(color: Colors.blueAccent.withOpacity(0.6), blurRadius: 15)
+                      ],
                     ),
                   ),
                 ],
@@ -172,32 +207,37 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
 
 class _WheelPainter extends CustomPainter {
   final List<WheelSegment> segments;
+  final List<int> exhaustedIds;
   final double angle;
+  final ui.Image? jokerImage;
 
-  _WheelPainter({required this.segments, required this.angle});
+  _WheelPainter(this.segments, this.exhaustedIds, this.angle, this.jokerImage);
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (segments.isEmpty) return;
     final radius = size.width / 2;
-    final center = Offset(size.width / 2, size.height / 2);
+    final center = Offset(radius, radius);
     final sweepAngle = (2 * math.pi) / segments.length;
 
-    final List<Color> colors = [
-      const Color(0xFF003F5C),
-      const Color(0xFF2F6690),
-      const Color(0xFF58508D),
-      const Color(0xFFBC5090),
-      const Color(0xFF9E3A73),
-      const Color(0xFFFFA600),
-    ];
-
     for (int i = 0; i < segments.length; i++) {
-      final startAngle = angle + (i * sweepAngle);
+      final s = segments[i];
+      final isExhausted = s.id != null && exhaustedIds.contains(s.id!);
+      final isDark = s.isQuestion || s.isSwitch || s.isJoker;
       final paint = Paint()
-        ..color = colors[i % colors.length]
+        ..color = isExhausted
+            ? const Color(0xFF020617).withOpacity(0.95) // Deep Exhausted Black/Navy
+            : isDark 
+                ? const Color(0xFF0F172A).withOpacity(0.9) // Deep Glass Navy
+                : const Color(0xFF1E293B).withOpacity(0.85) // Deep Glass Navy Consistent with Game Theme
+        ..style = PaintingStyle.fill;
+        
+        
+      // Inner glass glow
+      final glowPaint = Paint()
+        ..shader = ui.Gradient.radial(center, radius, [Colors.white.withOpacity(0.1), Colors.transparent])
         ..style = PaintingStyle.fill;
 
+      final startAngle = angle + (i * sweepAngle);
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         startAngle,
@@ -205,55 +245,110 @@ class _WheelPainter extends CustomPainter {
         true,
         paint,
       );
-
-      canvas.save();
-      canvas.translate(center.dx, center.dy);
-      
-      double rotationAngle = startAngle + sweepAngle / 2;
-      double normalizedAngle = rotationAngle % (2 * math.pi);
-      if (normalizedAngle < 0) normalizedAngle += 2 * math.pi;
-      
-      bool shouldFlip = normalizedAngle > math.pi / 2 && normalizedAngle < 3 * math.pi / 2;
-
-      canvas.rotate(rotationAngle);
-
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: segments[i].text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 55, 
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        textDirection: TextDirection.rtl,
-        textAlign: TextAlign.center,
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle,
+        true,
+        glowPaint,
       );
 
-      textPainter.layout(maxWidth: radius * 0.85);
-      
-      if (shouldFlip) {
-        canvas.translate(radius * 0.55, 0); 
-        canvas.rotate(math.pi); 
-        textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
+      // Draw border
+      final borderPaint = Paint()
+        ..color = Colors.white.withOpacity(0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle,
+        true,
+        borderPaint,
+      );
+
+      // Draw content
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(startAngle + sweepAngle / 2);
+
+      if (segments[i].isSwitch || segments[i].isJoker) {
+        if (segments[i].isJoker && jokerImage != null) {
+          canvas.save();
+          canvas.translate(radius * 0.75, 0); 
+          canvas.rotate(-(startAngle + sweepAngle / 2)); 
+          final double imgSize = radius * 0.3;
+          paintImage(
+            canvas: canvas,
+            rect: Rect.fromCenter(center: Offset.zero, width: imgSize, height: imgSize),
+            image: jokerImage!,
+            fit: BoxFit.contain,
+          );
+          canvas.restore();
+        } else {
+          final icon = segments[i].isSwitch ? Icons.sync : Icons.style;
+          final iconPainter = TextPainter(
+            text: TextSpan(
+              text: String.fromCharCode(icon.codePoint),
+              style: TextStyle(
+                fontSize: 28,
+                fontFamily: icon.fontFamily,
+                package: icon.fontPackage,
+                color: segments[i].isQuestion || segments[i].isSwitch || segments[i].isJoker ? Colors.white : Colors.amberAccent,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          );
+          iconPainter.layout();
+          canvas.save();
+          canvas.translate(radius * 0.7, 0);
+          canvas.rotate(-(startAngle + sweepAngle / 2));
+          iconPainter.paint(canvas, Offset(-iconPainter.width / 2, -iconPainter.height / 2));
+          canvas.restore();
+        }
       } else {
-        textPainter.paint(
-          canvas,
-          Offset(radius * 0.55 - textPainter.width / 2, -textPainter.height / 2),
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: segments[i].text,
+            style: TextStyle(
+              color: segments[i].isQuestion || segments[i].isSwitch || segments[i].isJoker ? Colors.white : Colors.amberAccent,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
         );
+        textPainter.layout();
+        canvas.save();
+        canvas.translate(radius * 0.7, 0);
+        canvas.rotate(-(startAngle + sweepAngle / 2));
+        textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
+        canvas.restore();
       }
-      
       canvas.restore();
     }
 
-    final borderPaint = Paint()
-      ..color = Colors.amber
+    // Outer glowing border
+    final outerGlowPaint = Paint()
+      ..color = Colors.blueAccent.withOpacity(0.3)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 15;
-    canvas.drawCircle(center, radius, borderPaint);
+      ..strokeWidth = 10.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawCircle(center, radius, outerGlowPaint);
+
+    final outerPaint = Paint()
+      ..color = Colors.white.withOpacity(0.2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    canvas.drawCircle(center, radius, outerPaint);
+
+    final secondaryBorder = Paint()
+      ..color = Colors.blueAccent.withOpacity(0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawCircle(center, radius - 4, secondaryBorder);
   }
 
   @override
   bool shouldRepaint(covariant _WheelPainter oldDelegate) => 
-      oldDelegate.angle != angle || oldDelegate.segments != segments;
+      oldDelegate.angle != angle || oldDelegate.segments != segments || oldDelegate.jokerImage != jokerImage;
 }

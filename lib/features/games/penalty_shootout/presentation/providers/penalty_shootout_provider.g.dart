@@ -41,7 +41,7 @@ final class PenaltyShootoutProvider
   }
 }
 
-String _$penaltyShootoutHash() => r'84c114a7ef1c9f26c21074315298b68223c4686c';
+String _$penaltyShootoutHash() => r'6a1292d3108c4eec7855405a508c29cf72f8a89e';
 
 abstract class _$PenaltyShootout extends $Notifier<PenaltyShootoutState> {
   PenaltyShootoutState build();

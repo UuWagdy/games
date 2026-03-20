@@ -1,0 +1,890 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:games/features/games/under_pressure/presentation/providers/under_pressure_provider.dart';
+import 'package:games/features/games/under_pressure/domain/entities/under_pressure_state.dart';
+import 'package:games/features/teams/domain/entities/team.dart';
+import 'package:games/features/questions/presentation/providers/question_providers.dart';
+import 'dart:ui';
+import 'package:games/core/design/app_design.dart';
+
+class UnderPressurePage extends ConsumerStatefulWidget {
+  const UnderPressurePage({super.key});
+
+  @override
+  ConsumerState<UnderPressurePage> createState() => _UnderPressurePageState();
+}
+
+class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
+  Set<int> _selectedCategoryIds = {};
+  Team? _teamA;
+  Team? _teamB;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(underPressureProvider);
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const Text('تحت الضغط', style: AppDesign.titleStyle),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: AppDesign.backgroundWrapper(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: state.status == UnderPressureStatus.idle
+                    ? _buildIdleScreen(context, state)
+                    : state.status == UnderPressureStatus.finished
+                        ? _buildFinishedScreen(state)
+                        : state.status == UnderPressureStatus.paused
+                            ? _buildTransitionScreen(state)
+                            : _buildGamingScreen(state),
+              ),
+              if (state.status != UnderPressureStatus.finished) _buildGlobalTeamsScore(state),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlobalTeamsScore(UnderPressureState state) {
+    final currentActingTeam = state.isTeam2Turn ? state.team2 : state.team1;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: 90,
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: state.teams.map((team) {
+                final isPlaying = currentActingTeam?.id == team.id;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isPlaying ? Colors.purpleAccent.withOpacity(0.2) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: isPlaying ? Border.all(color: Colors.purpleAccent.withOpacity(0.5)) : null,
+                    boxShadow: isPlaying ? [BoxShadow(color: Colors.purpleAccent.withOpacity(0.1), blurRadius: 10)] : [],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(team.name, style: TextStyle(color: isPlaying ? Colors.purpleAccent : Colors.white70, fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('${team.score} نقطة', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIdleScreen(BuildContext context, UnderPressureState state) {
+    final categoriesAsync = ref.watch(categoriesProvider);
+    final List<Team> teams = state.teams;
+    
+    // Validate current selections against fresh teams list
+    if (_teamA != null && !teams.any((t) => t.id == _teamA!.id)) _teamA = null;
+    if (_teamB != null && !teams.any((t) => t.id == _teamB!.id)) _teamB = null;
+
+    // Default selections
+    if (_teamA == null && teams.isNotEmpty) _teamA = teams[0];
+    if (_teamB == null && teams.length > 1) {
+      _teamB = teams.firstWhere((t) => t.id != _teamA?.id, orElse: () => teams[1]);
+    }
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(AppDesign.isSmallScreen(context) ? 16 : 24),
+      child: Column(
+        children: [
+          if (!AppDesign.isSmallScreen(context)) ...[
+            const SizedBox(height: 10),
+            const Icon(Icons.timer_outlined, size: 80, color: Colors.purpleAccent),
+            const SizedBox(height: 15),
+            const Text(
+              'استعد للضغط!',
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
+            ),
+            const Text(
+              'اختر فريقين لبدء المواجهة التنافسية',
+              style: TextStyle(fontSize: 16, color: Colors.white70),
+            ),
+            const SizedBox(height: 30),
+          ] else ...[
+            const SizedBox(height: 4),
+          ],
+          
+          Container(
+            width: double.infinity,
+            constraints: BoxConstraints(maxWidth: AppDesign.isSmallScreen(context) ? 500 : 1100),
+            padding: EdgeInsets.all(AppDesign.isSmallScreen(context) ? 12 : 40),
+            decoration: AppDesign.glassDecoration,
+            child: Column(
+              children: [
+                Text('تجهيز الفرق المتبارية:', style: AppDesign.titleStyle.copyWith(fontSize: AppDesign.isSmallScreen(context) ? 20 : 26)),
+                SizedBox(height: AppDesign.isSmallScreen(context) ? 16 : 32),
+                if (AppDesign.isSmallScreen(context))
+                  Column(
+                    children: [
+                      _buildTeamPicker('الفريق الأول', _teamA, teams, (t) => setState(() => _teamA = t), Colors.blueAccent),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Text('VS', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 20)),
+                      ),
+                      _buildTeamPicker('الفريق الثاني', _teamB, teams, (t) => setState(() => _teamB = t), Colors.tealAccent),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(child: _buildTeamPicker('الفريق الأول', _teamA, teams, (t) => setState(() => _teamA = t), Colors.blueAccent)),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: Text('VS', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 32)),
+                      ),
+                      Expanded(child: _buildTeamPicker('الفريق الثاني', _teamB, teams, (t) => setState(() => _teamB = t), Colors.tealAccent)),
+                    ],
+                  ),
+                SizedBox(height: AppDesign.isSmallScreen(context) ? 24 : 48),
+                ElevatedButton(
+                  onPressed: (_teamA != null && _teamB != null && _teamA != _teamB)
+                    ? () => ref.read(underPressureProvider.notifier).startGame(_teamA!, _teamB!, _selectedCategoryIds.isEmpty ? null : _selectedCategoryIds.toList())
+                    : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purpleAccent,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppDesign.isSmallScreen(context) ? 32 : 64,
+                      vertical: AppDesign.isSmallScreen(context) ? 12 : 24,
+                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    elevation: 10,
+                  ),
+                  child: Text('ابدأ المواجهة', style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 18 : 28, fontWeight: FontWeight.w900)),
+                ),
+                if (_teamA == _teamB && _teamA != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Text('لا يمكن اختيار نفس الفريق للمواجهة!', style: TextStyle(color: Colors.redAccent.withOpacity(0.8), fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+          ),
+          
+          SizedBox(height: AppDesign.isSmallScreen(context) ? 20 : 40),
+          _buildCategorySelection(categoriesAsync),
+        ],
+      ),
+    ),
+  );
+}
+
+  Widget _buildTeamPicker(String label, Team? selected, List<Team> allTeams, Function(Team) onSelected, Color color) {
+    return Column(
+      children: [
+        Text(label, style: TextStyle(color: color.withOpacity(0.8), fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: color.withOpacity(0.3), width: 2),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<Team>(
+              value: allTeams.contains(selected) ? selected : null,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF1E293B),
+              icon: Icon(Icons.keyboard_arrow_down_rounded, color: color),
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
+              items: allTeams.map((team) => DropdownMenuItem(value: team, child: Text(team.name))).toList(),
+              onChanged: (val) => val != null ? onSelected(val) : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTransitionScreen(UnderPressureState state) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.swap_horiz_rounded, size: 100, color: Colors.amberAccent),
+          const SizedBox(height: 24),
+          Text('انتهى دور فريق ${state.team1?.name}', style: const TextStyle(color: Colors.white70, fontSize: 24)),
+          const SizedBox(height: 12),
+          Text('الدور الآن على فريق ${state.team2?.name}', style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 48),
+          ElevatedButton(
+            onPressed: () => ref.read(underPressureProvider.notifier).startTeam2(),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 22),
+              backgroundColor: Colors.tealAccent,
+              foregroundColor: Colors.black87,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            child: const Text('ابدأ دور الفريق الثاني', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategorySelection(AsyncValue categoriesAsync) {
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 900),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 40)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 16, runSpacing: 16,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.purpleAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+                    child: const Icon(Icons.category_rounded, color: Colors.purpleAccent, size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('تصنيف الأسئلة', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
+                      Text('اختر نوعية الأسئلة', style: TextStyle(fontSize: 14, color: Colors.white38)),
+                    ],
+                  ),
+                ],
+              ),
+              _buildCategoryTopControls(categoriesAsync),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _searchController,
+            onChanged: (val) => setState(() => _searchQuery = val),
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'البحث عن فئة...',
+              hintStyle: const TextStyle(color: Colors.white24),
+              prefixIcon: const Icon(Icons.search, color: Colors.purpleAccent),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.05),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 32),
+          categoriesAsync.when(
+            data: (categories) {
+              final filteredCategories = (categories as List).where((cat) => cat.name.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+              if (filteredCategories.isEmpty) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40),
+                    child: Text('لا توجد فئات مطابقة للبحث', style: TextStyle(color: Colors.white38)),
+                  ),
+                );
+              }
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 220,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: 2.2,
+                ),
+                itemCount: filteredCategories.length,
+                itemBuilder: (ctx, index) {
+                  final cat = filteredCategories[index];
+                  final isSelected = _selectedCategoryIds.contains(cat.id);
+                  return InkWell(
+                    onTap: () => setState(() {
+                      if (isSelected) _selectedCategoryIds.remove(cat.id!);
+                      else _selectedCategoryIds.add(cat.id!);
+                    }),
+                    borderRadius: BorderRadius.circular(16),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.purpleAccent.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: isSelected ? Colors.purpleAccent.withOpacity(0.6) : Colors.white10, width: 2),
+                        boxShadow: isSelected ? [BoxShadow(color: Colors.purpleAccent.withOpacity(0.1), blurRadius: 10)] : [],
+                      ),
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            right: -10, bottom: -10,
+                            child: Icon(Icons.category_outlined, size: 40, color: isSelected ? Colors.purpleAccent.withOpacity(0.1) : Colors.white.withOpacity(0.02)),
+                          ),
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(isSelected ? Icons.check_circle_rounded : Icons.circle_outlined, size: 18, color: isSelected ? Colors.purpleAccent : Colors.white24),
+                                  const SizedBox(width: 10),
+                                  Flexible(child: Text(cat.name, style: TextStyle(fontSize: 14, color: isSelected ? Colors.white : Colors.white70, fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold), textAlign: TextAlign.center, maxLines: 2)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+            loading: () => const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Colors.purpleAccent))),
+            error: (e, s) => const SizedBox(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryTopControls(AsyncValue categoriesAsync) {
+    return Row(
+      children: [
+        _buildActionIconButton(
+          icon: Icons.select_all_rounded,
+          color: Colors.blueAccent,
+          tooltip: 'اختيار الكل',
+          onPressed: () {
+            categoriesAsync.whenData((cats) {
+              setState(() => _selectedCategoryIds = (cats as List).map((e) => e.id as int).toSet());
+            });
+          },
+        ),
+        const SizedBox(width: 12),
+        _buildActionIconButton(
+          icon: Icons.deselect_rounded,
+          color: Colors.redAccent,
+          tooltip: 'مسح الكل',
+          onPressed: () => setState(() => _selectedCategoryIds = {}),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionIconButton({required IconData icon, required Color color, required String tooltip, required VoidCallback onPressed}) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.2))),
+        child: Icon(icon, color: color, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildGamingScreen(UnderPressureState state) {
+    final question = state.currentQuestion;
+    final isSmall = AppDesign.isSmallScreen(context);
+
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: isSmall ? 5 : 20, horizontal: isSmall ? 10 : 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (!isSmall) const Spacer(),
+          _buildProgressTrack(state),
+          SizedBox(height: isSmall ? 4 : 24),
+          _buildTimer(state),
+          SizedBox(height: isSmall ? 4 : 24),
+          if (question != null)
+            Flexible(child: _buildQuestionCard(question))
+          else
+            const Text('انتهت الأسئلة!', style: TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold)),
+          SizedBox(height: isSmall ? 4 : 24),
+          _buildControls(),
+          SizedBox(height: isSmall ? 12 : 24),
+          _buildScoreBoard(state),
+          if (!isSmall) const Spacer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimer(UnderPressureState state) {
+    final bool warning = state.timeLeft < 10;
+    final color = warning ? Colors.redAccent : Colors.purpleAccent;
+    final currentlyAnswering = state.isTeam2Turn ? state.team2 : state.team1;
+    final isSmall = AppDesign.isSmallScreen(context);
+
+    return Container(
+      width: isSmall ? 70 : 100,
+      height: isSmall ? 70 : 100,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withOpacity(0.5), width: isSmall ? 3 : 6),
+        boxShadow: [
+          BoxShadow(color: color.withOpacity(0.2), blurRadius: isSmall ? 5 : 20, spreadRadius: 2)
+        ],
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${state.timeLeft}',
+              style: TextStyle(
+                fontSize: isSmall ? 24 : 36,
+                fontWeight: FontWeight.w900,
+                color: warning ? Colors.redAccent : Colors.white,
+                shadows: [Shadow(color: (warning ? Colors.redAccent : Colors.blueAccent).withOpacity(0.5), blurRadius: 10)],
+              ),
+            ),
+            Text(
+              '${currentlyAnswering?.name}',
+              style: TextStyle(fontSize: isSmall ? 10 : 13, fontWeight: FontWeight.bold, color: Colors.white70),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuestionCard(dynamic question) {
+    final isSmall = AppDesign.isSmallScreen(context);
+    return Container(
+      width: double.infinity,
+      constraints: BoxConstraints(maxWidth: AppDesign.isSmallScreen(context) ? 800 : 1000),
+      padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 24, vertical: isSmall ? 6 : 12),
+      decoration: AppDesign.glassDecoration,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (question.imageData != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.memory(
+                question.imageData!,
+                height: isSmall ? 80 : 180,
+                width: double.infinity,
+                fit: BoxFit.contain,
+              ),
+            ),
+            SizedBox(height: isSmall ? 4 : 16),
+          ],
+          Text(
+            question.text,
+            style: TextStyle(fontSize: isSmall ? 16 : 24, fontWeight: FontWeight.w900, color: Colors.white, height: 1.1),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: isSmall ? 6 : 16),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 20, vertical: isSmall ? 6 : 8),
+            decoration: BoxDecoration(
+              color: Colors.greenAccent.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.greenAccent.withOpacity(0.3), width: 1.5),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lightbulb_outline, color: Colors.greenAccent, size: isSmall ? 18 : 22),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    'الإجابة: ${question.answer}',
+                    style: TextStyle(fontSize: isSmall ? 12 : 18, color: Colors.greenAccent, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControls() {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: AppDesign.isSmallScreen(context) ? 10 : 20,
+      runSpacing: 10,
+      children: [
+        _ControlButton(
+          label: 'صح',
+          icon: Icons.check_circle_rounded,
+          color: Colors.greenAccent,
+          onPressed: () => ref.read(underPressureProvider.notifier).nextQuestion(true),
+        ),
+        _ControlButton(
+          label: 'خـطأ',
+          icon: Icons.cancel_rounded,
+          color: Colors.redAccent,
+          onPressed: () => ref.read(underPressureProvider.notifier).nextQuestion(false),
+        ),
+        _ControlButton(
+          label: 'تخطي',
+          icon: Icons.skip_next_rounded,
+          color: Colors.orangeAccent,
+          onPressed: () => ref.read(underPressureProvider.notifier).skipQuestion(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScoreBoard(UnderPressureState state) {
+    final score = state.isTeam2Turn ? state.team2Score : state.team1Score;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.stars_rounded, color: Colors.amber, size: 24),
+          const SizedBox(width: 10),
+          Text(
+            'الحصيلة: $score', 
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.amber)
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinishedScreen(UnderPressureState state) {
+    final winner = state.winnerTeamId == state.team1?.id ? state.team1 : (state.winnerTeamId == state.team2?.id ? state.team2 : null);
+
+    return Center(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(40),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(50),
+            margin: const EdgeInsets.all(24),
+            constraints: const BoxConstraints(maxWidth: 600),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(40),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.emoji_events_rounded, size: 100, color: Colors.amberAccent),
+                  const SizedBox(height: 24),
+                  const Text('انتهت المواجهة!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white)),
+                  const SizedBox(height: 32),
+                  
+                  if (AppDesign.isSmallScreen(context))
+                    Column(
+                      children: [
+                        _buildResultColumn(
+                          state.team1?.name ?? 'فريق 1', 
+                          state.team1PointsAdded, 
+                          state.teams.firstWhere((t) => t.id == state.team1?.id, orElse: () => state.team1!).score,
+                          state.winnerTeamId == state.team1?.id || state.isTie
+                        ),
+                        const SizedBox(height: 20),
+                        Container(width: 100, height: 1, color: Colors.white10),
+                        const SizedBox(height: 20),
+                        _buildResultColumn(
+                          state.team2?.name ?? 'فريق 2', 
+                          state.team2PointsAdded, 
+                          state.teams.firstWhere((t) => t.id == state.team2?.id, orElse: () => state.team2!).score,
+                          state.winnerTeamId == state.team2?.id || state.isTie
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Expanded(
+                          child: _buildResultColumn(
+                            state.team1?.name ?? 'فريق 1', 
+                            state.team1PointsAdded, 
+                            state.teams.firstWhere((t) => t.id == state.team1?.id, orElse: () => state.team1!).score,
+                            state.winnerTeamId == state.team1?.id || state.isTie
+                          )
+                        ),
+                        Container(width: 1, height: 120, color: Colors.white10),
+                        Expanded(
+                          child: _buildResultColumn(
+                            state.team2?.name ?? 'فريق 2', 
+                            state.team2PointsAdded, 
+                            state.teams.firstWhere((t) => t.id == state.team2?.id, orElse: () => state.team2!).score,
+                            state.winnerTeamId == state.team2?.id || state.isTie
+                          )
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 32),
+                  _buildProgressTrack(state),
+                  
+                  if (state.isTie)
+                    const Text('تعادل حاسم! حصل الفريقان على البونص', style: TextStyle(fontSize: 20, color: Colors.amberAccent, fontWeight: FontWeight.bold))
+                  else if (winner != null)
+                    Text('الفائز هو فريق ${winner.name} وحصل على البونص!', style: const TextStyle(fontSize: 20, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                  
+                  const SizedBox(height: 32),
+                  if (AppDesign.isSmallScreen(context))
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => ref.read(underPressureProvider.notifier).restartGame(),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              backgroundColor: Colors.tealAccent,
+                              foregroundColor: Colors.black87,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                            child: const Text('إعادة التحدي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => ref.read(underPressureProvider.notifier).reset(),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              backgroundColor: Colors.blueAccent,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                            child: const Text('موافق', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => ref.read(underPressureProvider.notifier).restartGame(),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                            backgroundColor: Colors.tealAccent,
+                            foregroundColor: Colors.black87,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          ),
+                          child: const Text('إعادة التحدي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 20),
+                        ElevatedButton(
+                          onPressed: () => ref.read(underPressureProvider.notifier).reset(),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          ),
+                          child: const Text('موافق', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultColumn(String name, int pointsAdded, int totalScore, bool isWinner) {
+    return Column(
+      children: [
+        Text(name, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isWinner ? Colors.amberAccent : Colors.white70)),
+        const SizedBox(height: 12),
+        Text('+$pointsAdded', style: TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: isWinner ? Colors.greenAccent : Colors.white54)),
+        const Text('نقطة مكتسبة', style: TextStyle(fontSize: 12, color: Colors.white38)),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text('الإجمالي: $totalScore', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgressTrack(UnderPressureState state) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      child: AppDesign.isSmallScreen(context)
+        ? Column(
+            children: [
+              _buildTeamProgress(state.team1?.name ?? 'فريق 1', state.team1Results, !state.isTeam2Turn && state.status == UnderPressureStatus.playing),
+              const SizedBox(height: 20),
+              _buildTeamProgress(state.team2?.name ?? 'فريق 2', state.team2Results, state.isTeam2Turn && state.status == UnderPressureStatus.playing),
+            ],
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              Expanded(child: _buildTeamProgress(state.team1?.name ?? 'فريق 1', state.team1Results, !state.isTeam2Turn && state.status == UnderPressureStatus.playing)),
+              const SizedBox(width: 40),
+              Expanded(child: _buildTeamProgress(state.team2?.name ?? 'فريق 2', state.team2Results, state.isTeam2Turn && state.status == UnderPressureStatus.playing)),
+            ],
+          ),
+    );
+  }
+
+  Widget _buildTeamProgress(String name, List<QuestionResult> results, bool isActive) {
+    return Column(
+      children: [
+        Text(
+          name, 
+          style: TextStyle(
+            color: isActive ? Colors.purpleAccent : Colors.white70, 
+            fontWeight: FontWeight.bold, 
+            fontSize: 14,
+            shadows: isActive ? [const Shadow(color: Colors.purpleAccent, blurRadius: 10)] : [],
+          )
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: results.asMap().entries.map((entry) {
+            final res = entry.value;
+            Color color;
+            IconData? icon;
+            switch (res) {
+              case QuestionResult.correct:
+                color = Colors.greenAccent;
+                icon = Icons.check;
+                break;
+              case QuestionResult.wrong:
+                color = Colors.redAccent;
+                icon = Icons.close;
+                break;
+              case QuestionResult.skipped:
+                color = Colors.orangeAccent;
+                icon = Icons.skip_next_rounded;
+                break;
+              case QuestionResult.pending:
+                color = Colors.white.withOpacity(0.1);
+                icon = null;
+                break;
+            }
+            return Container(
+              width: AppDesign.isSmallScreen(context) ? 24 : 32,
+              height: AppDesign.isSmallScreen(context) ? 24 : 32,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                shape: BoxShape.circle,
+                border: Border.all(color: color.withOpacity(0.4), width: 2),
+                boxShadow: (res != QuestionResult.pending) ? [BoxShadow(color: color.withOpacity(0.1), blurRadius: 4)] : [],
+              ),
+              child: Center(child: icon != null ? Icon(icon, size: AppDesign.isSmallScreen(context) ? 14 : 18, color: color) : Text('${entry.key + 1}', style: const TextStyle(color: Colors.white12, fontSize: 10))),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _ControlButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onPressed;
+
+  const _ControlButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSmall = AppDesign.isSmallScreen(context);
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: isSmall ? 80 : 100,
+        padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: isSmall ? 30 : 40, color: color),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(fontSize: isSmall ? 16 : 20, fontWeight: FontWeight.w900, color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}

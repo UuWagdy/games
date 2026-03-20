@@ -13,7 +13,10 @@ class ThreeDDice extends StatefulWidget {
     this.rollCounter = 0,
     this.duration = const Duration(milliseconds: 1200),
     this.onAnimationComplete,
+    this.size = 70,
   });
+
+  final double size;
 
   @override
   State<ThreeDDice> createState() => _ThreeDDiceState();
@@ -128,8 +131,8 @@ class _ThreeDDiceState extends State<ThreeDDice>
 
   Widget _buildDiceFace(int value) {
     return Container(
-      width: 70,
-      height: 70,
+      width: widget.size,
+      height: widget.size,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -150,7 +153,7 @@ class _ThreeDDiceState extends State<ThreeDDice>
       child: Center(
         child: CustomPaint(
           painter: DiceDotsPainter(value),
-          size: const Size(46, 46),
+          size: Size(widget.size * 0.65, widget.size * 0.65),
         ),
       ),
     );

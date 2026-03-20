@@ -1,15 +1,13 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:games/core/database/database_service.dart';
 import '../../domain/entities/bank_al_haz_entities.dart';
 
 class BankAlHazTemplateSeeder {
-  final WidgetRef ref;
-  BankAlHazTemplateSeeder(this.ref);
+  BankAlHazTemplateSeeder();
 
   Future<void> seedGame() async {
     final db = await DatabaseService.instance.database;
-    
+
     // Execute everything in ONE transaction to prevent hangs
     await db.transaction((txn) async {
       // 1. Clear existing Bank Al Haz data
@@ -18,51 +16,241 @@ class BankAlHazTemplateSeeder {
       await txn.delete('bah_buildings');
 
       // 2. Create Categories & Questions
-      final jerusalemOldCat = await _txnCreateCategoryAndQuestions(txn, "أورشليم (القديم)", _jerusalemOldQuestions);
-      final jerusalemNewCat = await _txnCreateCategoryAndQuestions(txn, "أورشليم (الجديد)", _jerusalemNewQuestions);
-      final babelCat = await _txnCreateCategoryAndQuestions(txn, "بابل", _babelQuestions);
-      final egyptCat = await _txnCreateCategoryAndQuestions(txn, "مصر", _egyptQuestions);
-      final jerichoCat = await _txnCreateCategoryAndQuestions(txn, "أريحا", _jerichoQuestions);
-      final bethlehemCat = await _txnCreateCategoryAndQuestions(txn, "بيت لحم", _bethlehemQuestions);
-      final nazarethCat = await _txnCreateCategoryAndQuestions(txn, "الناصرة", _nazarethQuestions);
-      final capernaumCat = await _txnCreateCategoryAndQuestions(txn, "كفرناحوم", _capernaumQuestions);
-      final bethanyCat = await _txnCreateCategoryAndQuestions(txn, "بيت عنيا", _bethanyQuestions);
-      final damascusCat = await _txnCreateCategoryAndQuestions(txn, "دمشق", _damascusQuestions);
-      final antiochCat = await _txnCreateCategoryAndQuestions(txn, "أنطاكية", _antiochQuestions);
-      final romeCat = await _txnCreateCategoryAndQuestions(txn, "روما", _romeQuestions);
+      final jerusalemOldCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "أورشليم (القديم)",
+        _jerusalemOldQuestions,
+      );
+      final jerusalemNewCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "أورشليم (الجديد)",
+        _jerusalemNewQuestions,
+      );
+      final babelCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "بابل",
+        _babelQuestions,
+      );
+      final egyptCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "مصر",
+        _egyptQuestions,
+      );
+      final jerichoCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "أريحا",
+        _jerichoQuestions,
+      );
+      final bethlehemCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "بيت لحم",
+        _bethlehemQuestions,
+      );
+      final nazarethCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "الناصرة",
+        _nazarethQuestions,
+      );
+      final capernaumCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "كفرناحوم",
+        _capernaumQuestions,
+      );
+      final bethanyCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "بيت عنيا",
+        _bethanyQuestions,
+      );
+      final damascusCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "دمشق",
+        _damascusQuestions,
+      );
+      final antiochCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "أنطاكية",
+        _antiochQuestions,
+      );
+      final romeCat = await _txnCreateCategoryAndQuestions(
+        txn,
+        "روما",
+        _romeQuestions,
+      );
 
       // 3. Add Stations
       final stations = [
         const Station(id: 1, name: "البداية", type: StationType.none),
-        Station(id: 2, name: "أورشليم (القديم)", buyPrice: 200, ownerCategoryId: jerusalemOldCat, passerCategoryId: jerusalemOldCat, requiresQuestion: true, type: StationType.question),
-        const Station(id: 3, name: "حظك اليوم", type: StationType.card, cardType: "chance"),
-        Station(id: 4, name: "بابل", buyPrice: 180, ownerCategoryId: babelCat, passerCategoryId: babelCat, requiresQuestion: true, type: StationType.question),
-        Station(id: 5, name: "مصر", buyPrice: 220, ownerCategoryId: egyptCat, passerCategoryId: egyptCat, requiresQuestion: true, type: StationType.question),
-        const Station(id: 6, name: "المحكمة", type: StationType.card, cardType: "chest"),
-        Station(id: 7, name: "أريحا", buyPrice: 160, ownerCategoryId: jerichoCat, passerCategoryId: jerichoCat, requiresQuestion: true, type: StationType.question),
-        const Station(id: 8, name: "بيت إيل", buyPrice: 140, type: StationType.property), 
-        Station(id: 9, name: "حبرون", buyPrice: 150, type: StationType.property),
-        Station(id: 10, name: "سدوم وعمورة", buyPrice: 130, type: StationType.property),
-        
-        Station(id: 11, name: "بيت لحم", buyPrice: 240, ownerCategoryId: bethlehemCat, passerCategoryId: bethlehemCat, requiresQuestion: true, type: StationType.question),
-        const Station(id: 12, name: "حظك اليوم", type: StationType.card, cardType: "chance"),
-        Station(id: 13, name: "الناصرة", buyPrice: 200, ownerCategoryId: nazarethCat, passerCategoryId: nazarethCat, requiresQuestion: true, type: StationType.question),
-        Station(id: 14, name: "كفرناحوم", buyPrice: 220, ownerCategoryId: capernaumCat, passerCategoryId: capernaumCat, requiresQuestion: true, type: StationType.question),
-        const Station(id: 15, name: "المحكمة", type: StationType.card, cardType: "chest"),
-        Station(id: 16, name: "أورشليم (الجديد)", buyPrice: 300, ownerCategoryId: jerusalemNewCat, passerCategoryId: jerusalemNewCat, requiresQuestion: true, type: StationType.question),
-        Station(id: 17, name: "بيت عنيا", buyPrice: 190, ownerCategoryId: bethanyCat, passerCategoryId: bethanyCat, requiresQuestion: true, type: StationType.question),
-        
-        Station(id: 18, name: "دمشق", buyPrice: 170, ownerCategoryId: damascusCat, passerCategoryId: damascusCat, requiresQuestion: true, type: StationType.question),
-        const Station(id: 19, name: "حظك اليوم", type: StationType.card, cardType: "chance"),
-        Station(id: 20, name: "أنطاكية", buyPrice: 210, ownerCategoryId: antiochCat, passerCategoryId: antiochCat, requiresQuestion: true, type: StationType.question),
-        Station(id: 21, name: "روما", buyPrice: 260, ownerCategoryId: romeCat, passerCategoryId: romeCat, requiresQuestion: true, type: StationType.question),
-        const Station(id: 22, name: "المحكمة", type: StationType.card, cardType: "chest"),
+        Station(
+          id: 2,
+          name: "أورشليم(ق)",
+          buyPrice: 200,
+          ownerCategoryId: jerusalemOldCat,
+          passerCategoryId: jerusalemOldCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        const Station(
+          id: 3,
+          name: "حظك اليوم",
+          type: StationType.card,
+          cardType: "chance",
+        ),
+        Station(
+          id: 4,
+          name: "بابل",
+          buyPrice: 180,
+          ownerCategoryId: babelCat,
+          passerCategoryId: babelCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        Station(
+          id: 5,
+          name: "مصر",
+          buyPrice: 220,
+          ownerCategoryId: egyptCat,
+          passerCategoryId: egyptCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        const Station(
+          id: 6,
+          name: "المحكمة",
+          type: StationType.card,
+          cardType: "chest",
+        ),
+        Station(
+          id: 7,
+          name: "أريحا",
+          buyPrice: 160,
+          ownerCategoryId: jerichoCat,
+          passerCategoryId: jerichoCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        const Station(
+          id: 8,
+          name: "بيت إيل",
+          buyPrice: 140,
+          type: StationType.property,
+        ),
+        Station(
+          id: 9,
+          name: "حبرون",
+          buyPrice: 150,
+          type: StationType.property,
+        ),
+        Station(
+          id: 10,
+          name: "سدوم وعمورة",
+          buyPrice: 130,
+          type: StationType.property,
+        ),
+
+        Station(
+          id: 11,
+          name: "بيت لحم",
+          buyPrice: 240,
+          ownerCategoryId: bethlehemCat,
+          passerCategoryId: bethlehemCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        const Station(
+          id: 12,
+          name: "حظك اليوم",
+          type: StationType.card,
+          cardType: "chance",
+        ),
+        Station(
+          id: 13,
+          name: "الناصرة",
+          buyPrice: 200,
+          ownerCategoryId: nazarethCat,
+          passerCategoryId: nazarethCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        Station(
+          id: 14,
+          name: "كفرناحوم",
+          buyPrice: 220,
+          ownerCategoryId: capernaumCat,
+          passerCategoryId: capernaumCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        const Station(
+          id: 15,
+          name: "المحكمة",
+          type: StationType.card,
+          cardType: "chest",
+        ),
+        Station(
+          id: 16,
+          name: "أورشليم(ج)",
+          buyPrice: 300,
+          ownerCategoryId: jerusalemNewCat,
+          passerCategoryId: jerusalemNewCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        Station(
+          id: 17,
+          name: "بيت عنيا",
+          buyPrice: 190,
+          ownerCategoryId: bethanyCat,
+          passerCategoryId: bethanyCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+
+        Station(
+          id: 18,
+          name: "دمشق",
+          buyPrice: 170,
+          ownerCategoryId: damascusCat,
+          passerCategoryId: damascusCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        const Station(
+          id: 19,
+          name: "حظك اليوم",
+          type: StationType.card,
+          cardType: "chance",
+        ),
+        Station(
+          id: 20,
+          name: "أنطاكية",
+          buyPrice: 210,
+          ownerCategoryId: antiochCat,
+          passerCategoryId: antiochCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        Station(
+          id: 21,
+          name: "روما",
+          buyPrice: 260,
+          ownerCategoryId: romeCat,
+          passerCategoryId: romeCat,
+          requiresQuestion: true,
+          type: StationType.question,
+        ),
+        const Station(
+          id: 22,
+          name: "المحكمة",
+          type: StationType.card,
+          cardType: "chest",
+        ),
       ];
 
       for (var s in stations) {
-        // Calculate a default base rent if not provided (20% of buy price)
-        double rent = s.baseRent > 0 ? s.baseRent : (s.buyPrice * 0.2).floorToDouble();
-        
+        double rent = s.baseRent > 0
+            ? s.baseRent
+            : (s.buyPrice * 0.2).floorToDouble();
+
         await txn.insert('bah_stations', {
           'id': s.id,
           'name': s.name,
@@ -77,15 +265,65 @@ class BankAlHazTemplateSeeder {
       }
 
       final cards = [
-        const BankAlHazCard(title: "بركة الصباح", description: "حصلت على 200 نقطة هدية", effectType: CardEffectType.addMoney, effectValue: 200, type: "chance"),
-        const BankAlHazCard(title: "عشور المحاصيل", description: "ادفع 100 ثمن العشور للفقراء", effectType: CardEffectType.removeMoney, effectValue: 100, type: "chance"),
-        const BankAlHazCard(title: "جولة تبشيرية", description: "اذهب إلى أنطاكية فوراً", effectValue: 0, targetStationName: "أنطاكية", effectType: CardEffectType.moveToStation, type: "chance"),
-        const BankAlHazCard(title: "رحلة مقدسة", description: "اذهب إلى نقطة البداية (احصل على مكافأة المرور)", effectValue: 0, targetStationName: "البداية", effectType: CardEffectType.moveToStation, type: "chance"),
-        
-        const BankAlHazCard(title: "سجن فيلبي", description: "تسبيح في السجن (توقف عن اللعب دور واحد)", effectType: CardEffectType.skipTurn, effectValue: 1, type: "chest"),
-        const BankAlHazCard(title: "محكمة الهيكل", description: "ادفع ضريبة للمقدس 150", effectType: CardEffectType.removeMoney, effectValue: 150, type: "chest"),
-        const BankAlHazCard(title: "هدية الملوك", description: "المجوس أرسلوا لك 300", effectType: CardEffectType.addMoney, effectValue: 300, type: "chest"),
-        const BankAlHazCard(title: "عجلة الزمان", description: "تحرك 3 خطوات للأمام", effectType: CardEffectType.moveSteps, effectValue: 3, type: "chest"),
+        const BankAlHazCard(
+          title: "بركة الصباح",
+          description: "حصلت على 200 نقطة هدية",
+          effectType: CardEffectType.addMoney,
+          effectValue: 200,
+          type: "chance",
+        ),
+        const BankAlHazCard(
+          title: "عشور المحاصيل",
+          description: "ادفع 100 ثمن العشور للفقراء",
+          effectType: CardEffectType.removeMoney,
+          effectValue: 100,
+          type: "chance",
+        ),
+        const BankAlHazCard(
+          title: "جولة تبشيرية",
+          description: "اذهب إلى أنطاكية فوراً",
+          effectValue: 0,
+          targetStationName: "أنطاكية",
+          effectType: CardEffectType.moveToStation,
+          type: "chance",
+        ),
+        const BankAlHazCard(
+          title: "رحلة مقدسة",
+          description: "اذهب إلى نقطة البداية (احصل على مكافأة المرور)",
+          effectValue: 0,
+          targetStationName: "البداية",
+          effectType: CardEffectType.moveToStation,
+          type: "chance",
+        ),
+
+        const BankAlHazCard(
+          title: "سجن فيلبي",
+          description: "تسبيح في السجن (توقف عن اللعب دور واحد)",
+          effectType: CardEffectType.skipTurn,
+          effectValue: 1,
+          type: "chest",
+        ),
+        const BankAlHazCard(
+          title: "محكمة الهيكل",
+          description: "ادفع ضريبة للمقدس 150",
+          effectType: CardEffectType.removeMoney,
+          effectValue: 150,
+          type: "chest",
+        ),
+        const BankAlHazCard(
+          title: "هدية الملوك",
+          description: "المجوس أرسلوا لك 300",
+          effectType: CardEffectType.addMoney,
+          effectValue: 300,
+          type: "chest",
+        ),
+        const BankAlHazCard(
+          title: "عجلة الزمان",
+          description: "تحرك 3 خطوات للأمام",
+          effectType: CardEffectType.moveSteps,
+          effectValue: 3,
+          type: "chest",
+        ),
       ];
       for (var c in cards) {
         await txn.insert('bah_cards', {
@@ -100,35 +338,56 @@ class BankAlHazTemplateSeeder {
     });
   }
 
-  Future<int> _txnCreateCategoryAndQuestions(Transaction txn, String name, List<Map<String, String>> data) async {
-    // Check if category already exists to avoid duplication
-    final existing = await txn.query('categories', where: 'name = ?', whereArgs: [name]);
+  Future<int> _txnCreateCategoryAndQuestions(
+    Transaction txn,
+    String name,
+    List<Map<String, String>> data,
+  ) async {
+    final existing = await txn.query(
+      'categories',
+      where: 'name = ?',
+      whereArgs: [name],
+    );
     int catId;
     if (existing.isNotEmpty) {
       catId = existing.first['id'] as int;
-      // Optionally clear existing questions for this category to prevent accumulation
-      await txn.delete('question_categories', where: 'category_id = ?', whereArgs: [catId]);
+      // Get all question IDs for this category
+      final qCats = await txn.query(
+        'question_categories',
+        where: 'category_id = ?',
+        whereArgs: [catId],
+      );
+      final qIds = qCats.map((e) => e['question_id'] as int).toList();
+
+      // Delete associations and the questions themselves to prevent duplicates
+      await txn.delete(
+        'question_categories',
+        where: 'category_id = ?',
+        whereArgs: [catId],
+      );
+      for (var qid in qIds) {
+        await txn.delete('questions', where: 'id = ?', whereArgs: [qid]);
+      }
     } else {
       catId = await txn.insert('categories', {'name': name});
     }
 
     for (var q in data) {
-        // Check if question exists in this category to avoid exact duplicates
-        final qText = q['q']!;
-        int questionId = await txn.insert('questions', {
-          'text': qText,
-          'answer': q['a']!,
-          'type': 'essay', // ← Changed to essay for open-ended questions
-          'options_json': null, // No dummy options
-          'correct_options_json': null,
-          'is_multiple': 0,
-        });
+      final qText = q['q']!;
+      int questionId = await txn.insert('questions', {
+        'text': qText,
+        'answer': q['a']!,
+        'type': 'essay',
+        'options_json': null,
+        'correct_options_json': null,
+        'is_multiple': 0,
+      });
 
-       await txn.insert('question_categories', {
-          'question_id': questionId,
-          'category_id': catId,
-          'is_used': 0,
-       });
+      await txn.insert('question_categories', {
+        'question_id': questionId,
+        'category_id': catId,
+        'is_used': 0,
+      });
     }
     return catId;
   }
@@ -200,7 +459,10 @@ class BankAlHazTemplateSeeder {
     {'q': 'أين نشأ المسيح؟', 'a': 'الناصرة'},
     {'q': 'من بشر العذراء مريم؟', 'a': 'الملاك جبرائيل'},
     {'q': 'ماذا كان عمل يوسف النجار؟', 'a': 'نجار'},
-    {'q': 'ماذا قال نثنائيل عن الناصرة؟', 'a': 'أمن الناصرة يمكن أن يكون شيء صالح؟'},
+    {
+      'q': 'ماذا قال نثنائيل عن الناصرة؟',
+      'a': 'أمن الناصرة يمكن أن يكون شيء صالح؟',
+    },
   ];
 
   final List<Map<String, String>> _capernaumQuestions = [

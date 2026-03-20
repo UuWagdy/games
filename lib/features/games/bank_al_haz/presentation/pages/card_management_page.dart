@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import '../providers/bank_al_haz_providers.dart';
+import 'package:games/core/design/app_design.dart';
 
 class CardManagementPage extends ConsumerWidget {
   const CardManagementPage({super.key});
@@ -14,112 +15,98 @@ class CardManagementPage extends ConsumerWidget {
     final cardsAsync = ref.watch(cardsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('إدارة الكروت'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showCardDialog(context, ref),
-          ),
-        ],
-      ),
-      body: cardsAsync.when(
-        data: (cards) => ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: cards.length,
-          itemBuilder: (context, index) {
-            final card = cards[index];
-            return Card(
-              elevation: 4,
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  gradient: LinearGradient(
-                    colors: [Colors.blue.shade50, Colors.white],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+      backgroundColor: Colors.transparent,
+      body: AppDesign.backgroundWrapper(
+        child: Column(
+          children: [
+            AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Text('إدارة الكروت', style: AppDesign.titleStyle.copyWith(fontSize: 22)),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.add_circle, color: Colors.amberAccent, size: 30),
+                  onPressed: () => _showCardDialog(context, ref),
                 ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 8,
-                  ),
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.blue.shade100,
-                    radius: 25,
-                    child: card.imageData != null
-                        ? ClipOval(
-                            child: Image.memory(
-                              card.imageData!,
-                              width: 50,
-                              height: 50,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : Icon(Icons.style, color: Colors.blue.shade800),
-                  ),
-                  title: Text(
-                    card.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(card.description),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
+              ],
+            ),
+            Expanded(
+              child: cardsAsync.when(
+                data: (cards) => ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  itemCount: cards.length,
+                  itemBuilder: (context, index) {
+                    final card = cards[index];
+                    final isChance = card.type == 'chance';
+                    final color = isChance ? Colors.amberAccent : Colors.blueAccent;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: AppDesign.glassDecorationWithColor(color),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        leading: Container(
+                          width: 55, height: 55,
                           decoration: BoxDecoration(
-                            color: Colors.amber.shade100,
-                            borderRadius: BorderRadius.circular(8),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: color.withOpacity(0.3), width: 2),
                           ),
-                          child: Text(
-                            _getEffectLabel(card.effectType),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.amber.shade900,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: card.imageData != null
+                              ? ClipOval(
+                                  child: Image.memory(
+                                    card.imageData!,
+                                    width: 55, height: 55,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : Icon(isChance ? Icons.auto_awesome : Icons.gavel, color: color, size: 28),
                         ),
-                      ],
-                    ),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () =>
-                            _showCardDialog(context, ref, card: card),
+                        title: Text(
+                          card.title,
+                          style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 18),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(card.description, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: color.withOpacity(0.3)),
+                              ),
+                              child: Text(
+                                _getEffectLabel(card.effectType),
+                                style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_note, color: Colors.white70),
+                              onPressed: () => _showCardDialog(context, ref, card: card),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () => _deleteCard(context, ref, card.id!),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteCard(context, ref, card.id!),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
+                loading: () => const Center(child: CircularProgressIndicator(color: Colors.amberAccent)),
+                error: (err, stack) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.redAccent))),
               ),
-            );
-          },
+            ),
+          ],
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
       ),
     );
   }

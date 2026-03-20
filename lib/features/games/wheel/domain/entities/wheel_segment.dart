@@ -4,6 +4,8 @@ class WheelSegment {
   final int points;
   final bool isQuestion;
   final List<int> categoryIds;
+  final bool isSwitch;
+  final bool isJoker;
 
   WheelSegment({
     this.id,
@@ -11,5 +13,7 @@ class WheelSegment {
     required this.points,
     this.isQuestion = false,
     this.categoryIds = const [],
+    this.isSwitch = false,
+    this.isJoker = false,
   });
 }

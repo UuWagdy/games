@@ -3,8 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import '../../../../questions/domain/entities/question.dart';
-import 'bank_al_haz_providers.dart';
 import '../../../../questions/presentation/providers/question_providers.dart';
+import '../../../../settings/presentation/providers/settings_providers.dart';
+import '../../../../teams/presentation/providers/team_providers.dart';
+import 'bank_al_haz_providers.dart';
+
 
 class GameState {
   final List<BankAlHazPlayer> players;
@@ -443,10 +446,44 @@ class GameEngine extends Notifier<GameState> {
 
     state = state.copyWith(
       currentPlayerIndex: nextIndex,
-      currentDiceValue: 0, // Reset dice to 0 so next player knows they haven't rolled yet
+      currentDiceValue: 0, 
       message: "دور ${state.players[nextIndex].name}",
-      isEndingTurn: false, // Unlock for the new player
+      isEndingTurn: false,
     );
+  }
+
+  Future<void> endGame() async {
+    if (state.players.isEmpty) return;
+
+    // Find winner by total assets (money + owned station prices)
+    BankAlHazPlayer? winner;
+    double maxAssets = -1;
+
+    for (var p in state.players) {
+      double stationValue = 0;
+      for (var sid in p.ownedStationIds) {
+        final s = state.board.firstWhere((st) => st.id == sid);
+        stationValue += s.buyPrice;
+      }
+      double total = p.money + stationValue;
+      if (total > maxAssets) {
+        maxAssets = total;
+        winner = p;
+      }
+    }
+
+    if (winner != null) {
+      state = state.copyWith(isGameOver: true, message: "انتهت اللعبة! الفائز هو ${winner.name} بإجمالي ثروة $maxAssets");
+      
+      // Award winner points
+      final teams = await ref.read(teamsListProvider.future);
+      final winningTeam = teams.firstWhere((t) => t.name == winner!.name, orElse: () => teams.first);
+      
+      final settings = await ref.read(generalSettingsProvider.future);
+      final winPoints = settings['bank_al_haz_win_points'] ?? 50;
+      
+      await ref.read(teamsListProvider.notifier).updateScore(winningTeam.id!, winPoints, reason: 'فوز في بنك الحظ');
+    }
   }
 }
 

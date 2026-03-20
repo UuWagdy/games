@@ -24,11 +24,20 @@ class PenaltyShootoutState {
   final PenaltyGameStatus status;
   final Question? currentQuestion;
   final int timer;
+  final int timerDuration;
   final Team? teamA;
   final Team? teamB;
   final bool? lastResult; // true for goal, false for miss, null for none
   final String? winner;
+  final int? winnerId;
   final bool isSuddenDeath;
+
+  // Competitive Mode fields
+  final bool isCompetitiveMode;
+  final String teamAKey;
+  final String teamBKey;
+  final PenaltyTurn? buzzedTurn; // Which team's turn it is currently due to buzzer
+  final List<PenaltyTurn> failedTurnsInCurrentQuestion;
 
   PenaltyShootoutState({
     required this.teamAAttempts,
@@ -40,11 +49,18 @@ class PenaltyShootoutState {
     this.status = PenaltyGameStatus.idle,
     this.currentQuestion,
     this.timer = 10,
+    this.timerDuration = 10,
     this.teamA,
     this.teamB,
     this.lastResult,
     this.winner,
+    this.winnerId,
     this.isSuddenDeath = false,
+    this.isCompetitiveMode = false,
+    this.teamAKey = 'a',
+    this.teamBKey = 'l',
+    this.buzzedTurn,
+    this.failedTurnsInCurrentQuestion = const [],
   });
 
   PenaltyShootoutState copyWith({
@@ -57,11 +73,20 @@ class PenaltyShootoutState {
     PenaltyGameStatus? status,
     Question? currentQuestion,
     int? timer,
+    int? timerDuration,
     Team? teamA,
     Team? teamB,
     bool? lastResult,
     String? winner,
+    int? winnerId,
     bool? isSuddenDeath,
+    bool? isCompetitiveMode,
+    String? teamAKey,
+    String? teamBKey,
+    PenaltyTurn? buzzedTurn,
+    List<PenaltyTurn>? failedTurnsInCurrentQuestion,
+    bool clearLastResult = false,
+    bool clearBuzzedTurn = false,
   }) {
     return PenaltyShootoutState(
       teamAAttempts: teamAAttempts ?? this.teamAAttempts,
@@ -73,11 +98,18 @@ class PenaltyShootoutState {
       status: status ?? this.status,
       currentQuestion: currentQuestion ?? this.currentQuestion,
       timer: timer ?? this.timer,
+      timerDuration: timerDuration ?? this.timerDuration,
       teamA: teamA ?? this.teamA,
       teamB: teamB ?? this.teamB,
-      lastResult: lastResult, // Can be null
+      lastResult: clearLastResult ? null : (lastResult ?? this.lastResult),
       winner: winner ?? this.winner,
+      winnerId: winnerId ?? this.winnerId,
       isSuddenDeath: isSuddenDeath ?? this.isSuddenDeath,
+      isCompetitiveMode: isCompetitiveMode ?? this.isCompetitiveMode,
+      teamAKey: teamAKey ?? this.teamAKey,
+      teamBKey: teamBKey ?? this.teamBKey,
+      buzzedTurn: clearBuzzedTurn ? null : (buzzedTurn ?? this.buzzedTurn),
+      failedTurnsInCurrentQuestion: failedTurnsInCurrentQuestion ?? this.failedTurnsInCurrentQuestion,
     );
   }
 }

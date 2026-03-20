@@ -8,6 +8,8 @@ class PlayerPiece extends StatefulWidget {
   final double rotation;
   final bool flip;
 
+  final double scale;
+
   const PlayerPiece({
     super.key,
     required this.color,
@@ -15,6 +17,7 @@ class PlayerPiece extends StatefulWidget {
     this.isMoving = false,
     this.rotation = 0,
     this.flip = false,
+    this.scale = 1.0,
   });
 
   @override
@@ -57,20 +60,17 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
   }
 
   void _updateParticles() {
-    // Add new particles ONLY when moving
     if (widget.isMoving && _random.nextDouble() > 0.4) {
       _particles.add(_DustParticle(
-        // Start from the back of the car (Right side in local space)
         x: 40 + _random.nextDouble() * 10,
         y: 32 + _random.nextDouble() * 5,
-        size: 2.5 + _random.nextDouble() * 3, // Smaller particles
+        size: 2.5 + _random.nextDouble() * 3,
         opacity: 0.7,
-        vx: 1.0 + _random.nextDouble() * 2.5, // Move BACKWARD (X+)
+        vx: 1.0 + _random.nextDouble() * 2.5,
         vy: (_random.nextDouble() - 0.5) * 1.5,
       ));
     }
 
-    // Move and fade existing particles
     for (int i = _particles.length - 1; i >= 0; i--) {
       _particles[i].x += _particles[i].vx;
       _particles[i].y += _particles[i].vy;
@@ -93,89 +93,97 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        // Only active player has vibration
         final bounce = (widget.label.isNotEmpty) ? math.sin(DateTime.now().millisecondsSinceEpoch / 150) * 1.2 : 0.0;
         
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.label.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(bottom: 2),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  widget.label,
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-              ),
-            SizedBox(
-              width: 60,
-              height: 55,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // THE CAR BODY + WHEELS (This rotates and flips)
-                  Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()
-                      ..rotateZ(widget.rotation)
-                      ..scale(widget.flip ? -1.0 : 1.0, 1.0),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // Dust Particles INSIDE the rotated/flipped space
-                        ..._particles.map((p) => Positioned(
-                          left: p.x,
-                          top: p.y,
-                          child: Opacity(
-                            opacity: p.opacity,
-                            child: Container(
-                              width: p.size,
-                              height: p.size,
-                              decoration: BoxDecoration(
-                                color: Colors.blueGrey.withOpacity(0.3),
-                                shape: BoxShape.circle,
-                              ),
+        // Use Stack to ensure the name doesn't affect the car's bounding box centering
+        return Transform.scale(
+          scale: widget.scale,
+          child: SizedBox(
+            width: 60,
+            height: 55,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                // THE CAR (Base layout 60x55)
+                Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.identity()
+                    ..rotateZ(widget.rotation)
+                    ..scale(widget.flip ? -1.0 : 1.0, 1.0),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      ..._particles.map((p) => Positioned(
+                        left: p.x,
+                        top: p.y,
+                        child: Opacity(
+                          opacity: p.opacity,
+                          child: Container(
+                            width: p.size,
+                            height: p.size,
+                            decoration: BoxDecoration(
+                              color: Colors.blueGrey.withOpacity(0.3),
+                              shape: BoxShape.circle,
                             ),
                           ),
-                        )),
+                        ),
+                      )),
 
-                        // Car Body (Vibrating)
-                        Positioned(
-                          bottom: 12 + bounce,
-                          left: 0,
-                          right: 0,
-                          child: _buildCarBody(),
-                        ),
+                      Positioned(
+                        bottom: 12 + bounce,
+                        left: 0,
+                        right: 0,
+                        child: _buildCarBody(),
+                      ),
 
-                        // Wheels
-                        Positioned(
-                          bottom: 8,
-                          left: 10,
-                          child: Transform.rotate(
-                            angle: widget.isMoving ? (_controller.value * math.pi * 4) : 0,
-                            child: _buildWheel(),
-                          ),
+                      Positioned(
+                        bottom: 8,
+                        left: 10,
+                        child: Transform.rotate(
+                          angle: widget.isMoving ? (_controller.value * math.pi * 4) : 0,
+                          child: _buildWheel(),
                         ),
-                        Positioned(
-                          bottom: 8,
-                          right: 10,
-                          child: Transform.rotate(
-                            angle: widget.isMoving ? (_controller.value * math.pi * 4) : 0,
-                            child: _buildWheel(),
-                          ),
+                      ),
+                      Positioned(
+                        bottom: 8,
+                        right: 10,
+                        child: Transform.rotate(
+                          angle: widget.isMoving ? (_controller.value * math.pi * 4) : 0,
+                          child: _buildWheel(),
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // THE NAME (Floats above the car)
+                if (widget.label.isNotEmpty)
+                  Positioned(
+                    top: -35, // Adjust this so the name stays above the car regardless of car height
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12, width: 0.5),
+                        boxShadow: [
+                           BoxShadow(color: Colors.black45, blurRadius: 10, spreadRadius: 2),
+                        ],
+                      ),
+                      child: Text(
+                        widget.label,
+                        style: TextStyle(
+                          color: Colors.white, 
+                          fontSize: (widget.scale < 1.0) ? (12 / widget.scale) : 18, 
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
-          ],
+          ),
         );
       },
     );
@@ -186,7 +194,6 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
       height: 35,
       child: Stack(
         children: [
-          // Lower part
           Positioned(
             bottom: 0,
             left: 0,
@@ -202,7 +209,6 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
               ),
             ),
           ),
-          // Cabin
           Positioned(
             top: 2,
             left: 14,
@@ -215,7 +221,6 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
               ),
             ),
           ),
-          // Windows
           Positioned(
             top: 6,
             left: 18,
@@ -228,7 +233,6 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
               ),
             ),
           ),
-          // Lights
           Positioned(top: 18, left: 3, child: _buildLight()),
           Positioned(top: 18, right: 3, child: _buildLight()),
         ],

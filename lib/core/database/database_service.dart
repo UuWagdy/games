@@ -47,13 +47,50 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 15,
+      version: 17,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 17) {
+      // Logic for adding switch/joker if someone is on an older version and didn't get them
+      try {
+        await db.execute(
+          'ALTER TABLE wheel_segments ADD COLUMN is_switch INTEGER DEFAULT 0',
+        );
+      } catch (e) {}
+      try {
+        await db.execute(
+          'ALTER TABLE wheel_segments ADD COLUMN is_joker INTEGER DEFAULT 0',
+        );
+      } catch (e) {}
+
+      // Check if they already exist before inserting to avoid duplicates
+      final switchExists = await db.query('wheel_segments', where: 'is_switch = 1');
+      if (switchExists.isEmpty) {
+        await db.insert('wheel_segments', {
+          'text': 'سويتش',
+          'points': 0,
+          'is_question': 0,
+          'is_switch': 1,
+        });
+      }
+
+      final jokerExists = await db.query('wheel_segments', where: 'is_joker = 1');
+      if (jokerExists.isEmpty) {
+        await db.insert('wheel_segments', {
+          'text': 'جوكر',
+          'points': 0,
+          'is_question': 0,
+          'is_joker': 1,
+        });
+      }
+    }
+    if (oldVersion < 16) {
+      // Logic for v16 was already merged into v17 above
+    }
     if (oldVersion < 4) {
       await db.execute('DROP TABLE IF EXISTS wheel_segments');
       await _createWheelTable(db);
@@ -262,7 +299,9 @@ class DatabaseService {
         text TEXT NOT NULL,
         points INTEGER NOT NULL,
         is_question INTEGER DEFAULT 0,
-        category_ids TEXT
+        category_ids TEXT,
+        is_switch INTEGER DEFAULT 0,
+        is_joker INTEGER DEFAULT 0
       )
     ''');
 
@@ -287,6 +326,18 @@ class DatabaseService {
       'points': 15,
       'is_question': 1,
       'category_ids': '1',
+    });
+    await db.insert('wheel_segments', {
+      'text': 'سويتش',
+      'points': 0,
+      'is_question': 0,
+      'is_switch': 1,
+    });
+    await db.insert('wheel_segments', {
+      'text': 'جوكر',
+      'points': 0,
+      'is_question': 0,
+      'is_joker': 1,
     });
   }
 

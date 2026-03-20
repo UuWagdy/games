@@ -14,6 +14,8 @@ class WheelRepositoryImpl implements WheelRepository {
     return result.map((json) {
       final map = Map<String, dynamic>.from(json);
       map['is_question'] = map['is_question'] == 1;
+      map['is_switch'] = map['is_switch'] == 1;
+      map['is_joker'] = map['is_joker'] == 1;
       
       // Convert '1,2,3' to [1, 2, 3]
       final idsString = map['category_ids'] as String?;
@@ -28,6 +30,8 @@ class WheelRepositoryImpl implements WheelRepository {
         points: model.points,
         isQuestion: model.isQuestion,
         categoryIds: model.categoryIds,
+        isSwitch: model.isSwitch,
+        isJoker: model.isJoker,
       );
     }).toList();
   }
@@ -40,9 +44,13 @@ class WheelRepositoryImpl implements WheelRepository {
       points: segment.points,
       isQuestion: segment.isQuestion,
       categoryIds: segment.categoryIds,
+      isSwitch: segment.isSwitch,
+      isJoker: segment.isJoker,
     );
     final map = model.toJson();
     map['is_question'] = model.isQuestion ? 1 : 0;
+    map['is_switch'] = model.isSwitch ? 1 : 0;
+    map['is_joker'] = model.isJoker ? 1 : 0;
     // Store as '1,2,3'
     map['category_ids'] = model.categoryIds.join(',');
     await db.insert('wheel_segments', map);
@@ -57,9 +65,13 @@ class WheelRepositoryImpl implements WheelRepository {
       points: segment.points,
       isQuestion: segment.isQuestion,
       categoryIds: segment.categoryIds,
+      isSwitch: segment.isSwitch,
+      isJoker: segment.isJoker,
     );
     final map = model.toJson();
     map['is_question'] = model.isQuestion ? 1 : 0;
+    map['is_switch'] = model.isSwitch ? 1 : 0;
+    map['is_joker'] = model.isJoker ? 1 : 0;
     // Store as '1,2,3'
     map['category_ids'] = model.categoryIds.join(',');
     await db.update(

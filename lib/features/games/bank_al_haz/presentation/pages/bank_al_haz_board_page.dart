@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:ui';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import '../providers/game_engine_provider.dart';
 import '../providers/bank_al_haz_providers.dart';
@@ -9,6 +10,7 @@ import '../widgets/three_d_dice.dart';
 import '../widgets/player_piece.dart';
 import '../../../../questions/domain/entities/question.dart';
 import '../../../../teams/presentation/pages/teams_management_page.dart';
+import 'package:games/core/design/app_design.dart';
 import '../../../../settings/presentation/pages/settings_page.dart';
 import 'dart:math' as math;
 import 'dart:async';
@@ -94,19 +96,111 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     );
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildFloatingHeader(gameState),
-            Expanded(
-              child: FadeTransition(
-                opacity: _boardRevealController,
-                child: _buildBoard(gameState, engine),
+      extendBodyBehindAppBar: true,
+      endDrawer: AppDesign.isSmallScreen(context) ? Drawer(
+        backgroundColor: AppDesign.slate900,
+        child: _buildMobileDrawer(gameState),
+      ) : null,
+      body: AppDesign.backgroundWrapper(
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildFloatingHeader(gameState, context),
+              Expanded(
+                child: FadeTransition(
+                  opacity: _boardRevealController,
+                  child: _buildBoard(gameState, engine),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildMobileDrawer(GameState state) {
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        DrawerHeader(
+          decoration: BoxDecoration(color: Colors.blue.shade900),
+          child: const Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.account_balance, color: Colors.white, size: 48),
+              SizedBox(height: 12),
+              Text('بنك الحظ', style: AppDesign.titleStyle),
+            ],
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.timer, color: Colors.amberAccent),
+          title: const Text('الوقت المنقضي', style: TextStyle(color: Colors.white)),
+          trailing: Text(_timeElapsedStr, style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+        ),
+        ListTile(
+          leading: const Icon(Icons.history, color: Colors.blueAccent),
+          title: const Text('عدد الدورات', style: TextStyle(color: Colors.white)),
+          trailing: Text('${state.totalTurns}', style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+        ),
+        const Divider(color: Colors.white10),
+        ListTile(
+          leading: const Icon(Icons.group_add, color: Colors.greenAccent),
+          title: const Text('إدارة الفرق', style: TextStyle(color: Colors.white)),
+          onTap: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const TeamsManagementPage()));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.settings, color: Colors.white70),
+          title: const Text('الإعدادات', style: TextStyle(color: Colors.white)),
+          onTap: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.auto_awesome, color: Colors.amberAccent),
+          title: const Text('تطبيق القالب الديني', style: TextStyle(color: Colors.white)),
+          onTap: () {
+            Navigator.pop(context);
+            _restartGamePrompt(context, ref);
+          },
+        ),
+        const Divider(color: Colors.white10),
+        ListTile(
+          leading: const Icon(Icons.stop_circle, color: Colors.redAccent),
+          title: const Text('إنهاء اللعبة', style: TextStyle(color: Colors.white)),
+          onTap: () {
+            Navigator.pop(context);
+            _confirmEndGame();
+          },
+        ),
+      ],
+    );
+  }
+
+  void _confirmEndGame() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppDesign.slate800,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('إنهاء اللعبة', style: AppDesign.titleStyle),
+        content: const Text('هل أنت متأكد من إنهاء اللعبة الآن؟ سيتم احتساب إجمالي الثروة وتحديد الفائز', style: AppDesign.subtitleStyle),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(gameEngineProvider.notifier).endGame();
+            },
+            child: const Text('إنهاء'),
+          ),
+        ],
       ),
     );
   }
@@ -220,32 +314,23 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         );
       },
       pageBuilder: (dialogCtx, _, _) {
+        bool isSmall = AppDesign.isSmallScreen(dialogCtx);
         return Center(
           child: Material(
             color: Colors.transparent,
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               constraints: const BoxConstraints(maxWidth: 500),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 20,
-                    spreadRadius: 5,
-                  ),
-                ],
-              ),
+              decoration: AppDesign.dialogDecoration,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    height: 100,
+                    height: 120,
                     width: double.infinity,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.blue.shade800, Colors.blue.shade400],
+                        colors: [Colors.blue.shade900, Colors.blue.shade600],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -258,18 +343,14 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                       children: [
                         Text(
                           station.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppDesign.titleStyle,
                         ),
                         if (isOwned)
                           Text(
                             "مالك المدينة: $ownerName",
                             style: const TextStyle(
                               color: Colors.white70,
-                              fontSize: 14,
+                              fontSize: 16,
                             ),
                           ),
                       ],
@@ -284,52 +365,52 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                             borderRadius: BorderRadius.circular(15),
                             child: Image.memory(
                               station.imageData!,
-                              height: 100,
+                              height: 120,
                               fit: BoxFit.cover,
                             ),
                           )
                         else
                           const Icon(
                             Icons.location_city,
-                            size: 60,
-                            color: Colors.blueGrey,
+                            size: 80,
+                            color: Colors.white24,
                           ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 32),
                         _statRow(
                           Icons.payments,
                           "ثمن الشراء",
                           "${station.buyPrice} P",
-                          Colors.green,
+                          Colors.greenAccent,
                         ),
-                        const Divider(height: 20),
+                        const Divider(height: 32, color: Colors.white10),
                         _statRow(
                           Icons.home,
                           station.isUnbuyable
                               ? "غرامة التحدي"
                               : "الإيجار الأساسي",
                           "${station.baseRent} P",
-                          Colors.orange,
+                          Colors.amberAccent,
                         ),
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 40),
                         if (station.isUnbuyable) ...[
                           const Text(
                             "هذه الشخصية غير قابلة للشراء، يمكنك تحديها للفوز أو دفع غرامة",
                             style: TextStyle(
-                              color: Colors.deepPurple,
+                              color: Colors.amberAccent,
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                              fontSize: 14,
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
                               onPressed: () =>
                                   Navigator.pop(dialogCtx, _StationAction.buy),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.deepPurple,
-                                foregroundColor: Colors.white,
+                                backgroundColor: Colors.amberAccent,
+                                foregroundColor: Colors.black,
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 20,
                                 ),
@@ -347,35 +428,36 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                           TextButton(
                             onPressed: () =>
                                 Navigator.pop(dialogCtx, _StationAction.pass),
-                            child: const Text("مرور بسلام"),
+                            child: const Text("مرور بسلام", style: TextStyle(color: Colors.white70)),
                           ),
                         ] else if (isOwner) ...[
                           const Text(
                             "أنت تمتلك هذه المدينة بالفعل!",
                             style: TextStyle(
-                              color: Colors.green,
+                              color: Colors.greenAccent,
                               fontWeight: FontWeight.bold,
+                              fontSize: 18,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
                           TextButton(
                             onPressed: () =>
                                 Navigator.pop(dialogCtx, _StationAction.pass),
-                            child: const Text("إغلاق"),
+                            child: const Text("إغلاق", style: TextStyle(color: Colors.white70)),
                           ),
                         ] else if (isOwned) ...[
                           const Text(
                             "ستدخل تحدي المار لتقليل الإيجار",
                             style: TextStyle(
-                              color: Colors.blueGrey,
-                              fontSize: 14,
+                              color: Colors.white60,
+                              fontSize: 16,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -384,8 +466,8 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                                 _StationAction.passerQuestion,
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange.shade700,
-                                foregroundColor: Colors.white,
+                                backgroundColor: Colors.orangeAccent,
+                                foregroundColor: Colors.black,
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 20,
                                 ),
@@ -403,67 +485,104 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                             ),
                           ),
                         ] else ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: canBuy
-                                      ? () => Navigator.pop(
-                                          dialogCtx,
-                                          _StationAction.buy,
-                                        )
-                                      : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green.shade600,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 20,
+                          if (isSmall)
+                            Column(
+                              children: [
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: canBuy
+                                        ? () => Navigator.pop(dialogCtx, _StationAction.buy)
+                                        : null,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.greenAccent.shade700,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
+                                    child: const Text('شراء (سؤال مالك)', style: TextStyle(fontWeight: FontWeight.bold)),
                                   ),
-                                  child: const Text(
-                                    'شراء (سؤال مالك)',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton(
+                                    onPressed: () => Navigator.pop(dialogCtx, _StationAction.pass),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white70,
+                                      side: const BorderSide(color: Colors.white24),
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                    ),
+                                    child: const Text('مرور (بدون سؤال)', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: canBuy
+                                        ? () => Navigator.pop(
+                                            dialogCtx,
+                                            _StationAction.buy,
+                                          )
+                                        : null,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.greenAccent.shade700,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 20,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'شراء (سؤال مالك)',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () => Navigator.pop(
-                                    dialogCtx,
-                                    _StationAction.pass,
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 20,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () => Navigator.pop(
+                                      dialogCtx,
+                                      _StationAction.pass,
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(15),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white70,
+                                      side: const BorderSide(color: Colors.white24),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 20,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                      ),
                                     ),
-                                  ),
-                                  child: const Text(
-                                    'مرور (بدون سؤال)',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                    child: const Text(
+                                      'مرور (بدون سؤال)',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
                           if (!canBuy)
                             const Padding(
-                              padding: EdgeInsets.only(top: 8.0),
+                              padding: EdgeInsets.only(top: 12.0),
                               child: Text(
                                 "نقاطك لا تكفي للشراء",
                                 style: TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 12,
+                                  color: Colors.redAccent,
+                                  fontSize: 14,
                                 ),
                               ),
                             ),
@@ -523,18 +642,9 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
             color: Colors.transparent,
             child: Container(
               margin: const EdgeInsets.all(24),
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
               constraints: const BoxConstraints(maxWidth: 450),
-              decoration: BoxDecoration(
-                color: Colors.blueGrey.shade900,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: card.type == 'chance'
-                      ? Colors.amber
-                      : Colors.blueAccent,
-                  width: 2,
-                ),
-              ),
+              decoration: AppDesign.dialogDecoration,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -542,80 +652,70 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                     "كارت ${card.type == 'chance' ? 'حظك اليوم' : 'المحكمة'}",
                     style: TextStyle(
                       color: card.type == 'chance'
-                          ? Colors.amber
+                          ? Colors.amberAccent
                           : Colors.blueAccent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 24,
+                      letterSpacing: 1.2,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 32),
                   if (card.imageData != null)
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
+                      borderRadius: BorderRadius.circular(20),
                       child: Image.memory(
                         card.imageData!,
-                        height: 120,
+                        height: 160,
                         fit: BoxFit.cover,
-                      ),
-                    )
-                  else if (card.imagePath != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Image.asset(
-                        card.imagePath!,
-                        height: 120,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.auto_awesome,
-                          color: Colors.white24,
-                          size: 60,
-                        ),
                       ),
                     )
                   else
-                    const Icon(
-                      Icons.auto_awesome,
-                      color: Colors.white24,
-                      size: 60,
+                    Icon(
+                      card.type == 'chance' ? Icons.auto_awesome : Icons.gavel,
+                      color: Colors.white12,
+                      size: 100,
                     ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 32),
                   Text(
                     card.title,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 22,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   Text(
                     card.description,
-                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                    style: const TextStyle(color: Colors.white60, fontSize: 18, height: 1.5),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(dialogCtx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: card.type == 'chance'
-                          ? Colors.amber
-                          : Colors.blueAccent,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 40,
-                        vertical: 12,
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(dialogCtx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: card.type == 'chance'
+                            ? Colors.amberAccent
+                            : Colors.blueAccent,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 20,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        elevation: 10,
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
-                    child: const Text(
-                      "موافق",
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                      child: const Text(
+                        "موافق",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
                       ),
                     ),
                   ),
@@ -631,19 +731,19 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   Widget _statRow(IconData icon, String label, String value, Color color) {
     return Row(
       children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(width: 10),
+        Icon(icon, color: color, size: 28),
+        const SizedBox(width: 16),
         Text(
           label,
-          style: const TextStyle(fontSize: 15, color: Colors.blueGrey),
+          style: const TextStyle(fontSize: 16, color: Colors.white60),
         ),
         const Spacer(),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: color,
           ),
         ),
       ],
@@ -652,15 +752,12 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
 
   // ==================== HEADER ====================
 
-  Widget _buildFloatingHeader(GameState state) {
+  Widget _buildFloatingHeader(GameState state, BuildContext context) {
+    bool isSmall = AppDesign.isSmallScreen(context);
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.white10),
-      ),
+      margin: EdgeInsets.symmetric(horizontal: isSmall ? 6 : 20, vertical: isSmall ? 4 : 12),
+      padding: EdgeInsets.symmetric(horizontal: isSmall ? 6 : 24, vertical: isSmall ? 4 : 16),
+      decoration: AppDesign.glassDecoration,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -668,51 +765,71 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios_new,
-                  color: Colors.white70,
-                  size: 20,
-                ),
+                icon: Icon(Icons.arrow_back_ios_new, color: Colors.white, size: isSmall ? 18 : 22),
                 onPressed: () => Navigator.pop(context),
               ),
-              IconButton(
-                icon: const Icon(Icons.group_add, color: Colors.blueAccent, size: 22),
-                tooltip: 'إدارة الفرق',
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const TeamsManagementPage()),
+              if (!isSmall) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.group_add, color: Colors.blueAccent, size: 26),
+                  tooltip: 'إدارة الفرق',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TeamsManagementPage()),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
+          if (!isSmall)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.settings, color: Colors.white70, size: 26),
+                  tooltip: 'الإعدادات',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsPage()),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                _buildDynamicStat(
+                  Icons.timer_outlined,
+                  _timeElapsedStr,
+                  Colors.amberAccent,
+                ),
+                const SizedBox(width: 20),
+                _buildDynamicStat(
+                  Icons.history,
+                  "الدورات: ${state.totalTurns}",
+                  Colors.blueAccent,
+                ),
+              ],
+            ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: const Icon(Icons.settings, color: Colors.white70, size: 22),
-                tooltip: 'الإعدادات',
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+              if (isSmall)
+                Builder(
+                  builder: (scaffoldContext) => IconButton(
+                    icon: Icon(Icons.menu, color: Colors.white, size: isSmall ? 22 : 28),
+                    onPressed: () => Scaffold.of(scaffoldContext).openEndDrawer(),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                )
+              else ...[
+                IconButton(
+                  icon: const Icon(Icons.stop_circle, color: Colors.redAccent, size: 26),
+                  tooltip: 'إنهاء اللعبة',
+                  onPressed: () => _confirmEndGame(),
                 ),
-              ),
-              const SizedBox(width: 8),
-              _buildDynamicStat(
-                Icons.timer_outlined,
-                _timeElapsedStr,
-                Colors.amber,
-              ),
-              const SizedBox(width: 15),
-              _buildDynamicStat(
-                Icons.history,
-                "الدورات: ${state.totalTurns}",
-                Colors.blueAccent,
-              ),
+                IconButton(
+                  icon: const Icon(Icons.auto_awesome, color: Colors.amberAccent, size: 26),
+                  onPressed: () => _restartGamePrompt(context, ref),
+                ),
+              ],
             ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.auto_awesome, color: Colors.amberAccent),
-            onPressed: () => _restartGamePrompt(context, ref),
           ),
         ],
       ),
@@ -752,68 +869,75 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       builder: (context, constraints) {
         final double availWidth = constraints.maxWidth;
         final double availHeight = constraints.maxHeight;
-        final bool isWideScreen = availWidth > 800;
-        // On wide screens, use full width; on smaller, keep square
-        final double boardSize = isWideScreen
-            ? math.min(availWidth * 0.96, availHeight * 0.96)
-            : math.min(availWidth, availHeight) * 0.96;
+
         int total = state.board.length;
         if (total == 0) return const SizedBox.shrink();
 
+        // Calculate grid dimensions
         int pPlus4 = total + 4;
         int sumSides = (pPlus4 / 2).floor();
         int widthCells = (sumSides / 2).ceil();
         int heightCells = sumSides - widthCells;
         if (2 * (widthCells + heightCells) - 4 < total) widthCells++;
 
-        return Center(
-          child: Container(
-            width: boardSize,
-            height: boardSize,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // Center area — HAS interactive buttons, but dice is IgnorePointer
-                _buildCenterArea(boardSize, state, engine),
-                // Station cells — purely visual, wrapped in IgnorePointer
-                IgnorePointer(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      for (int i = 0; i < total; i++)
-                        _buildStationCell(
-                          i,
-                          state.board[i],
-                          boardSize,
-                          widthCells,
-                          heightCells,
-                        ),
-                    ],
-                  ),
+        // Board fills ALL available space - no margins
+        final double finalWidth = availWidth;
+        final double finalHeight = availHeight;
+
+        return Container(
+          width: finalWidth,
+          height: finalHeight,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.04),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Center area - Constrained to NOT overlap cells
+              Positioned(
+                left: finalWidth / widthCells,
+                top: finalHeight / heightCells,
+                right: finalWidth / widthCells,
+                bottom: finalHeight / heightCells,
+                child: _buildCenterArea(finalWidth, finalHeight, state, engine),
+              ),
+              // Station cells
+              IgnorePointer(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (int i = 0; i < total; i++)
+                      _buildStationCell(
+                        i,
+                        state.board[i],
+                        finalWidth,
+                        finalHeight,
+                        widthCells,
+                        heightCells,
+                        state,
+                      ),
+                  ],
                 ),
-                // Player pieces — animated, wrapped in IgnorePointer
-                IgnorePointer(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      for (int pIdx = 0; pIdx < state.players.length; pIdx++)
-                        _buildAnimatedPlayerPiece(
-                          pIdx,
-                          state,
-                          boardSize,
-                          widthCells,
-                          heightCells,
-                        ),
-                    ],
-                  ),
+              ),
+              // Player pieces
+              IgnorePointer(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (int pIdx = 0; pIdx < state.players.length; pIdx++)
+                      _buildAnimatedPlayerPiece(
+                        pIdx,
+                        state,
+                        finalWidth,
+                        finalHeight,
+                        widthCells,
+                        heightCells,
+                      ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -821,10 +945,12 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   }
 
   Widget _buildCenterArea(
-    double boardSize,
+    double boardWidth,
+    double boardHeight,
     GameState gameState,
     GameEngine engine,
   ) {
+    final bool isSmall = AppDesign.isSmallScreen(context);
     bool isLock =
         gameState.isMovingPlayer ||
         gameState.isRollingDice ||
@@ -840,24 +966,23 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
               opacity: 0.04,
               child: Icon(
                 Icons.directions_car_filled,
-                size: boardSize * 0.18,
+                size: math.min(boardWidth, boardHeight) * 0.08,
                 color: Colors.white,
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: isSmall ? 2 : 10),
           if (gameState.message.isNotEmpty)
             IgnorePointer(
               child: Container(
-                width: boardSize * 0.7,
-                margin: const EdgeInsets.only(bottom: 15),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 12,
+                margin: EdgeInsets.only(bottom: isSmall ? 4 : 10),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: isSmall ? 3 : 10,
                 ),
                 decoration: BoxDecoration(
                   color: Colors.blueAccent.withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.white24),
                 ),
                 child: Text(
@@ -865,7 +990,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: boardSize > 800 ? 45 : boardSize * 0.04,
+                    fontSize: (math.min(boardWidth, boardHeight) * 0.05).clamp(14, 34).toDouble(),
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -873,6 +998,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
             ),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               _buildActionButton(
                 label: "نرد",
@@ -880,20 +1006,19 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                 active: !isLock && !hasPending,
                 onTap: () => engine.rollDice(),
                 color: Colors.orangeAccent,
-                size: boardSize * 0.08,
+                size: (math.min(boardWidth, boardHeight) * 0.06).clamp(28, 50).toDouble(),
               ),
-              const SizedBox(width: 15),
-              // Dice — IgnorePointer so rotating faces don't trigger MouseTracker
-              // Dice — Interactive roll
+              const SizedBox(width: 10),
               GestureDetector(
                 onTap: (!isLock && !hasPending) ? () => engine.rollDice() : null,
                 child: ThreeDDice(
+                  size: (math.min(boardWidth, boardHeight) * 0.1).clamp(35, 70).toDouble(),
                   value: gameState.currentDiceValue,
                   rollCounter: gameState.rollCounter,
                   onAnimationComplete: () {},
                 ),
               ),
-              const SizedBox(width: 15),
+              const SizedBox(width: 10),
               _buildActionButton(
                 label: "إنهاء",
                 icon: Icons.check_circle,
@@ -903,20 +1028,20 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                   engine.forceNextTurn();
                 },
                 color: Colors.greenAccent,
-                size: boardSize * 0.08,
+                size: (math.min(boardWidth, boardHeight) * 0.06).clamp(28, 50).toDouble(),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: isSmall ? 6 : 20),
           IgnorePointer(
-            child: _buildInternalPlayerStatsBar(gameState, boardSize),
+            child: _buildInternalPlayerStatsBar(gameState, boardWidth),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInternalPlayerStatsBar(GameState state, double boardSize) {
+  Widget _buildInternalPlayerStatsBar(GameState state, double boardWidth) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -948,10 +1073,12 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                   "${p.name}: ${p.money.toInt()}",
                   style: TextStyle(
                     color: isCurrent ? Colors.black87 : Colors.white70,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+                    fontSize: isCurrent ? 14 : 11,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
+                const SizedBox(width: 4),
+                Icon(Icons.monetization_on_rounded, color: Colors.amberAccent, size: isCurrent ? 14 : 11),
               ],
             ),
           );
@@ -963,18 +1090,25 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   Widget _buildStationCell(
     int index,
     Station station,
-    double boardSize,
+    double boardWidth,
+    double boardHeight,
     int wCount,
     int hCount,
+    GameState gameState,
   ) {
-    final pos = _calculateRectOffset(index, wCount, hCount, boardSize);
-    double cw = boardSize / wCount;
-    double ch = boardSize / hCount;
+    final bool isSmall = AppDesign.isSmallScreen(context);
+    final pos = _calculateRectOffset(index, wCount, hCount, boardWidth, boardHeight);
+    double cw = boardWidth / wCount;
+    double ch = boardHeight / hCount;
     bool isCorner =
         index == 0 ||
         index == wCount - 1 ||
         index == wCount + hCount - 2 ||
         index == 2 * wCount + hCount - 3;
+    final bool isSpecial = station.type != StationType.property && station.type != StationType.question;
+    final baseColor = isCorner
+        ? Colors.grey.shade900
+        : (isSpecial ? Colors.blueGrey.shade800 : _getCityColor(index));
 
     return Positioned(
       left: pos.dx,
@@ -982,77 +1116,130 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       child: Container(
         width: cw,
         height: ch,
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: Colors.black26, width: 0.5),
+          color: Colors.white.withOpacity(0.04),
+          border: Border.all(color: Colors.white.withOpacity(0.12)),
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: Column(
-          children: [
-            Container(
-              height: ch * 0.22,
-              color: isCorner ? Colors.grey.shade900 : _getCityColor(index),
-              child: isCorner
-                  ? const Center(
-                      child: Icon(Icons.star, size: 12, color: Colors.amber),
-                    )
-                  : null,
-            ),
-            Expanded(
-              child: Stack(
-                children: [
-                  if (station.imageData != null)
-                    Opacity(
-                      opacity: 0.15,
-                      child: Image.memory(
-                        station.imageData!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
-                    ),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(2.0),
-                      child: Text(
-                        station.name,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900, // VERY BOLD
-                          fontSize: ch * 0.24, // MUCH LARGER FONT
-                          color: Colors.black87,
-                          height: 1.0,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 1,
-                              offset: const Offset(0.5, 0.5),
-                            ),
-                          ],
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Column(
+            children: [
+              // Color Bar
+              Container(
+                height: ch * 0.22,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: baseColor.withOpacity(0.8),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                  boxShadow: [BoxShadow(color: baseColor.withOpacity(0.3), blurRadius: 4)],
+                ),
               ),
-            ),
-            _buildOwnerIndicator(station, cw, ch, ref.read(gameEngineProvider)),
-          ],
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 4.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                station.name,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: isSmall ? (cw * 0.18).clamp(10, 16) : (cw * 0.25).clamp(14, 35),
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.1,
+                                  shadows: [Shadow(color: Colors.black45, blurRadius: 4)],
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (station.type == StationType.card)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Icon(
+                                    station.cardType == "chance" 
+                                        ? Icons.auto_awesome_rounded 
+                                        : Icons.gavel_rounded,
+                                    color: station.cardType == "chance" 
+                                        ? Colors.amberAccent 
+                                        : Colors.blueAccent,
+                                    size: cw * 0.25,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (!isCorner && station.buyPrice > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: () {
+                            // Check if any player owns this station
+                            final isOwned = gameState.players.any(
+                              (p) => p.ownedStationIds.contains(station.id),
+                            );
+                            if (isOwned) {
+                              // Show rent
+                              final rent = station.baseRent > 0
+                                  ? station.baseRent
+                                  : (station.buyPrice * 0.2).floorToDouble();
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.greenAccent.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    "إيجار: ${rent.toInt()}",
+                                    style: TextStyle(
+                                      color: Colors.greenAccent,
+                                      fontSize: (cw * 0.15).clamp(10, 18),
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                // Show buy price
+                                return Text(
+                                  "${station.buyPrice.toInt()}",
+                                  style: TextStyle(
+                                    color: Colors.amberAccent,
+                                    fontSize: (cw * 0.16).clamp(12, 20),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                );
+                              }
+                            }(),
+                          ),
+                    ],
+                  ),
+                ),
+              ),
+              _buildOwnerIndicator(station, cw, ch, gameState),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Offset _calculateRectOffset(int index, int w, int h, double size) {
-    double cw = size / w;
-    double ch = size / h;
+  Offset _calculateRectOffset(int index, int w, int h, double boardWidth, double boardHeight) {
+    double cw = boardWidth / w;
+    double ch = boardHeight / h;
     if (index < w) return Offset(index * cw, 0);
-    if (index < w + h - 1) return Offset(size - cw, (index - w + 1) * ch);
+    if (index < w + h - 1) return Offset(boardWidth - cw, (index - w + 1) * ch);
     if (index < 2 * w + h - 2) {
-      return Offset(size - cw - (index - (w + h - 2)) * cw, size - ch);
+      return Offset(boardWidth - cw - (index - (w + h - 2)) * cw, boardHeight - ch);
     }
-    return Offset(0, size - ch - (index - (2 * w + h - 3)) * ch);
+    return Offset(0, boardHeight - ch - (index - (2 * w + h - 3)) * ch);
   }
 
   Widget _buildOwnerIndicator(
@@ -1084,14 +1271,16 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   Widget _buildAnimatedPlayerPiece(
     int index,
     GameState state,
-    double boardSize,
+    double boardWidth,
+    double boardHeight,
     int w,
     int h,
   ) {
+    final bool isSmall = AppDesign.isSmallScreen(context);
     final p = state.players[index];
-    final pos = _calculateRectOffset(p.currentPosition, w, h, boardSize);
-    double cw = boardSize / w;
-    double ch = boardSize / h;
+    final pos = _calculateRectOffset(p.currentPosition, w, h, boardWidth, boardHeight);
+    double cw = boardWidth / w;
+    double ch = boardHeight / h;
     final int r = index % 2, c = (index / 2).floor();
     // Calculate rotation and flip based on which side the player is on
     double rotation = 0;
@@ -1109,11 +1298,12 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     }
 
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
-      left: pos.dx + (cw * 0.2 + (r * cw * 0.3)) - 25,
-      top: pos.dy + (ch * 0.4 + (c * ch * 0.15)) - 15,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.linear, // Linear is better for step-by-step movement
+      left: pos.dx + (cw / 2) - 30 + (r * 10 - 5),
+      top: pos.dy + (ch / 2) - 27.5 + (c * 10 - 5),
       child: PlayerPiece(
+        scale: isSmall ? 0.38 : 0.85,
         color: [
           Colors.red,
           Colors.green,
@@ -1170,56 +1360,68 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
 
   Widget _buildPreparationScreen(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.auto_awesome, color: Colors.amber, size: 64),
-            const SizedBox(height: 24),
-            const Text(
-              "اللوحة فارغة!",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              "يمكنك البدء بالقالب الديني الجاهز أو إضافة مدن مخصصة.",
-              style: TextStyle(color: Colors.white70, fontSize: 16),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.auto_awesome, color: Colors.amber),
-              label: const Text(
-                'العب باستخدام القالب الديني ✨',
-                style: TextStyle(fontSize: 18),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
+      backgroundColor: Colors.transparent,
+      body: AppDesign.backgroundWrapper(
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.all(40),
+            constraints: const BoxConstraints(maxWidth: 500),
+            decoration: AppDesign.glassDecoration,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.amberAccent.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.auto_awesome, color: Colors.amberAccent, size: 64),
                 ),
-                backgroundColor: Colors.blue.shade900,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+                const SizedBox(height: 32),
+                Text(
+                  "بنك الحظ: القالب الديني",
+                  style: AppDesign.titleStyle.copyWith(fontSize: 26),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              onPressed: () => _restartGamePrompt(context, ref),
+                const SizedBox(height: 16),
+                const Text(
+                  "ابدأ اللعب فوراً باستخدام خريطة أورشليم والمدن المقدسة، أو قم بإنشاء مدنك الخاصة من الإعدادات.",
+                  style: TextStyle(color: Colors.white60, fontSize: 16, height: 1.5),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 48),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.play_circle_fill, size: 28),
+                    label: const Text(
+                      'بدء اللعبة (القالب الديني)',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 22),
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      elevation: 10,
+                    ),
+                    onPressed: () => _restartGamePrompt(context, ref),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextButton.icon(
+                  icon: const Icon(Icons.settings_outlined, color: Colors.white38),
+                  label: const Text(
+                    'إدارة المحطات والكروت',
+                    style: TextStyle(color: Colors.white38, fontSize: 16),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextButton.icon(
-              icon: const Icon(Icons.location_city, color: Colors.white70),
-              label: const Text(
-                'إضافة مدن مخصصة',
-                style: TextStyle(color: Colors.white70),
-              ),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1251,7 +1453,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
             onPressed: () async {
               Navigator.pop(dialogCtx);
               try {
-                await BankAlHazTemplateSeeder(ref).seedGame();
+                await BankAlHazTemplateSeeder().seedGame();
                 await Future.delayed(const Duration(milliseconds: 600));
                 ref.invalidate(gameEngineProvider);
                 ref.invalidate(stationsProvider);
@@ -1299,9 +1501,6 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   }
 }
 
-// ==================== QUESTION DIALOG (Wheel-game style) ====================
-// Shows question + options → "إظهار الإجابة" → correct/incorrect buttons
-
 class _QuestionDialogContent extends StatefulWidget {
   final Question question;
   const _QuestionDialogContent({required this.question});
@@ -1315,75 +1514,69 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
 
   @override
   Widget build(BuildContext context) {
+    bool isSmall = AppDesign.isSmallScreen(context);
     return Center(
       child: Material(
         color: Colors.transparent,
         child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          constraints: const BoxConstraints(maxWidth: 500),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.blue.shade100, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.25),
-                blurRadius: 20,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          constraints: const BoxConstraints(maxWidth: 600),
+          decoration: AppDesign.dialogDecoration,
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Badge
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(15),
+                      color: Colors.blueAccent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.quiz_outlined,
-                          size: 20,
-                          color: Colors.blue,
-                        ),
-                        const SizedBox(width: 8),
+                        Icon(Icons.quiz_outlined, size: 22, color: Colors.blueAccent),
+                        SizedBox(width: 10),
                         Text(
                           'سؤال التحدي',
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade700,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.blueAccent,
+                            fontSize: 16,
+                            letterSpacing: 1,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-
-                  // Question text
+                  const SizedBox(height: 32),
+                  if (widget.question.imageData != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.memory(
+                        widget.question.imageData!,
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
                   Text(
                     widget.question.text,
                     style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                      height: 1.4,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      height: 1.5,
+                      shadows: [Shadow(color: Colors.blueAccent, blurRadius: 10)],
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
-
-                  // Options display (only for multipleChoice)
+                  const SizedBox(height: 40),
                   if (widget.question.type == QuestionType.multipleChoice &&
                       widget.question.options != null &&
                       widget.question.options!.isNotEmpty)
@@ -1391,135 +1584,125 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                       final idx = entry.key;
                       final opt = entry.value;
                       final isCorrectOpt =
-                          widget.question.correctOptionIndices?.contains(idx) ??
-                          false;
+                          widget.question.correctOptionIndices?.contains(idx) ?? false;
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 12),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
+                          padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
                             color: _showAnswer && isCorrectOpt
-                                ? Colors.green.shade50
-                                : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(14),
+                                ? Colors.greenAccent.withOpacity(0.1)
+                                : Colors.white.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: _showAnswer && isCorrectOpt
-                                  ? Colors.green
-                                  : Colors.grey.shade300,
+                                  ? Colors.greenAccent
+                                  : Colors.white.withOpacity(0.1),
                               width: _showAnswer && isCorrectOpt ? 2 : 1,
                             ),
                           ),
                           child: Row(
                             children: [
                               Container(
-                                width: 30,
-                                height: 30,
+                                width: 36,
+                                height: 36,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: _showAnswer && isCorrectOpt
-                                      ? Colors.green
-                                      : Colors.grey.shade300,
+                                      ? Colors.greenAccent
+                                      : Colors.white.withOpacity(0.1),
                                 ),
                                 child: Center(
                                   child: Text(
                                     '${idx + 1}',
                                     style: TextStyle(
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w900,
                                       color: _showAnswer && isCorrectOpt
-                                          ? Colors.white
-                                          : Colors.black54,
+                                          ? Colors.black
+                                          : Colors.white70,
                                     ),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 20),
                               Expanded(
                                 child: Text(
                                   opt,
                                   style: TextStyle(
-                                    fontSize: 16,
+                                    fontSize: 18,
                                     fontWeight: _showAnswer && isCorrectOpt
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
+                                        ? FontWeight.w900
+                                        : FontWeight.w500,
                                     color: _showAnswer && isCorrectOpt
-                                        ? Colors.green.shade700
-                                        : Colors.black87,
+                                        ? Colors.greenAccent
+                                        : Colors.white70,
                                   ),
                                 ),
                               ),
                               if (_showAnswer && isCorrectOpt)
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green,
-                                  size: 22,
-                                ),
+                                const Icon(Icons.check_circle, color: Colors.greenAccent, size: 24),
                             ],
                           ),
                         ),
                       );
                     }),
-
-                  // True/False display
                   if (widget.question.type == QuestionType.trueFalse)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildTFChip(
-                          "صح",
-                          true,
-                          widget.question.tfValue == true,
+                    isSmall 
+                      ? Column(
+                          children: [
+                            SizedBox(width: double.infinity, child: _buildTFChip("صح", true, widget.question.tfValue == true)),
+                            const SizedBox(height: 12),
+                            SizedBox(width: double.infinity, child: _buildTFChip("خطأ", false, widget.question.tfValue == false)),
+                          ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildTFChip("صح", true, widget.question.tfValue == true),
+                            const SizedBox(width: 20),
+                            _buildTFChip("خطأ", false, widget.question.tfValue == false),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        _buildTFChip(
-                          "خطأ",
-                          false,
-                          widget.question.tfValue == false,
-                        ),
-                      ],
-                    ),
-
-                  const SizedBox(height: 20),
-
-                  // Show answer section
+                  const SizedBox(height: 32),
                   if (_showAnswer) ...[
-                    const Divider(),
-                    const SizedBox(height: 8),
+                    const Divider(color: Colors.white10, height: 40),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
-                          Icons.lightbulb,
-                          color: Colors.amber,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
+                        const Icon(Icons.lightbulb, color: Colors.amberAccent, size: 24),
+                        const SizedBox(width: 12),
                         const Text(
                           'الإجابة الصحيحة:',
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            color: Colors.amberAccent,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.question.answer,
-                      style: const TextStyle(
-                        color: Colors.green,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.greenAccent.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.greenAccent.withOpacity(0.2)),
                       ),
-                      textAlign: TextAlign.center,
+                      child: Text(
+                        widget.question.answer,
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 40),
                   ],
-
-                  // Action buttons
                   if (!_showAnswer)
                     SizedBox(
                       width: double.infinity,
@@ -1528,64 +1711,88 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                         icon: const Icon(Icons.visibility),
                         label: const Text(
                           'إظهار الإجابة',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade700,
+                          backgroundColor: Colors.blueAccent,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
                       ),
                     ),
-
                   if (_showAnswer)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => Navigator.pop(context, true),
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text(
-                              'إجابة صحيحة',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
+                    isSmall
+                      ? Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => Navigator.pop(context, true),
+                                icon: const Icon(Icons.check_circle),
+                                label: const Text('إجابة صحيحة', style: TextStyle(fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.greenAccent.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => Navigator.pop(context, false),
-                            icon: const Icon(Icons.cancel),
-                            label: const Text(
-                              'إجابة خاطئة',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => Navigator.pop(context, false),
+                                icon: const Icon(Icons.cancel),
+                                label: const Text('إجابة خاطئة', style: TextStyle(fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.redAccent.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
                               ),
                             ),
-                          ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => Navigator.pop(context, true),
+                                icon: const Icon(Icons.check_circle),
+                                label: const Text(
+                                  'إجابة صحيحة',
+                                  style: TextStyle(fontWeight: FontWeight.w900),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.greenAccent.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 20),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => Navigator.pop(context, false),
+                                icon: const Icon(Icons.cancel),
+                                label: const Text(
+                                  'إجابة خاطئة',
+                                  style: TextStyle(fontWeight: FontWeight.w900),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.redAccent.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 20),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
                 ],
               ),
             ),
@@ -1599,16 +1806,16 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
     return Expanded(
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(vertical: 18),
+        padding: const EdgeInsets.symmetric(vertical: 24),
         decoration: BoxDecoration(
           color: _showAnswer && isCorrect
-              ? Colors.green.shade50
-              : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(14),
+              ? Colors.greenAccent.withOpacity(0.1)
+              : Colors.white.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: _showAnswer && isCorrect
-                ? Colors.green
-                : Colors.grey.shade300,
+                ? Colors.greenAccent
+                : Colors.white.withOpacity(0.1),
             width: _showAnswer && isCorrect ? 2 : 1,
           ),
         ),
@@ -1617,18 +1824,17 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
           children: [
             Text(
               text,
-              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
                 color: _showAnswer && isCorrect
-                    ? Colors.green.shade700
-                    : Colors.black87,
+                    ? Colors.greenAccent
+                    : Colors.white70,
               ),
             ),
             if (_showAnswer && isCorrect) ...[
-              const SizedBox(width: 8),
-              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+              const SizedBox(width: 12),
+              const Icon(Icons.check_circle, color: Colors.greenAccent, size: 24),
             ],
           ],
         ),

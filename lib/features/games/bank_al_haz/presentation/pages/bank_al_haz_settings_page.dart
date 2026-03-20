@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:ui';
+import 'package:games/core/design/app_design.dart';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import '../providers/bank_al_haz_providers.dart';
 import '../providers/game_engine_provider.dart';
@@ -10,16 +12,22 @@ import 'bank_al_haz_board_page.dart';
 import '../providers/bank_al_haz_template_seeder.dart';
 
 class BankAlHazSettingsPage extends ConsumerStatefulWidget {
-  const BankAlHazSettingsPage({super.key});
+  final bool isView;
+  const BankAlHazSettingsPage({super.key, this.isView = false});
 
   @override
-  ConsumerState<BankAlHazSettingsPage> createState() => _BankAlHazSettingsPageState();
+  ConsumerState<BankAlHazSettingsPage> createState() =>
+      _BankAlHazSettingsPageState();
 }
 
 class _BankAlHazSettingsPageState extends ConsumerState<BankAlHazSettingsPage> {
-  final TextEditingController _moneyController = TextEditingController(text: '1000');
-  final TextEditingController _roundsController = TextEditingController(text: '10');
-  
+  final TextEditingController _moneyController = TextEditingController(
+    text: '1000',
+  );
+  final TextEditingController _roundsController = TextEditingController(
+    text: '10',
+  );
+
   WinningCondition _winCondition = WinningCondition.rounds;
   WinCriteria _winCriteria = WinCriteria.moneyOnly;
 
@@ -41,88 +49,266 @@ class _BankAlHazSettingsPageState extends ConsumerState<BankAlHazSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('إعدادات بنك الحظ')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('إعدادات اللعبة العامة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
+    final content = SingleChildScrollView(
+      padding: EdgeInsets.all(widget.isView ? 16.0 : 24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'إعدادات اللعبة العامة',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.amberAccent,
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _moneyController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: 'فلوس البداية (نقاط)',
+              labelStyle: const TextStyle(color: Colors.white60),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.05),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'إدارة العناصر',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.amberAccent,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.location_city),
+            label: const Text('إدارة المحطات (المدن)'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white.withOpacity(0.1),
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StationManagementPage()),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.style),
+            label: const Text('إدارة الكروت (فرصة/صندوق)'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white.withOpacity(0.1),
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CardManagementPage()),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'قوانين الفوز',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.amberAccent,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Theme(
+            data: ThemeData.dark(),
+            child: DropdownButtonFormField<WinningCondition>(
+              initialValue: _winCondition,
+              items: WinningCondition.values
+                  .map(
+                    (w) => DropdownMenuItem(
+                      value: w,
+                      child: Text(
+                        w == WinningCondition.rounds
+                            ? 'بعد عدد دورات معين'
+                            : w == WinningCondition.time
+                            ? 'بعد وقت معين'
+                            : 'لما تخلص أسئلة المحطات',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (val) => setState(() => _winCondition = val!),
+              decoration: InputDecoration(
+                labelText: 'شرط الفوز',
+                labelStyle: const TextStyle(color: Colors.white60),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          if (_winCondition == WinningCondition.rounds) ...[
+            const SizedBox(height: 16),
             TextField(
-              controller: _moneyController,
-              decoration: const InputDecoration(labelText: 'فلوس البداية (نقاط)'),
+              controller: _roundsController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'عدد الدورات',
+                labelStyle: const TextStyle(color: Colors.white60),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide.none,
+                ),
+              ),
               keyboardType: TextInputType.number,
             ),
-            const SizedBox(height: 20),
-            const Text('إدارة العناصر', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.location_city),
-              label: const Text('إدارة المحطات (المدن)'),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StationManagementPage())),
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.style),
-              label: const Text('إدارة الكروت (فرصة/صندوق)'),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CardManagementPage())),
-            ),
-            const SizedBox(height: 20),
-            const Text('قوانين الفوز', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            DropdownButtonFormField<WinningCondition>(
-              value: _winCondition,
-              items: WinningCondition.values.map((w) => DropdownMenuItem(
-                value: w,
-                child: Text(w == WinningCondition.rounds ? 'بعد عدد دورات معين' : w == WinningCondition.time ? 'بعد وقت معين' : 'لما تخلص أسئلة المحطات'),
-              )).toList(),
-              onChanged: (val) => setState(() => _winCondition = val!),
-              decoration: const InputDecoration(labelText: 'شرط الفوز'),
-            ),
-            if (_winCondition == WinningCondition.rounds)
-              TextField(
-                controller: _roundsController,
-                decoration: const InputDecoration(labelText: 'عدد الدورات'),
-                keyboardType: TextInputType.number,
-              ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<WinCriteria>(
-              value: _winCriteria,
-              items: WinCriteria.values.map((c) => DropdownMenuItem(
-                value: c,
-                child: Text(c == WinCriteria.moneyOnly ? 'الأكثر في فلوسه' : c == WinCriteria.moneyAndStations ? 'فلوسه + ثمن شراء المدن' : 'فلوسه + ثمن الشراء + ثمن المباني'),
-              )).toList(),
+          ],
+          const SizedBox(height: 10),
+          Theme(
+            data: ThemeData.dark(),
+            child: DropdownButtonFormField<WinCriteria>(
+              initialValue: _winCriteria,
+              items: WinCriteria.values
+                  .map(
+                    (c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(
+                        c == WinCriteria.moneyOnly
+                            ? 'الأكثر في فلوسه'
+                            : c == WinCriteria.moneyAndStations
+                            ? 'فلوسه + ثمن شراء المدن'
+                            : 'فلوسه + ثمن الشراء + ثمن المباني',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  )
+                  .toList(),
               onChanged: (val) => setState(() => _winCriteria = val!),
-              decoration: const InputDecoration(labelText: 'طريقة اختيار الفائز'),
-            ),
-            const SizedBox(height: 40),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.auto_awesome, color: Colors.amber),
-              label: const Text('العب باستخدام القالب الديني ✨', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Colors.blue.shade900,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              decoration: InputDecoration(
+                labelText: 'طريقة اختيار الفائز',
+                labelStyle: const TextStyle(color: Colors.white60),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide.none,
+                ),
               ),
-              onPressed: () => _startGame(true),
+            ),
+          ),
+          if (!widget.isView) ...[
+            const SizedBox(height: 40),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _startGame(true),
+                borderRadius: BorderRadius.circular(15),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  decoration: AppDesign.glassDecorationWithColor(
+                    Colors.blue.shade900,
+                  ).copyWith(border: Border.all(color: Colors.white24)),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.auto_awesome, color: Colors.amber, size: 28),
+                      SizedBox(width: 16),
+                      Text(
+                        'العب باستخدام القالب الديني ✨',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Colors.blue.shade600,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _startGame(false),
+                borderRadius: BorderRadius.circular(15),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  decoration: AppDesign.glassDecorationWithColor(
+                    Colors.blue.shade600,
+                  ).copyWith(border: Border.all(color: Colors.white10)),
+                  child: const Center(
+                    child: Text(
+                      'ابدأ اللعبة بالمدن المخصصة',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              onPressed: () => _startGame(false),
-              child: const Text('ابدأ اللعبة بالمدن المخصصة', style: TextStyle(fontSize: 18)),
+            ),
+          ] else ...[
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () async {
+                final settings = BankAlHazSettings(
+                  initialMoney: double.tryParse(_moneyController.text) ?? 1000,
+                  winCondition: _winCondition,
+                  winCriteria: _winCriteria,
+                  maxRounds: int.tryParse(_roundsController.text) ?? 10,
+                );
+                await ref
+                    .read(bankAlHazRepositoryProvider)
+                    .saveSettings(settings);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم حفظ الإعدادات بنجاح')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              ),
+              child: const Text(
+                'حفظ التغييرات',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
-        ),
+        ],
       ),
+    );
+
+    if (widget.isView) return content;
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('إعدادات بنك الحظ', style: AppDesign.titleStyle),
+        centerTitle: true,
+      ),
+      body: AppDesign.backgroundWrapper(child: SafeArea(child: content)),
     );
   }
 
@@ -136,12 +322,13 @@ class _BankAlHazSettingsPageState extends ConsumerState<BankAlHazSettingsPage> {
     try {
       if (isTemplate) {
         // 1. Seed the religious template FIRST to ensure we have cities
-        await BankAlHazTemplateSeeder(ref).seedGame();
+        await BankAlHazTemplateSeeder().seedGame();
         // Refresh to get new cities
-        ref.invalidate(stationsProvider);
+        if (mounted) ref.invalidate(stationsProvider);
       }
 
       // 2. FETCH LATEST TEAMS DIRECTLY FROM FUTURE
+      if (!mounted) return;
       final freshTeams = await ref.read(teamsListProvider.future);
 
       if (freshTeams.isEmpty) {
@@ -161,32 +348,40 @@ class _BankAlHazSettingsPageState extends ConsumerState<BankAlHazSettingsPage> {
 
       // 3. Save current settings
       final settings = BankAlHazSettings(
-         initialMoney: double.tryParse(_moneyController.text) ?? 1000,
-         winCondition: _winCondition,
-         winCriteria: _winCriteria,
-         maxRounds: int.tryParse(_roundsController.text) ?? 10,
+        initialMoney: double.tryParse(_moneyController.text) ?? 1000,
+        winCondition: _winCondition,
+        winCriteria: _winCriteria,
+        maxRounds: int.tryParse(_roundsController.text) ?? 10,
       );
       await ref.read(bankAlHazRepositoryProvider).saveSettings(settings);
 
       // Refresh providers
       ref.invalidate(cardsProvider);
       ref.invalidate(gameEngineProvider);
-      
+
       // Ensure data is fully loaded
       await Future.delayed(const Duration(milliseconds: 600));
-      
+
       // Init game state with FRESH TEAMS
       final playerNames = freshTeams.map((t) => t.name).toList();
-      await ref.read(gameEngineProvider.notifier).initGame(playerNames, settings);
-      
+      if (!mounted) return;
+      await ref
+          .read(gameEngineProvider.notifier)
+          .initGame(playerNames, settings);
+
       if (mounted) {
         Navigator.pop(context); // Remove loader
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const BankAlHazBoardPage()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const BankAlHazBoardPage()),
+        );
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Remove loader
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ أثناء بدء اللعبة: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('خطأ أثناء بدء اللعبة: $e')));
       }
     }
   }
