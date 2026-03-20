@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:math' as math;
 import 'dart:ui';
@@ -198,35 +199,48 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
         child: _buildSidebar(teamsAsync, gameState),
       ) : null,
       body: AppDesign.backgroundWrapper(
-        child: teamsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator(color: Colors.amber)),
-          error: (e, s) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.redAccent))),
-          data: (teams) {
-            if (teams.isEmpty) return const Center(child: Text('يرجى إضافة فرق للبدء', style: TextStyle(color: Colors.white, fontSize: 24)));
-            
-            final currentTeam = teams[gameState.currentPlayerIndex % teams.length];
-
-            if (AppDesign.isSmallScreen(context)) {
-              return _buildBoardArea(gameState, teams, currentTeam);
+        child: Focus(
+          autofocus: true,
+          onKey: (node, event) {
+            if (event is RawKeyDownEvent && 
+                (event.logicalKey == LogicalKeyboardKey.space || event.logicalKey == LogicalKeyboardKey.enter)) {
+              if (!_isRolling && !_isMoving && gameState.status != SnakesLaddersStatus.finished) {
+                _handleRoll();
+                return KeyEventResult.handled;
+              }
             }
-
-            return Row(
-              children: [
-                Expanded(
-                  flex: 7,
-                  child: _buildBoardArea(gameState, teams, currentTeam),
-                ),
-                Container(
-                  width: 320,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.04),
-                    border: const Border(left: BorderSide(color: Colors.white10)),
-                  ),
-                  child: _buildSidebar(teamsAsync, gameState),
-                ),
-              ],
-            );
+            return KeyEventResult.ignored;
           },
+          child: teamsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator(color: Colors.amber)),
+            error: (e, s) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.redAccent))),
+            data: (teams) {
+              if (teams.isEmpty) return const Center(child: Text('يرجى إضافة فرق للبدء', style: TextStyle(color: Colors.white, fontSize: 24)));
+              
+              final currentTeam = teams[gameState.currentPlayerIndex % teams.length];
+    
+              if (AppDesign.isSmallScreen(context)) {
+                return _buildBoardArea(gameState, teams, currentTeam);
+              }
+    
+              return Row(
+                children: [
+                  Expanded(
+                    flex: 7,
+                    child: _buildBoardArea(gameState, teams, currentTeam),
+                  ),
+                  Container(
+                    width: 320,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.04),
+                      border: const Border(left: BorderSide(color: Colors.white10)),
+                    ),
+                    child: _buildSidebar(teamsAsync, gameState),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

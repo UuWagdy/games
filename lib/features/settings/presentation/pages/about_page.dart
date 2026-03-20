@@ -107,6 +107,16 @@ class AboutPage extends StatelessWidget {
                   color: Colors.amberAccent,
                 ),
 
+                SizedBox(height: isSmall ? 24 : 40),
+
+                 _buildCreditSection(
+                  context,
+                  title: 'تجميع الأسئلة',
+                  names: ['أ. چوليا چورچ'],
+                  icon: Icons.quiz_rounded,
+                  color: Colors.pinkAccent,
+                ),
+
                 SizedBox(height: isSmall ? 40 : 64),
 
                 // Footer Version

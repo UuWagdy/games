@@ -12,95 +12,187 @@ import '../../domain/entities/question.dart';
 import '../../domain/entities/category.dart';
 import 'package:games/core/design/app_design.dart';
 import 'dart:ui';
+import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class QuestionsManagementPage extends ConsumerWidget {
   const QuestionsManagementPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Theme(
-      data: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: Colors.transparent,
-        cardColor: Colors.white.withOpacity(0.05),
-      ),
-      child: DefaultTabController(
-        length: 2,
-        child: Column(
-          children: [
-            const TabBar(
-              indicatorColor: Colors.amber,
-              labelColor: Colors.amber,
-              unselectedLabelColor: Colors.white60,
-              tabs: [
-                Tab(text: 'الأنواع / المجموعات'),
-                Tab(text: 'الأسئلة'),
-              ],
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                   const _CategoriesList(),
-                   const _QuestionsList(),
-                ],
+    return AppDesign.backgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('إدارة الأسئلة والفئات', style: AppDesign.titleStyle),
+          centerTitle: true,
+        ),
+        body: DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: const TabBar(
+                  indicator: BoxDecoration(
+                    color: Colors.amber,
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelColor: Colors.black,
+                  unselectedLabelColor: Colors.white60,
+                  labelStyle: TextStyle(fontWeight: FontWeight.bold),
+                  tabs: [
+                    Tab(text: 'الأنواع / المجموعات'),
+                    Tab(text: 'الأسئلة'),
+                  ],
+                ),
               ),
-            ),
-          ],
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _CategoriesList(),
+                    _QuestionsList(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _CategoriesList extends ConsumerWidget {
+class _CategoriesList extends ConsumerStatefulWidget {
   const _CategoriesList();
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CategoriesList> createState() => _CategoriesListState();
+}
+
+class _CategoriesListState extends ConsumerState<_CategoriesList> {
+  bool selectionMode = false;
+  final Set<int> selectedIds = {};
+  String searchQuery = "";
+
+  @override
+  Widget build(BuildContext context) {
     final categoriesAsync = ref.watch(categoriesProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: categoriesAsync.when(
-        data: (categories) => ListView.separated(
-          padding: const EdgeInsets.all(24),
-          itemCount: categories.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final category = categories[index];
-            final isSmall = AppDesign.isSmallScreen(context);
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: ListTile(
-                contentPadding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 20, vertical: 8),
-                title: Text(
-                  category.name, 
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 16 : 18, color: Colors.white),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.edit_outlined, color: Colors.blueAccent, size: isSmall ? 20 : 24),
-                      onPressed: () => _showEditCategoryDialog(context, ref, category),
+      body: Column(
+        children: [
+          // Search and Bulk Action Bar for Categories
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (val) => setState(() => searchQuery = val),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: AppDesign.searchInputDecoration('بحث في الفئات...').copyWith(
+                      prefixIcon: const Icon(Icons.search, color: Colors.white38),
                     ),
-                    IconButton(
-                      icon: Icon(Icons.delete_outline, color: Colors.redAccent, size: isSmall ? 20 : 24),
-                      onPressed: () => ref.read(categoriesProvider.notifier).deleteCategory(category.id!),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
-        loading: () => const Center(child: CircularProgressIndicator(color: Colors.amber)),
-        error: (err, stack) => Center(child: Text('خطأ: $err', style: const TextStyle(color: Colors.red))),
+                const SizedBox(width: 12),
+                if (selectionMode) ...[
+                  IconButton(
+                    icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+                    onPressed: selectedIds.isEmpty ? null : () => _confirmBulkDelete(),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white60),
+                    onPressed: () => setState(() { selectionMode = false; selectedIds.clear(); }),
+                  ),
+                ] else
+                   IconButton(
+                    icon: const Icon(Icons.checklist, color: Colors.amber),
+                    onPressed: () => setState(() => selectionMode = true),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: categoriesAsync.when(
+              data: (allCategories) {
+                final categories = allCategories.where((c) => c.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
+                
+                if (categories.isEmpty) return const Center(child: Text('لا توجد فئات مطابقة', style: TextStyle(color: Colors.white38)));
+                
+                return ListView.separated(
+                  padding: const EdgeInsets.all(24),
+                  itemCount: categories.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    final isSmall = AppDesign.isSmallScreen(context);
+                    final isSelected = selectedIds.contains(category.id);
+
+                    return InkWell(
+                      onLongPress: () => setState(() { selectionMode = true; selectedIds.add(category.id!); }),
+                      onTap: selectionMode ? () => setState(() {
+                        if (isSelected) selectedIds.remove(category.id); else selectedIds.add(category.id!);
+                      }) : null,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.amber.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: isSelected ? Colors.amber : Colors.white10),
+                        ),
+                        child: ListTile(
+                          contentPadding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 20, vertical: 8),
+                          leading: selectionMode ? Checkbox(
+                            value: isSelected, 
+                            activeColor: Colors.amber,
+                            onChanged: (v) => setState(() { if (v!) selectedIds.add(category.id!); else selectedIds.remove(category.id!); })
+                          ) : null,
+                          title: Text(
+                            category.name, 
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 16 : 18, color: Colors.white),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: selectionMode ? null : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.edit_outlined, color: Colors.blueAccent, size: isSmall ? 20 : 24),
+                                onPressed: () => _showEditCategoryDialog(context, ref, category),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.delete_outline, color: Colors.redAccent, size: isSmall ? 20 : 24),
+                                onPressed: () => _confirmSingleDelete(category),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator(color: Colors.amber)),
+              error: (err, stack) => Center(child: Text('خطأ: $err', style: const TextStyle(color: Colors.red))),
+            ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: selectionMode ? null : FloatingActionButton(
         mini: true,
         backgroundColor: Colors.amber,
         foregroundColor: Colors.black,
@@ -110,50 +202,53 @@ class _CategoriesList extends ConsumerWidget {
     );
   }
 
-  void _showAddCategoryDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
-    _showCategoryDialog(context, ref, 'إضافة نوع جديد', controller, () {
-      if (controller.text.isNotEmpty) {
-        ref.read(categoriesProvider.notifier).addCategory(controller.text);
-        Navigator.pop(context);
-      }
-    });
-  }
-
-  void _showEditCategoryDialog(BuildContext context, WidgetRef ref, Category category) {
-    final controller = TextEditingController(text: category.name);
-    _showCategoryDialog(context, ref, 'تعديل النوع', controller, () {
-      if (controller.text.isNotEmpty) {
-        ref.read(categoriesProvider.notifier).updateCategory(category.copyWith(name: controller.text));
-        Navigator.pop(context);
-      }
-    });
-  }
-
-  void _showCategoryDialog(BuildContext context, WidgetRef ref, String title, TextEditingController controller, VoidCallback onSave) {
+  void _confirmSingleDelete(Category category) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppDesign.slate900,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            labelText: 'اسم النوع',
-            labelStyle: const TextStyle(color: Colors.white60),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white24)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.amber)),
-          ),
-          autofocus: true,
-        ),
+        title: const Text('حذف الفئة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('هل أنت متأكد من حذف الفئة "${category.name}"؟\nسيتم حذف الأسئلة المرتبطة بها أيضاً.', style: const TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
-            onPressed: onSave,
-            child: const Text('حفظ'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              ref.read(categoriesProvider.notifier).deleteCategory(category.id!);
+              Navigator.pop(ctx);
+            },
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmBulkDelete() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppDesign.slate900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('حذف الفئات المختارة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('هل أنت متأكد من حذف ${selectedIds.length} فئة؟\nسيتم حذف الأسئلة المرتبطة حصرياً بهذه الفئات أيضاً.', style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final notifier = ref.read(categoriesProvider.notifier);
+              for (var id in selectedIds) {
+                await notifier.deleteCategory(id);
+              }
+              if (mounted) {
+                setState(() { selectionMode = false; selectedIds.clear(); });
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحذف بنجاح'), backgroundColor: Colors.redAccent));
+              }
+            },
+            child: const Text('حذف الكل'),
           ),
         ],
       ),
@@ -161,8 +256,226 @@ class _CategoriesList extends ConsumerWidget {
   }
 }
 
+void _showAddCategoryDialog(BuildContext context, WidgetRef ref) {
+  final controller = TextEditingController();
+  _showCategoryDialog(context, ref, 'إضافة نوع جديد', controller, () {
+    if (controller.text.isNotEmpty) {
+      ref.read(categoriesProvider.notifier).addCategory(controller.text);
+      Navigator.pop(context);
+    }
+  });
+}
+
+void _showEditCategoryDialog(BuildContext context, WidgetRef ref, Category category) {
+  final controller = TextEditingController(text: category.name);
+  _showCategoryDialog(context, ref, 'تعديل النوع', controller, () {
+    if (controller.text.isNotEmpty) {
+      ref.read(categoriesProvider.notifier).updateCategory(category.copyWith(name: controller.text));
+      Navigator.pop(context);
+    }
+  });
+}
+
+void _showCategoryDialog(BuildContext context, WidgetRef ref, String title, TextEditingController controller, VoidCallback onSave) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      content: TextField(
+        controller: controller,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: 'اسم النوع',
+          labelStyle: const TextStyle(color: Colors.white60),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white24)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.amber)),
+        ),
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+          onPressed: onSave,
+          child: const Text('حفظ'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _QuestionsList extends ConsumerWidget {
   const _QuestionsList();
+
+  Future<void> _saveOrShareFile({
+    required BuildContext context,
+    required Uint8List bytes,
+    required String fileName,
+    required String shareTitle,
+    bool isPdf = false,
+  }) async {
+    try {
+      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        String? outputFile = await FilePicker.platform.saveFile(
+          dialogTitle: 'حفظ الملف',
+          fileName: fileName,
+        );
+
+        if (outputFile != null) {
+          // Ensure file extension
+          if (!outputFile.toLowerCase().endsWith(fileName.substring(fileName.lastIndexOf('.')).toLowerCase())) {
+             outputFile += fileName.substring(fileName.lastIndexOf('.'));
+          }
+          final file = File(outputFile);
+          await file.writeAsBytes(bytes);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('تم حفظ الملف بنجاح'), backgroundColor: Colors.green),
+            );
+          }
+        }
+      } else {
+        if (isPdf) {
+          await Printing.sharePdf(bytes: bytes, filename: fileName);
+        } else {
+          final tempDir = await getTemporaryDirectory();
+          final file = File('${tempDir.path}/$fileName');
+          await file.writeAsBytes(bytes);
+          await Share.shareXFiles(
+            [XFile(file.path, name: fileName, mimeType: fileName.endsWith('.csv') ? 'text/csv' : null)], 
+            text: shareTitle
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ في الحفظ/المشاركة: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportAllCsv(BuildContext context, WidgetRef ref) async {
+    try {
+      final questions = await ref.read(questionRepositoryProvider).getQuestions(null);
+      final categories = await ref.read(questionRepositoryProvider).getCategories();
+      final catMap = {for (var c in categories) c.id: c.name};
+
+      final List<List<dynamic>> rows = [
+        ['Text', 'Answer', 'Categories', 'Type', 'Options', 'CorrectIndices', 'TFValue', 'IsMultiple', 'GridRows', 'GridCols', 'GridCorrectCells']
+      ];
+
+      for (var q in questions) {
+        final catNames = q.categoryIds.map((id) => catMap[id] ?? '').join(';');
+        
+        List<dynamic> row = [
+          q.text,
+          q.answer,
+          catNames,
+          q.type.name,
+          q.options?.join('|') ?? '',
+          q.correctOptionIndices?.join(',') ?? '',
+          q.tfValue?.toString() ?? '',
+          q.isMultiple,
+          (q.gridData?['rows'] as List?)?.join('|') ?? '',
+          (q.gridData?['cols'] as List?)?.join('|') ?? '',
+          (q.gridData?['correctCells'] as List?)?.map((c) => "${c[0]},${c[1]}").join(';') ?? '',
+        ];
+        rows.add(row);
+      }
+
+      final csvString = const ListToCsvConverter().convert(rows);
+      final bytes = Uint8List.fromList(utf8.encode('\uFEFF$csvString'));
+      
+      if (context.mounted) {
+        await _saveOrShareFile(
+          context: context, 
+          bytes: bytes, 
+          fileName: 'all_questions.csv', 
+          shareTitle: 'كل الأسئلة الحالية'
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ التصدير: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _exportAllPdf(BuildContext context, WidgetRef ref) async {
+    try {
+      final questions = await ref.read(questionRepositoryProvider).getQuestions(null);
+      final categories = await ref.read(questionRepositoryProvider).getCategories();
+      final catMap = {for (var c in categories) c.id: c.name};
+
+      final pdf = pw.Document();
+      // Load fonts from assets for offline support as requested by USER
+      final regularFontData = await rootBundle.load("assets/fonts/Amiri-Regular.ttf");
+      final boldFontData = await rootBundle.load("assets/fonts/Amiri-Bold.ttf");
+      
+      final font = pw.Font.ttf(regularFontData);
+      final boldFont = pw.Font.ttf(boldFontData);
+
+      pdf.addPage(
+        pw.MultiPage(
+          theme: pw.ThemeData.withFont(base: font, bold: boldFont),
+          build: (context) => [
+            pw.Header(
+              level: 0, 
+              child: pw.Container(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Text('قائمة الأسئلة والفئات', textDirection: pw.TextDirection.rtl)
+              )
+            ),
+            pw.SizedBox(height: 20),
+            ...questions.map((q) {
+              final qCats = q.categoryIds.map((id) => catMap[id] ?? '').join('، ');
+              return pw.Align(
+                alignment: pw.Alignment.topRight,
+                child: pw.Container(
+                  // Set a reasonable width for the cards so they don't always stretch but take their content or a portion of the page
+                  width: 400, 
+                  margin: const pw.EdgeInsets.only(bottom: 15),
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('السؤال: ${q.text}', textDirection: pw.TextDirection.rtl, style: pw.TextStyle(fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                      pw.Text('الإجابة: ${q.answer}', textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(color: PdfColors.green), textAlign: pw.TextAlign.right),
+                      pw.Text('الفئات: $qCats', textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(color: PdfColors.grey700, fontSize: 10), textAlign: pw.TextAlign.right),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      );
+
+      final bytes = await pdf.save();
+      
+      if (context.mounted) {
+        await _saveOrShareFile(
+          context: context, 
+          bytes: bytes, 
+          fileName: 'questions.pdf', 
+          shareTitle: 'قائمة الأسئلة',
+          isPdf: true,
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ PDF: $e\nتأكد من وجود ملفات الخطوط في assets/fonts/'), backgroundColor: Colors.red));
+      }
+    }
+  }
 
   Future<void> _downloadTemplate(BuildContext context) async {
     try {
@@ -170,18 +483,21 @@ class _QuestionsList extends ConsumerWidget {
       buffer.writeln('Text,Answer,Categories,Type,Options,CorrectIndices,TFValue,IsMultiple,GridRows,GridCols,GridCorrectCells');
       buffer.writeln('ما عاصمة مصر؟,القاهرة,معلومات عامة,مقالي,,,,,,,');
       
-      final bytes = utf8.encode('\uFEFF$buffer');
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/questions_template.csv');
-      await file.writeAsBytes(bytes);
+      final bytes = Uint8List.fromList(utf8.encode('\uFEFF$buffer'));
       
-      await Share.shareXFiles([XFile(file.path)], text: 'نموذج الأسئلة');
+      await _saveOrShareFile(
+        context: context, 
+        bytes: bytes, 
+        fileName: 'questions_template.csv', 
+        shareTitle: 'نموذج الأسئلة'
+      );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في القالب: $e'), backgroundColor: Colors.red));
       }
     }
   }
+
 
   Future<void> _importCsv(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(questionRepositoryProvider);
@@ -266,15 +582,37 @@ class _QuestionsList extends ConsumerWidget {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              alignment: WrapAlignment.center,
               children: [
-                _buildImportBox(context, ref),
-                const SizedBox(height: 12),
+                _buildActionButton(
+                  context, 
+                  'استيراد CSV', 
+                  Icons.cloud_upload_outlined, 
+                  Colors.greenAccent, 
+                  () => _importCsv(context, ref)
+                ),
+                _buildActionButton(
+                  context, 
+                  'تصدير كل الأسئلة (CSV)', 
+                  Icons.download_rounded, 
+                  Colors.blueAccent, 
+                  () => _exportAllCsv(context, ref)
+                ),
+                 _buildActionButton(
+                  context, 
+                  'تصدير PDF', 
+                  Icons.picture_as_pdf_outlined, 
+                  Colors.purpleAccent, 
+                  () => _exportAllPdf(context, ref)
+                ),
                 TextButton.icon(
                   onPressed: () => _downloadTemplate(context),
-                  icon: const Icon(Icons.download_rounded, color: Colors.greenAccent),
-                  label: const Text('تحميل نموذج فارغ للإكسل', style: TextStyle(color: Colors.greenAccent)),
+                  icon: const Icon(Icons.help_outline, color: Colors.white60, size: 16),
+                  label: const Text('تحميل نموذج فارغ', style: TextStyle(color: Colors.white60, fontSize: 12)),
                 ),
               ],
             ),
@@ -308,32 +646,23 @@ class _QuestionsList extends ConsumerWidget {
     );
   }
 
-  Widget _buildImportBox(BuildContext context, WidgetRef ref) {
+  Widget _buildActionButton(BuildContext context, String label, IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
-      onTap: () => _importCsv(context, ref),
-      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.greenAccent.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
-          boxShadow: [BoxShadow(color: Colors.greenAccent.withOpacity(0.05), blurRadius: 10)],
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: color.withOpacity(0.3)),
         ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_upload_outlined, color: Colors.greenAccent, size: 40),
-            SizedBox(width: 20),
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('استيراد الأسئلة من ملف Excel', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                  Text('ملف CSV يدعم كافة الأنواع والمجموعات', style: TextStyle(color: Colors.white60, fontSize: 13)),
-                ],
-              ),
-            ),
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
           ],
         ),
       ),
@@ -352,14 +681,51 @@ class _QuestionsBySelectedCategory extends ConsumerStatefulWidget {
 class _QuestionsBySelectedCategoryState extends ConsumerState<_QuestionsBySelectedCategory> {
   final List<int> selectedCategoryIds = [];
   bool selectAll = true;
+  String searchQuery = "";
+  bool selectionMode = false;
+  final Set<int> multiSelectedIds = {};
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // Search and Actions Bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  onChanged: (val) => setState(() => searchQuery = val),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: AppDesign.searchInputDecoration('بحث في الأسئلة...').copyWith(
+                    prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              if (selectionMode) ...[
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+                  onPressed: multiSelectedIds.isEmpty ? null : () => _confirmBulkDelete(),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white60),
+                  onPressed: () => setState(() { selectionMode = false; multiSelectedIds.clear(); }),
+                ),
+              ] else
+                IconButton(
+                  icon: const Icon(Icons.checklist, color: Colors.amber),
+                  onPressed: () => setState(() => selectionMode = true),
+                ),
+            ],
+          ),
+        ),
+
+        // Category Filter
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -392,7 +758,12 @@ class _QuestionsBySelectedCategoryState extends ConsumerState<_QuestionsBySelect
             final questionsAsync = ref.watch(questionsProvider(null));
             return questionsAsync.when(
               data: (allQuestions) {
-                final questions = selectAll ? allQuestions : allQuestions.where((q) => q.categoryIds.any((id) => selectedCategoryIds.contains(id))).toList();
+                final questions = allQuestions.where((q) {
+                  final matchesCat = selectAll || q.categoryIds.any((id) => selectedCategoryIds.contains(id));
+                  final matchesSearch = q.text.contains(searchQuery) || q.answer.contains(searchQuery);
+                  return matchesCat && matchesSearch;
+                }).toList();
+
                   final isSmall = AppDesign.isSmallScreen(context);
                   return GridView.builder(
                     padding: EdgeInsets.all(isSmall ? 12 : 24).copyWith(bottom: 100),
@@ -405,35 +776,54 @@ class _QuestionsBySelectedCategoryState extends ConsumerState<_QuestionsBySelect
                     itemCount: questions.length,
                     itemBuilder: (context, index) {
                       final q = questions[index];
+                      final isSelected = multiSelectedIds.contains(q.id);
                       final qCats = widget.categories.where((c) => q.categoryIds.contains(c.id)).map((c) => c.name).join('، ');
-                      return Container(
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.white10)),
-                        child: ListTile(
-                          contentPadding: EdgeInsets.symmetric(horizontal: isSmall ? 10 : 16, vertical: 8),
-                          leading: q.imageData != null 
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.memory(q.imageData!, width: isSmall ? 40 : 50, height: isSmall ? 40 : 50, fit: BoxFit.cover),
-                                )
-                              : Container(
-                                  width: isSmall ? 40 : 50, height: isSmall ? 40 : 50, 
-                                  decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
-                                  child: Icon(Icons.text_fields_rounded, color: Colors.white24, size: isSmall ? 20 : 24),
-                                ),
-                          title: Text(q.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 13 : 14, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('ج: ${q.answer}', style: const TextStyle(color: Colors.greenAccent, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                              Text(qCats, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            ],
+                      return InkWell(
+                        onLongPress: () => setState(() { selectionMode = true; multiSelectedIds.add(q.id!); }),
+                        onTap: selectionMode ? () => setState(() { 
+                          if (isSelected) multiSelectedIds.remove(q.id); else multiSelectedIds.add(q.id!); 
+                        }) : null,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.amber.withOpacity(0.2) : Colors.white.withOpacity(0.05), 
+                            borderRadius: BorderRadius.circular(15), 
+                            border: Border.all(color: isSelected ? Colors.amber : Colors.white10)
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(icon: Icon(Icons.edit_outlined, color: Colors.blueAccent, size: isSmall ? 18 : 20), onPressed: () => _showEditQuestionDialog(context, ref, widget.categories, q)),
-                              IconButton(icon: Icon(Icons.delete_outline, color: Colors.redAccent, size: isSmall ? 18 : 20), onPressed: () => ref.read(questionsProvider(null).notifier).deleteQuestion(q.id!)),
-                            ],
+                          child: ListTile(
+                            contentPadding: EdgeInsets.symmetric(horizontal: isSmall ? 10 : 16, vertical: 8),
+                            leading: selectionMode 
+                              ? Checkbox(
+                                  value: isSelected, 
+                                  activeColor: Colors.amber,
+                                  onChanged: (v) => setState(() { if (v!) multiSelectedIds.add(q.id!); else multiSelectedIds.remove(q.id!); })
+                                )
+                              : (q.imageData != null 
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.memory(q.imageData!, width: isSmall ? 40 : 50, height: isSmall ? 40 : 50, fit: BoxFit.cover),
+                                  )
+                                : Container(
+                                    width: isSmall ? 40 : 50, height: isSmall ? 40 : 50, 
+                                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+                                    child: Icon(Icons.text_fields_rounded, color: Colors.white24, size: isSmall ? 20 : 24),
+                                  )),
+                            title: Text(q.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 13 : 14, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('ج: ${q.answer}', style: const TextStyle(color: Colors.greenAccent, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                Text(qCats, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ],
+                            ),
+                            trailing: selectionMode 
+                              ? null 
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(icon: Icon(Icons.edit_outlined, color: Colors.blueAccent, size: isSmall ? 18 : 20), onPressed: () => _showEditQuestionDialog(context, ref, widget.categories, q)),
+                                    IconButton(icon: Icon(Icons.delete_outline, color: Colors.redAccent, size: isSmall ? 18 : 20), onPressed: () => ref.read(questionsProvider(null).notifier).deleteQuestion(q.id!)),
+                                  ],
+                                ),
                           ),
                         ),
                       );
@@ -446,6 +836,42 @@ class _QuestionsBySelectedCategoryState extends ConsumerState<_QuestionsBySelect
           }),
         ),
       ],
+    );
+  }
+
+  void _confirmBulkDelete() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppDesign.slate900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('تأكيد الحذف المتعدد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('هل أنت متأكد من حذف ${multiSelectedIds.length} سؤال؟', style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            onPressed: () async {
+              final notifier = ref.read(questionsProvider(null).notifier);
+              final idsToDelete = List<int>.from(multiSelectedIds);
+              for (var id in idsToDelete) {
+                await notifier.deleteQuestion(id);
+              }
+              if (mounted) {
+                setState(() {
+                  selectionMode = false;
+                  multiSelectedIds.clear();
+                });
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('تم حذف ${idsToDelete.length} سؤال بنجاح'), backgroundColor: Colors.redAccent)
+                );
+              }
+            },
+            child: const Text('حذف الكل المختار'),
+          ),
+        ],
+      ),
     );
   }
 }

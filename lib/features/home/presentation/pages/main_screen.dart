@@ -1,385 +1,321 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/features/teams/presentation/providers/team_providers.dart';
 import '../../../../features/games/bank_al_haz/presentation/pages/bank_al_haz_settings_page.dart';
 import '../../../../features/games/wheel/presentation/pages/wheel_game_page.dart';
 import '../../../../features/games/penalty_shootout/presentation/pages/penalty_shootout_page.dart';
 import '../../../../features/games/under_pressure/presentation/pages/under_pressure_page.dart';
 import '../../../../features/games/snakes_and_ladders/presentation/pages/snakes_ladders_game_page.dart';
 import '../../../../features/games/quiz_arena/presentation/pages/quiz_arena_settings_page.dart';
+import '../../../../features/games/ludo_quiz/presentation/pages/ludo_game_page.dart';
+import '../../../../features/games/spy_game/presentation/pages/spy_setup_page.dart';
 import '../../../../features/settings/presentation/pages/settings_page.dart';
 
-class MainScreen extends StatelessWidget {
+class MainScreen extends ConsumerWidget {
   const MainScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: AppDesign.backgroundWrapper(
-        child: _buildContent(context),
+        child: _buildContent(context, ref),
       ),
     );
   }
 
-  Widget _buildContent(BuildContext context) {
+  Widget _buildContent(BuildContext context, WidgetRef ref) {
+    final teamsAsync = ref.watch(teamsListProvider);
+    final teams = teamsAsync.value ?? [];
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.settings, color: Colors.white, size: 24),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsPage()),
+          ),
+        ),
         centerTitle: true,
-        title: Row(
+        title: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: EdgeInsets.all(AppDesign.isSmallScreen(context) ? 6 : 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white10),
-              ),
-              child: Image.asset(
-                'assets/images/logo.png',
-                width: AppDesign.isSmallScreen(context) ? 24 : 32,
-                height: AppDesign.isSmallScreen(context) ? 24 : 32,
-                fit: BoxFit.contain,
+            Text(
+              "استمتع بأفضل الألعاب التنافسية مع أصدقائك",
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(width: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'GAMES PLATFORM',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 22,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Image.asset(
+                  'assets/images/logo.png',
+                  width: 24,
+                  height: 24,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 100),
+          _buildElegantLeaderboard(teams),
+          Expanded(
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                _buildGamesGrid(context),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildElegantLeaderboard(List<dynamic> teams) {
+    if (teams.isEmpty) return const SizedBox.shrink();
+    return Builder(
+      builder: (context) {
+        final isSmall = AppDesign.isSmallScreen(context);
+        return Container(
+          height: isSmall ? 50 : 65,
+          margin: EdgeInsets.symmetric(vertical: isSmall ? 5 : 12),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 24),
+            itemCount: teams.length,
+            itemBuilder: (context, index) {
+              final team = teams[index];
+              return Container(
+                margin: EdgeInsets.only(right: isSmall ? 8 : 16),
+                padding: EdgeInsets.symmetric(horizontal: isSmall ? 10 : 20, vertical: isSmall ? 6 : 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(isSmall ? 25 : 35),
+                  border: Border.all(color: Colors.white10),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 2)
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: isSmall ? 6 : 8,
+                      height: isSmall ? 6 : 8,
+                      decoration: BoxDecoration(
+                        color: _getTeamColor(index),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: _getTeamColor(index).withOpacity(0.6), blurRadius: 4, spreadRadius: 1),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: isSmall ? 6 : 12),
+                    Text(
+                      team.name,
+                      style: TextStyle(
+                        color: Colors.white70, 
+                        fontSize: isSmall ? 10 : 13, 
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    SizedBox(width: isSmall ? 6 : 10),
+                    Text(
+                      "${team.score}",
+                      style: TextStyle(
+                        color: Colors.white, 
+                        fontSize: isSmall ? 16 : 22, 
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      }
+    );
+  }
+
+  Color _getTeamColor(int index) {
+    final colors = [Colors.redAccent, Colors.greenAccent, Colors.blueAccent, Colors.orangeAccent, Colors.purpleAccent];
+    return colors[index % colors.length];
+  }
+
+  Widget _buildGamesGrid(BuildContext context) {
+    final games = [
+      {
+        'title': 'تحت الضغط',
+        'subtitle': 'اختبار السرعة والذكاء',
+        'icon': Icons.timer_outlined,
+        'color': Colors.purpleAccent,
+        'page': const UnderPressurePage(),
+      },
+      {
+        'title': 'ضربات الجزاء',
+        'subtitle': 'المواجهة المباشرة والمثيرة',
+        'icon': Icons.sports_soccer,
+        'color': Colors.cyanAccent,
+        'page': const PenaltyShootoutPage(),
+      },
+      {
+        'title': 'بنك الحظ',
+        'subtitle': 'اللعبة اللوحية الشهيرة',
+        'icon': Icons.map_outlined,
+        'color': Colors.tealAccent,
+        'page': const BankAlHazSettingsPage(),
+      },
+      {
+        'title': 'عجلة الحظ',
+        'subtitle': 'لف العجلة واربح النقاط',
+        'icon': Icons.casino_outlined,
+        'color': Colors.blueAccent,
+        'page': const WheelGamePage(),
+      },
+      {
+        'title': 'ساحة التحدي',
+        'subtitle': 'تحدى أصدقائك في مسابقة ثقافية',
+        'icon': Icons.quiz_outlined,
+        'color': Colors.indigoAccent,
+        'page': const QuizArenaSettingsPage(),
+      },
+      {
+        'title': 'السلم والثعبان',
+        'subtitle': 'اصعد للقمة وتجنب الثعابين',
+        'icon': Icons.grid_on_outlined,
+        'color': Colors.orangeAccent,
+        'page': const SnakesLaddersGamePage(),
+      },
+      {
+        'title': 'لودو الأسئلة',
+        'subtitle': 'لعبة اللودو الكلاسيكية بلمسة ثقافية',
+        'icon': Icons.gamepad_outlined,
+        'color': Colors.pinkAccent,
+        'page': const LudoGamePage(),
+      },
+      {
+        'title': 'لعبة الجاسوس',
+        'subtitle': 'احذر من الجاسوس بينكم',
+        'icon': Icons.person_search,
+        'color': Colors.redAccent,
+        'page': const SpyGameMainScreen(),
+      },
+    ];
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      sliver: SliverGrid(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: AppDesign.isSmallScreen(context) ? 2 : 4,
+          mainAxisSpacing: 24,
+          crossAxisSpacing: 24,
+          childAspectRatio: 0.85,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final game = games[index];
+            return _buildGameCard(context, game);
+          },
+          childCount: games.length,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameCard(BuildContext context, Map<String, dynamic> game) {
+    final Color color = game['color'] as Color;
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => game['page'] as Widget),
+      ),
+      borderRadius: BorderRadius.circular(32),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1F3D).withOpacity(0.6),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: Colors.white10),
+          boxShadow: [
+             BoxShadow(
+               color: color.withOpacity(0.05),
+               blurRadius: 20,
+               spreadRadius: 2,
+             )
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withOpacity(0.1),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withOpacity(0.2),
+                    blurRadius: 15,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: Icon(game['icon'] as IconData, size: 40, color: color),
+            ),
+            const SizedBox(height: 20),
             Text(
-              'GAMES PLATFORM',
-              style: TextStyle(
+              game['title'] as String,
+              style: const TextStyle(
                 fontWeight: FontWeight.w900,
-                fontSize: AppDesign.isSmallScreen(context) ? 18 : 26,
+                fontSize: 20,
                 color: Colors.white,
-                letterSpacing: AppDesign.isSmallScreen(context) ? 1 : 2,
-                shadows: const [Shadow(color: Colors.blueAccent, blurRadius: 15)],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                game['subtitle'] as String,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.white.withOpacity(0.4),
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 28),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsPage()),
-            ),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.only(
-                left: AppDesign.isSmallScreen(context) ? 16 : 24,
-                right: AppDesign.isSmallScreen(context) ? 16 : 24,
-                top: AppDesign.isSmallScreen(context) ? 110 : 140, 
-                bottom: 40
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    'اختر لعبتك المفضلة',
-                    style: TextStyle(
-                      fontSize: AppDesign.isSmallScreen(context) ? 28 : 42,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'استمتع بأفضل الألعاب التنافسية مع أصدقائك',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: AppDesign.isSmallScreen(context) ? 14 : 18,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 48),
-                  _buildGamesGrid(context),
-                  const SizedBox(height: 80),
-                  _buildFooter(context),
-                  const SizedBox(height: 40),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
-
-  Widget _buildGamesGrid(BuildContext context) {
-    final isSmall = AppDesign.isSmallScreen(context);
-    final List<_GameCardData> games = [
-      _GameCardData(
-        title: 'عجلة الحظ',
-        subtitle: 'لف العجلة واربح النقاط',
-        icon: Icons.casino_outlined,
-        color: Colors.blueAccent,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WheelGamePage())),
-      ),
-      _GameCardData(
-        title: 'بنك الحظ',
-        subtitle: 'اللعبة اللوحية الشهيرة',
-        icon: Icons.map_outlined,
-        color: Colors.tealAccent,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BankAlHazSettingsPage())),
-      ),
-      _GameCardData(
-        title: 'ضربات الجزاء',
-        subtitle: 'المواجهة المباشرة والمثيرة',
-        icon: Icons.sports_soccer_outlined,
-        color: Colors.cyanAccent,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PenaltyShootoutPage())),
-      ),
-      _GameCardData(
-        title: 'تحت الضغط',
-        subtitle: 'اختبار السرعة والذكاء',
-        icon: Icons.timer_outlined,
-        color: Colors.purpleAccent,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UnderPressurePage())),
-      ),
-      _GameCardData(
-        title: 'السلم والثعبان',
-        subtitle: 'اصعد للقمة وتجنب الثعابين',
-        icon: Icons.grid_4x4_outlined,
-        color: Colors.orangeAccent,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SnakesLaddersGamePage())),
-      ),
-      _GameCardData(
-        title: 'ساحة التحدي',
-        subtitle: 'تحدى أصدقائك في مسابقة ثقافية',
-        icon: Icons.quiz_outlined,
-        color: Colors.deepPurpleAccent,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QuizArenaSettingsPage())),
-      ),
-    ];
-
-    if (isSmall) {
-      // Force 2-column grid on mobile
-      return GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.85,
-        ),
-        itemCount: games.length,
-        itemBuilder: (context, index) {
-          final g = games[index];
-          return _GameCard(
-            title: g.title,
-            subtitle: g.subtitle,
-            icon: g.icon,
-            color: g.color,
-            onTap: g.onTap,
-          );
-        },
-      );
-    }
-
-    return Wrap(
-      spacing: 40,
-      runSpacing: 40,
-      alignment: WrapAlignment.center,
-      children: games.map((g) => _GameCard(
-        title: g.title,
-        subtitle: g.subtitle,
-        icon: g.icon,
-        color: g.color,
-        onTap: g.onTap,
-      )).toList(),
-    );
-  }
-
-  Widget _buildFooter(BuildContext context) {
-    return InkWell(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const SettingsPage(initialIndex: 9)),
-      ),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-        decoration: AppDesign.glassDecoration,
-        child: const Text(
-          'تصميم عصري • أداء سريع • تجربة ممتعة',
-          style: TextStyle(
-            color: Colors.white24,
-            fontSize: 14,
-            letterSpacing: 2,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GameCard extends StatefulWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _GameCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  State<_GameCard> createState() => _GameCardState();
-}
-
-class _GameCardState extends State<_GameCard> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final isSmall = AppDesign.isSmallScreen(context);
-    // On mobile GridView: fill available width; On desktop: fixed 280
-    final cardWidth = isSmall ? double.infinity : 280.0;
-    final cardHeight = isSmall ? null : 320.0;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedScale(
-        scale: _isHovered ? 1.05 : 1.0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutBack,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: Container(
-            width: isSmall ? null : cardWidth,
-            height: cardHeight,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(isSmall ? 24 : 32),
-              border: Border.all(
-                color: _isHovered 
-                  ? widget.color.withOpacity(0.5) 
-                  : Colors.white.withOpacity(0.08),
-                width: 1.5,
-              ),
-              boxShadow: [
-                if (_isHovered)
-                  BoxShadow(
-                    color: widget.color.withOpacity(0.2),
-                    blurRadius: 40,
-                    offset: const Offset(0, 20),
-                  ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(isSmall ? 24 : 32),
-              child: Stack(
-                children: [
-                  Positioned(
-                    top: -20,
-                    right: -20,
-                    child: Container(
-                      width: isSmall ? 80 : 120,
-                      height: isSmall ? 80 : 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            widget.color.withOpacity(0.15),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.all(isSmall ? 16 : 32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: isSmall ? 64 : 100,
-                          height: isSmall ? 64 : 100,
-                          decoration: BoxDecoration(
-                            color: widget.color.withOpacity(0.1),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: widget.color.withOpacity(0.2),
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: widget.color.withOpacity(0.2),
-                                blurRadius: 15,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            widget.icon,
-                            size: isSmall ? 28 : 50,
-                            color: widget.color,
-                          ),
-                        ),
-                        SizedBox(height: isSmall ? 12 : 32),
-                        Text(
-                          widget.title,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: isSmall ? 16 : 28,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        SizedBox(height: isSmall ? 8 : 12),
-                        Text(
-                          widget.subtitle,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: isSmall ? 10 : 15,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GameCardData {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  _GameCardData({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
 }

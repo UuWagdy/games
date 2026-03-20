@@ -16,8 +16,17 @@ class UnderPressure extends _$UnderPressure {
 
   @override
   UnderPressureState build() {
+    ref.onDispose(() {
+      _timer?.cancel();
+    });
+
     final teamsAsync = ref.watch(teamsListProvider);
     final teams = teamsAsync.value ?? [];
+    
+    // Preserve existing state if we are already in a game
+    if (stateOrNull != null) {
+      return stateOrNull!.copyWith(teams: teams);
+    }
     return UnderPressureState(teams: teams);
   }
 
@@ -38,7 +47,7 @@ class UnderPressure extends _$UnderPressure {
       filtered = filtered.sublist(0, countLimit);
     }
 
-    final teamResults = List.filled(filtered.length, QuestionResult.pending);
+    final List<QuestionResult> initialResults = List.filled(filtered.length, QuestionResult.pending);
 
     state = state.copyWith(
       team1: t1,
@@ -52,8 +61,8 @@ class UnderPressure extends _$UnderPressure {
       isTeam2Turn: false,
       winnerTeamId: null,
       isTie: false,
-      team1Results: teamResults,
-      team2Results: teamResults,
+      team1Results: List.from(initialResults), // Separate copy for Team 1
+      team2Results: List.from(initialResults), // Separate copy for Team 2 (Fairness: same questions later)
       categoryIds: categoryIds,
       team1PointsAdded: 0,
       team2PointsAdded: 0,
@@ -88,16 +97,19 @@ class UnderPressure extends _$UnderPressure {
     final settingsAsync = await ref.read(underPressureSettingsProvider.future);
     final timeLimit = settingsAsync['timer_duration'] ?? 60;
     
-    // We shuffle questions again or just reset index? 
-    // Usually Team 2 should get different questions or same count but different set.
-    // Let's just reset index for now or fetch new batch.
-    // User said "Team 1 finishes, Team 2 enters".
+    // FAIRNESS PRINCIPLE: Team 2 MUST face the exact same questions as Team 1
+    // in the exact same order. We reset the index to 0 while keeping state.questions frozen.
     state = state.copyWith(
       isTeam2Turn: true,
       currentQuestionIndex: 0,
       timeLeft: timeLimit,
-      status: UnderPressureStatus.paused, // Wait for manual start? 
+      status: UnderPressureStatus.paused,
     );
+  }
+
+  void startTeam1() {
+    state = state.copyWith(status: UnderPressureStatus.playing);
+    _startTimer();
   }
 
   void startTeam2() {
@@ -128,14 +140,6 @@ class UnderPressure extends _$UnderPressure {
       t2Final += bonus;
     }
 
-    // Persist to DB
-    if (state.team1?.id != null) {
-      await ref.read(teamsListProvider.notifier).updateScore(state.team1!.id!, t1Final, reason: 'تحت الضغط');
-    }
-    if (state.team2?.id != null) {
-      await ref.read(teamsListProvider.notifier).updateScore(state.team2!.id!, t2Final, reason: 'تحت الضغط');
-    }
-
     state = state.copyWith(
       status: UnderPressureStatus.finished,
       winnerTeamId: winnerId,
@@ -143,6 +147,14 @@ class UnderPressure extends _$UnderPressure {
       team1PointsAdded: t1Final,
       team2PointsAdded: t2Final,
     );
+
+    // Persist to DB
+    if (state.team1?.id != null) {
+      await ref.read(teamsListProvider.notifier).updateScore(state.team1!.id!, t1Final, reason: 'تحت الضغط');
+    }
+    if (state.team2?.id != null) {
+      await ref.read(teamsListProvider.notifier).updateScore(state.team2!.id!, t2Final, reason: 'تحت الضغط');
+    }
   }
 
   void nextQuestion(bool correct) {

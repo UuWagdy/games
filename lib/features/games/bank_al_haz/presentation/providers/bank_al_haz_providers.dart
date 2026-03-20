@@ -7,14 +7,21 @@ final bankAlHazRepositoryProvider = Provider<BankAlHazRepository>((ref) {
   return BankAlHazRepositoryImpl();
 });
 
+final templatesProvider = FutureProvider<List<BankAlHazTemplate>>((ref) async {
+  final repository = ref.watch(bankAlHazRepositoryProvider);
+  return repository.getTemplates();
+});
+
 final stationsProvider = FutureProvider<List<Station>>((ref) async {
   final repository = ref.watch(bankAlHazRepositoryProvider);
-  return repository.getStations();
+  final settings = await ref.watch(gameSettingsProvider.future);
+  return repository.getStations(templateId: settings.activeTemplateId);
 });
 
 final cardsProvider = FutureProvider<List<BankAlHazCard>>((ref) async {
   final repository = ref.watch(bankAlHazRepositoryProvider);
-  return repository.getCards();
+  final settings = await ref.watch(gameSettingsProvider.future);
+  return repository.getCards(templateId: settings.activeTemplateId);
 });
 
 final gameSettingsProvider = FutureProvider<BankAlHazSettings>((ref) async {

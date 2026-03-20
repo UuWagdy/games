@@ -22,7 +22,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       image: 'assets/images/logo.png',
       color: Colors.blueAccent,
       namesTitle: 'بواسطة فريق العمل',
-      names: ['د. يوساب وجدي', 'م. بافلي باسم', 'فيلوباتير باسم'],
+      names: ['د. يوساب وجدي', 'م. بافلي باسم', 'فيلوباتير باسم', 'أ. چوليا چورچ'],
     ),
     OnboardingModel(
       title: 'أفكار الألعاب',
@@ -41,6 +41,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       color: Colors.purpleAccent,
       namesTitle: 'تطوير وبرمجة',
       names: ['د. يوساب وجدي'],
+    ),
+    OnboardingModel(
+      title: 'تجميع الأسئلة',
+      subtitle: 'QUESTIONS',
+      description: 'تم اختيار وتجميع مجموعة واسعة ومتنوعة من الأسئلة بدقة بالغة لتغطي مختلف المجالات وتزيد من حماس وتحدي اللعب.',
+      image: 'assets/images/logo.png',
+      color: Colors.pinkAccent,
+      namesTitle: 'تجميع وإعداد',
+      names: ['أ. چوليا چورچ'],
     ),
   ];
 

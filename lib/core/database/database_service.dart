@@ -3,10 +3,16 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../features/games/bank_al_haz/data/sources/bank_al_haz_default_data.dart';
 
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._init();
   static Database? _database;
+  
+  // Update this number whenever you update the games.db in assets folder
+  // to force all users (and your EXE/APK) to sync with the new assets version.
+  static const int _dbRevision = 2; 
 
   DatabaseService._init();
 
@@ -22,38 +28,102 @@ class DatabaseService {
 
     // Check if the database exists
     final exists = await databaseExists(path);
+    
+    // Check if we need to force a sync based on revision (for build updates)
+    final prefs = await SharedPreferences.getInstance();
+    final lastSyncedRevision = prefs.getInt('db_revision') ?? 0;
+    final needsSync = lastSyncedRevision < _dbRevision;
 
-    if (!exists) {
-      // Should copy from assets
+    if (!exists || needsSync) {
+      // Sync from asset
       try {
         await Directory(dirname(path)).create(recursive: true);
+        
+        // Close existing connection ONLY if we already have one (unlikely during init)
+        if (_database != null) {
+          await _database!.close();
+          _database = null;
+        }
 
-        // Copy from asset
-        ByteData data = await rootBundle.load(
-          join('assets', 'database', filePath),
-        );
-        List<int> bytes = data.buffer.asUint8List(
-          data.offsetInBytes,
-          data.lengthInBytes,
-        );
-
-        // Write and flush the bytes written
+        ByteData data = await rootBundle.load('assets/database/$filePath');
+        List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
         await File(path).writeAsBytes(bytes, flush: true);
+        
+        // Mark as synced with the new revision
+        await prefs.setInt('db_revision', _dbRevision);
+        print('Database synced from assets (Revision: $_dbRevision)');
       } catch (e) {
         print('Error copying database from assets: $e');
-        // If copying fails, let it create a new one via onCreate or just fail gracefully
       }
     }
 
     return await openDatabase(
       path,
-      version: 17,
+      version: 25,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
   }
 
+  Future<void> forceSyncFromAssets() async {
+    final dbPath = await getApplicationDocumentsDirectory();
+    final path = join(dbPath.path, 'games.db');
+    
+    // Close existing connection if any
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+
+    try {
+      await Directory(dirname(path)).create(recursive: true);
+      ByteData data = await rootBundle.load('assets/database/games.db');
+      List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      await File(path).writeAsBytes(bytes, flush: true);
+      print('Database successfully synced from assets');
+    } catch (e) {
+      print('Error syncing database from assets: $e');
+      rethrow;
+    }
+  }
+
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    // Robustly check for is_purchased column
+    final columnCheck = await db.rawQuery('PRAGMA table_info(bah_buildings)');
+    final hasIsPurchased = columnCheck.any((column) => column['name'] == 'is_purchased');
+    
+    if (!hasIsPurchased) {
+      try {
+        await db.execute('ALTER TABLE bah_buildings ADD COLUMN is_purchased INTEGER DEFAULT 0');
+      } catch (e) {
+        print('Error adding is_purchased column: $e');
+      }
+    }
+
+    if (oldVersion < 24) {
+      try {
+        await db.execute('ALTER TABLE bah_stations ADD COLUMN is_unbuyable INTEGER DEFAULT 0');
+      } catch (_) {}
+    }
+    if (oldVersion < 23) {
+      try {
+        await db.execute('ALTER TABLE bah_stations ADD COLUMN allows_tax INTEGER DEFAULT 1');
+      } catch (_) {}
+    }
+    if (oldVersion < 22) {
+      try {
+        await db.execute('ALTER TABLE bah_stations ADD COLUMN era TEXT DEFAULT "none"');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE bah_stations ADD COLUMN has_tax INTEGER DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE bah_stations ADD COLUMN tax_amount REAL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE bah_buildings ADD COLUMN is_purchased INTEGER DEFAULT 0');
+      } catch (_) {}
+    }
     if (oldVersion < 17) {
       // Logic for adding switch/joker if someone is on an older version and didn't get them
       try {
@@ -192,6 +262,46 @@ class DatabaseService {
         // Ignore
       }
     }
+    if (oldVersion < 18) {
+      try {
+        await db.execute(
+          'ALTER TABLE bah_settings ADD COLUMN salary_per_lap REAL DEFAULT 200',
+        );
+        await db.execute(
+          'ALTER TABLE bah_settings ADD COLUMN win_points INTEGER DEFAULT 50',
+        );
+      } catch (e) {
+        // Already exists or ignore
+      }
+    }
+    if (oldVersion < 21) {
+      await db.execute('CREATE TABLE IF NOT EXISTS bah_templates (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)');
+      
+      try {
+        await db.execute('ALTER TABLE bah_stations ADD COLUMN template_id INTEGER');
+      } catch (_) {}
+      
+      try {
+        await db.execute('ALTER TABLE bah_cards ADD COLUMN template_id INTEGER');
+      } catch (_) {}
+      
+      try {
+        await db.execute('ALTER TABLE bah_settings ADD COLUMN active_template_id INTEGER');
+      } catch (_) {}
+
+      // Create initial template and migrate data if bah_templates is empty
+      final templates = await db.query('bah_templates', limit: 1);
+      if (templates.isEmpty) {
+        int templateId = await db.insert('bah_templates', {'id': 1, 'name': 'القالب الديني (إفتراضي)'});
+        await db.update('bah_stations', {'template_id': templateId});
+        await db.update('bah_cards', {'template_id': templateId});
+        await db.update('bah_settings', {'active_template_id': templateId});
+      }
+    }
+
+    if (oldVersion < 19) {
+      await BankAlHazDefaultData.seed(db);
+    }
   }
 
   Future _createBankAlHazTables(Database db) async {
@@ -209,7 +319,13 @@ class DatabaseService {
         requires_question INTEGER DEFAULT 1,
         card_type TEXT,
         buy_price REAL DEFAULT 0,
-        base_rent REAL DEFAULT 0
+        base_rent REAL DEFAULT 0,
+        template_id INTEGER,
+        era TEXT DEFAULT 'none',
+        has_tax INTEGER DEFAULT 0,
+        tax_amount REAL DEFAULT 0,
+        allows_tax INTEGER DEFAULT 1,
+        is_unbuyable INTEGER DEFAULT 0
       )
     ''');
 
@@ -221,6 +337,7 @@ class DatabaseService {
         name TEXT NOT NULL,
         buy_price REAL DEFAULT 0,
         additional_rent REAL DEFAULT 0,
+        is_purchased INTEGER DEFAULT 0,
         FOREIGN KEY (station_id) REFERENCES bah_stations (id) ON DELETE CASCADE
       )
     ''');
@@ -236,7 +353,8 @@ class DatabaseService {
         type TEXT,
         effect_type TEXT NOT NULL,
         effect_value INTEGER DEFAULT 0,
-        target_station_name TEXT
+        target_station_name TEXT,
+        template_id INTEGER
       )
     ''');
 
@@ -244,22 +362,34 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE bah_settings (
         id INTEGER (1) PRIMARY KEY DEFAULT 1,
-        initial_money REAL DEFAULT 1000,
+        initial_money REAL DEFAULT 1500.0,
         win_condition TEXT DEFAULT 'rounds',
-        win_criteria TEXT DEFAULT 'moneyOnly',
+        win_criteria TEXT DEFAULT 'cumulativeValue',
         max_rounds INTEGER DEFAULT 10,
-        max_time_minutes INTEGER DEFAULT 30
+        max_time_minutes INTEGER DEFAULT 30,
+        salary_per_lap REAL DEFAULT 200.0,
+        win_points INTEGER DEFAULT 50,
+        active_template_id INTEGER
       )
     ''');
+
+    // 5. Templates table
+    await db.execute('''CREATE TABLE bah_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT
+    )''');
 
     // Insert default settings if not exists
     await db.insert('bah_settings', {
       'id': 1,
-      'initial_money': 1000,
+      'initial_money': 1500.0,
       'win_condition': 'rounds',
-      'win_criteria': 'moneyOnly',
+      'win_criteria': 'cumulativeValue',
       'max_rounds': 10,
       'max_time_minutes': 30,
+      'salary_per_lap': 200.0,
+      'win_points': 50,
+      'active_template_id': 1,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
@@ -378,6 +508,9 @@ class DatabaseService {
     await _createScoreLogsTable(db);
     await _createQuestionCategoriesTable(db);
     await _createBankAlHazTables(db);
+
+    // Initial Seeding
+    await BankAlHazDefaultData.seed(db);
 
     await db.insert('categories', {'name': 'الكتاب المقدس'});
     await db.insert('categories', {'name': 'معلومات عامة'});

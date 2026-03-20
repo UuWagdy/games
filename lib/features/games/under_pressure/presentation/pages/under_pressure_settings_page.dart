@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/under_pressure_settings_provider.dart';
 import 'package:games/core/design/app_design.dart';
@@ -13,8 +14,10 @@ class UnderPressureSettingsPage extends ConsumerWidget {
     return settingsAsync.when(
       data: (settings) => SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
+        child: Center(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
             _buildSettingCard(
               context,
               title: 'إعدادات تحت الضغط',
@@ -61,11 +64,40 @@ class UnderPressureSettingsPage extends ConsumerWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 24),
+            _buildSettingCard(
+              context,
+              title: 'اختصارات لوحة المفاتيح',
+              icon: Icons.keyboard_rounded,
+              children: [
+                _buildKeySetting(
+                  context,
+                  title: 'اختصار (صح)',
+                  value: settings['correct_key'] ?? '1',
+                  onChanged: (val) => ref.read(underPressureSettingsProvider.notifier).setCorrectKey(val),
+                ),
+                const Divider(color: Colors.white10),
+                _buildKeySetting(
+                  context,
+                  title: 'اختصار (خطأ)',
+                  value: settings['wrong_key'] ?? '2',
+                  onChanged: (val) => ref.read(underPressureSettingsProvider.notifier).setWrongKey(val),
+                ),
+                const Divider(color: Colors.white10),
+                _buildKeySetting(
+                  context,
+                  title: 'اختصار (تخطي)',
+                  value: settings['skip_key'] ?? '3',
+                  onChanged: (val) => ref.read(underPressureSettingsProvider.notifier).setSkipKey(val),
+                ),
+              ],
+            ),
           ],
         ),
       ),
-      loading: () => const Center(child: CircularProgressIndicator(color: Colors.purpleAccent)),
-      error: (e, s) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.redAccent))),
+    ),
+    loading: () => const Center(child: CircularProgressIndicator(color: Colors.purpleAccent)),
+    error: (e, s) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.redAccent))),
     );
   }
 
@@ -176,6 +208,100 @@ class UnderPressureSettingsPage extends ConsumerWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildKeySetting(BuildContext context, {required String title, required String value, required Function(String) onChanged}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+          InkWell(
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => _KeyCaptureDialog(title: title),
+              ).then((result) {
+                if (result != null) {
+                  onChanged(result);
+                }
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.purpleAccent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.purpleAccent.withOpacity(0.5)),
+              ),
+              child: Text(
+                value.toUpperCase(),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KeyCaptureDialog extends StatefulWidget {
+  final String title;
+  const _KeyCaptureDialog({required this.title});
+
+  @override
+  State<_KeyCaptureDialog> createState() => _KeyCaptureDialogState();
+}
+
+class _KeyCaptureDialogState extends State<_KeyCaptureDialog> {
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(widget.title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+      content: KeyboardListener(
+        focusNode: _focusNode,
+        autofocus: true,
+        onKeyEvent: (event) {
+          if (event is KeyDownEvent) {
+             final keyLabel = event.logicalKey.keyLabel;
+             if (keyLabel.isNotEmpty) {
+               Navigator.pop(context, keyLabel);
+             }
+          }
+        },
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.keyboard_outlined, size: 64, color: Colors.purpleAccent),
+            SizedBox(height: 20),
+            Text('اضغط على أي مفتاح في لوحة المفاتيح لتحديده كإختصار', 
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70)),
+          ],
+        ),
       ),
     );
   }

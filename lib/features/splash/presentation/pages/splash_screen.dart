@@ -248,6 +248,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                           _CreditBadge(name: 'د. يوساب وجدي', role: 'Dev', color: Colors.blueAccent),
                           _CreditBadge(name: 'م. بافلي باسم', role: 'Ideas', color: Colors.amberAccent),
                           _CreditBadge(name: 'فيلوباتير باسم', role: 'Ideas', color: Colors.purpleAccent),
+                          _CreditBadge(name: 'أ. چوليا چورچ', role: 'Questions', color: Colors.greenAccent),
                         ],
                       ),
                     ),

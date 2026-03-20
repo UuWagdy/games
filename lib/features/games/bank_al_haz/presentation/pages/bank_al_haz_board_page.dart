@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:ui';
-import '../../domain/entities/bank_al_haz_entities.dart';
-import '../providers/game_engine_provider.dart';
-import '../providers/bank_al_haz_providers.dart';
-import '../providers/bank_al_haz_template_seeder.dart';
-import '../../../../teams/presentation/providers/team_providers.dart';
-import '../widgets/three_d_dice.dart';
-import '../widgets/player_piece.dart';
-import '../../../../questions/domain/entities/question.dart';
-import '../../../../teams/presentation/pages/teams_management_page.dart';
+import 'package:games/features/games/bank_al_haz/domain/entities/bank_al_haz_entities.dart';
+import 'package:games/features/games/bank_al_haz/presentation/providers/game_engine_provider.dart';
+import 'package:games/features/games/bank_al_haz/presentation/providers/bank_al_haz_providers.dart';
+import 'package:games/features/games/bank_al_haz/data/sources/bank_al_haz_default_data.dart';
+import 'package:games/core/database/database_service.dart';
+import 'package:games/features/teams/presentation/providers/team_providers.dart';
+import 'package:games/features/games/bank_al_haz/presentation/widgets/three_d_dice.dart';
+import 'package:games/features/games/bank_al_haz/presentation/widgets/player_piece.dart';
+import 'package:games/features/questions/domain/entities/question.dart';
+import 'package:games/features/teams/presentation/pages/teams_management_page.dart';
 import 'package:games/core/design/app_design.dart';
 import '../../../../settings/presentation/pages/settings_page.dart';
 import 'dart:math' as math;
@@ -31,6 +33,8 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   Timer? _pendingLandingTimer;
   String _timeElapsedStr = "00:00";
   bool _isHandlingLanding = false;
+  GameLog? _currentEventLog;
+  Timer? _eventClearTimer;
 
   @override
   void initState() {
@@ -45,7 +49,14 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   void _startGameTimer() {
     _gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
-      final startTime = ref.read(gameEngineProvider).startTime;
+      final state = ref.read(gameEngineProvider);
+      
+      if (state.settings.winCondition == WinningCondition.time) {
+         // Rebuild is already handled by GameEngine's state updates (remainingSeconds) every second.
+         return;
+      }
+      
+      final startTime = state.startTime;
       if (startTime != null) {
         final duration = DateTime.now().difference(startTime);
         final mins = duration.inMinutes.toString().padLeft(2, '0');
@@ -53,6 +64,13 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         if (mounted) setState(() => _timeElapsedStr = "$mins:$secs");
       }
     });
+  }
+
+  String _formatTime(int seconds) {
+    if (seconds < 0) seconds = 0;
+    final mins = (seconds / 60).floor().toString().padLeft(2, '0');
+    final secs = (seconds % 60).toString().padLeft(2, '0');
+    return "$mins:$secs";
   }
 
   @override
@@ -78,6 +96,26 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       });
     });
 
+    // Listen for important events from logs
+    ref.listen<List<GameLog>>(
+      gameEngineProvider.select((s) => s.logs),
+      (prev, next) {
+        if (next.isNotEmpty && (prev == null || next.length > prev.length)) {
+          final lastLog = next.last;
+          // Filter for money or purchase events
+          if (lastLog.type == LogType.moneyAdd || lastLog.type == LogType.moneyRemove || lastLog.type == LogType.purchase) {
+            _eventClearTimer?.cancel();
+            if (mounted) {
+              setState(() => _currentEventLog = lastLog);
+              _eventClearTimer = Timer(const Duration(seconds: 4), () {
+                if (mounted) setState(() => _currentEventLog = null);
+              });
+            }
+          }
+        }
+      },
+    );
+
     // Listen for landing — use Timer to guarantee clean event loop
     ref.listen<Station?>(
       gameEngineProvider.select((s) => s.pendingLandingStation),
@@ -95,6 +133,9 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       },
     );
 
+    final bool isLock = gameState.isMovingPlayer || gameState.pendingLandingStation != null;
+    final bool hasPending = gameState.pendingLandingStation != null;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       endDrawer: AppDesign.isSmallScreen(context) ? Drawer(
@@ -102,15 +143,120 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         child: _buildMobileDrawer(gameState),
       ) : null,
       body: AppDesign.backgroundWrapper(
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildFloatingHeader(gameState, context),
-              Expanded(
-                child: FadeTransition(
-                  opacity: _boardRevealController,
-                  child: _buildBoard(gameState, engine),
+        child: Focus(
+          autofocus: true,
+          onKey: (node, event) {
+            if (event is RawKeyDownEvent && 
+                (event.logicalKey == LogicalKeyboardKey.space || event.logicalKey == LogicalKeyboardKey.enter)) {
+              if (!isLock && !hasPending) {
+                engine.rollDice();
+                return KeyEventResult.handled;
+              }
+            }
+            return KeyEventResult.ignored;
+          },
+          child: SafeArea(
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    _buildFloatingHeader(gameState, context),
+                    Expanded(
+                      child: FadeTransition(
+                        opacity: _boardRevealController,
+                        child: _buildBoard(gameState, engine),
+                      ),
+                    ),
+                  ],
                 ),
+                
+                // Game Over Overlay
+                _buildGameOverOverlay(gameState, engine, context),
+
+                // Removed old Positioned toast from here to move it inside _buildBoard for better dynamic positioning
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEventToast(GameLog log) {
+    bool isMobile = AppDesign.isSmallScreen(context);
+    final playerColors = [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple];
+    final color = log.playerIndex != null 
+        ? playerColors[log.playerIndex! % playerColors.length]
+        : _getLogColor(log.type);
+    
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.elasticOut,
+      builder: (context, val, child) {
+        return Transform.scale(
+          scale: val,
+          child: Opacity(
+            opacity: val.clamp(0.0, 1.0),
+            child: child,
+          ),
+        );
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 24, 
+          vertical: isMobile ? 10 : 14
+        ),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
+          border: Border.all(color: color.withOpacity(0.5), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.4),
+              blurRadius: isMobile ? 12 : 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
+          child: Stack(
+            children: [
+              // Shine Effect Animation
+              Positioned.fill(
+                child: _ShineAnimation(color: color),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                   Container(
+                     padding: EdgeInsets.all(isMobile ? 6 : 8),
+                     decoration: BoxDecoration(
+                        color: color.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                     ),
+                     child: Icon(
+                       _getLogIcon(log.type), 
+                       color: color, 
+                       size: isMobile ? 18 : 24
+                     ),
+                   ),
+                   SizedBox(width: isMobile ? 10 : 16),
+                   Expanded(
+                     child: Text(
+                        log.message,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isMobile ? 13 : 16,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                        textAlign: TextAlign.center,
+                     ),
+                   ),
+                ],
               ),
             ],
           ),
@@ -151,6 +297,14 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           onTap: () {
             Navigator.pop(context);
             Navigator.push(context, MaterialPageRoute(builder: (_) => const TeamsManagementPage()));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.inventory, color: Colors.greenAccent),
+          title: const Text('ممتلكاتي', style: TextStyle(color: Colors.white)),
+          onTap: () {
+            Navigator.pop(context);
+            _showMyPropertiesDialog(context, state);
           },
         ),
         ListTile(
@@ -245,17 +399,25 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
 
     switch (action) {
       case _StationAction.buy:
+        bool bought = false;
         if (station.requiresQuestion) {
           final q = await engine.getRandomQuestion(station.ownerCategoryId);
           if (q != null && mounted) {
-            final correct = await _showQuestionDialog(q);
+            bought = await _showQuestionDialog(q);
             await Future.delayed(const Duration(milliseconds: 150));
-            if (mounted) engine.resolveLanding(bought: correct);
           } else {
-            if (mounted) engine.resolveLanding(bought: true);
+            bought = true;
           }
         } else {
-          engine.resolveLanding(bought: true);
+          bought = true;
+        }
+        
+        if (mounted) {
+           engine.resolveLanding(bought: bought, skipAutoNextTurn: bought);
+           if (bought) {
+             await _handlePostPurchaseFlow(station, engine);
+             engine.forceNextTurn();
+           }
         }
         break;
       case _StationAction.passerQuestion:
@@ -385,9 +547,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                         const Divider(height: 32, color: Colors.white10),
                         _statRow(
                           Icons.home,
-                          station.isUnbuyable
-                              ? "غرامة التحدي"
-                              : "الإيجار الأساسي",
+                          station.isUnbuyable ? "غرامة التحدي" : "الإيجار الأساسي",
                           "${station.baseRent} P",
                           Colors.amberAccent,
                         ),
@@ -406,32 +566,23 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: () =>
-                                  Navigator.pop(dialogCtx, _StationAction.buy),
+                              onPressed: () => Navigator.pop(dialogCtx, _StationAction.buy),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.amberAccent,
                                 foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 20,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 20),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                               ),
                               icon: const Icon(Icons.psychology),
                               label: const Text(
                                 'تحدي الشخصية (سؤال)',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ),
                           const SizedBox(height: 12),
                           TextButton(
-                            onPressed: () =>
-                                Navigator.pop(dialogCtx, _StationAction.pass),
+                            onPressed: () => Navigator.pop(dialogCtx, _StationAction.pass),
                             child: const Text("مرور بسلام", style: TextStyle(color: Colors.white70)),
                           ),
                         ] else if (isOwner) ...[
@@ -444,56 +595,193 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                             ),
                           ),
                           const SizedBox(height: 24),
-                          TextButton(
-                            onPressed: () =>
-                                Navigator.pop(dialogCtx, _StationAction.pass),
-                            child: const Text("إغلاق", style: TextStyle(color: Colors.white70)),
-                          ),
-                        ] else if (isOwned) ...[
-                          const Text(
-                            "ستدخل تحدي المار لتقليل الإيجار",
-                            style: TextStyle(
-                              color: Colors.white60,
-                              fontSize: 16,
+                          if (station.buildings.isNotEmpty) ...[
+                            const Text(
+                              "المباني المتاحة:",
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 12),
+                            ...station.buildings.asMap().entries.map((entry) {
+                              final idx = entry.key;
+                              final building = entry.value;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      building.isPurchased ? Icons.check_circle : Icons.home_work,
+                                      color: building.isPurchased ? Colors.greenAccent : Colors.white24,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(building.name, style: const TextStyle(color: Colors.white)),
+                                          Text(
+                                            "الثمن: ${building.buyPrice} | إيجار إضافي: +${building.additionalRent}",
+                                            style: const TextStyle(color: Colors.white60, fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (!building.isPurchased)
+                                      ElevatedButton(
+                                        onPressed: currentPlayer.money >= building.buyPrice
+                                            ? () async {
+                                                await ref.read(gameEngineProvider.notifier).buyBuilding(station.id!, idx);
+                                                Navigator.pop(dialogCtx, _StationAction.pass);
+                                              }
+                                            : null,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.greenAccent.shade700,
+                                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        ),
+                                        child: const Text("بناء", style: TextStyle(fontSize: 12)),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 16),
+                          ],
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text("تفعيل الضرائب", style: TextStyle(color: Colors.white)),
+                                    Switch(
+                                      value: station.hasTax,
+                                      onChanged: (val) {
+                                        ref.read(gameEngineProvider.notifier).toggleTax(station.id!, val);
+                                        Navigator.pop(dialogCtx, _StationAction.pass);
+                                      },
+                                      activeColor: Colors.redAccent,
+                                    ),
+                                  ],
+                                ),
+                                if (station.hasTax) ...[
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    keyboardType: TextInputType.number,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: InputDecoration(
+                                      hintText: "قيمة الضرائب",
+                                      hintStyle: const TextStyle(color: Colors.white24),
+                                      prefixIcon: const Icon(Icons.money_off, color: Colors.redAccent),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    onSubmitted: (val) {
+                                      final amt = double.tryParse(val) ?? 0;
+                                      ref.read(gameEngineProvider.notifier).setTaxAmount(station.id!, amt);
+                                      Navigator.pop(dialogCtx, _StationAction.pass);
+                                    },
+                                    controller: TextEditingController(
+                                      text: station.taxAmount > 0 ? station.taxAmount.toInt().toString() : "",
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    "أي لاعب يمر بهذه المحطة سيدفع هذه القيمة",
+                                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                           const SizedBox(height: 24),
                           SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: () => Navigator.pop(
-                                dialogCtx,
-                                _StationAction.passerQuestion,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(dialogCtx);
+                                _showSellDialog(
+                                  context,
+                                  station,
+                                  gameState,
+                                  ref.read(gameEngineProvider.notifier),
+                                );
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                                side: const BorderSide(color: Colors.redAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
+                              icon: const Icon(Icons.sell),
+                              label: const Text("بيع العقار (للبنك أو للاعب)"),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogCtx, _StationAction.pass),
+                            child: const Text("إغلاق", style: TextStyle(color: Colors.white70)),
+                          ),
+                        ] else if (isOwned) ...[
+                          const Text(
+                            "ستدخل تحدي المار لتقليل الإيجار",
+                            style: TextStyle(color: Colors.white60, fontSize: 16),
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.pop(dialogCtx, _StationAction.passerQuestion),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.orangeAccent,
                                 foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 20,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 20),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                               ),
                               child: const Text(
                                 'بدء تحدي المار (سؤال)',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ),
                         ] else ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.amberAccent.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(color: Colors.amberAccent.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.account_balance_wallet, color: Colors.amberAccent, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "رصيدك: ${currentPlayer.money.toInt()} P",
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          _buildBalanceDiff(currentPlayer, station.buyPrice, canBuy),
+                          const SizedBox(height: 24),
                           if (isSmall)
                             Column(
                               children: [
                                 SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton(
-                                    onPressed: canBuy
-                                        ? () => Navigator.pop(dialogCtx, _StationAction.buy)
-                                        : null,
+                                    onPressed: canBuy ? () => Navigator.pop(dialogCtx, _StationAction.buy) : null,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.greenAccent.shade700,
                                       foregroundColor: Colors.white,
@@ -524,52 +812,32 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                               children: [
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: canBuy
-                                        ? () => Navigator.pop(
-                                            dialogCtx,
-                                            _StationAction.buy,
-                                          )
-                                        : null,
+                                    onPressed: canBuy ? () => Navigator.pop(dialogCtx, _StationAction.buy) : null,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.greenAccent.shade700,
                                       foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 20,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(15),
-                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 20),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                                     ),
                                     child: const Text(
                                       'شراء (سؤال مالك)',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      style: TextStyle(fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: OutlinedButton(
-                                    onPressed: () => Navigator.pop(
-                                      dialogCtx,
-                                      _StationAction.pass,
-                                    ),
+                                    onPressed: () => Navigator.pop(dialogCtx, _StationAction.pass),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: Colors.white70,
                                       side: const BorderSide(color: Colors.white24),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 20,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(15),
-                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 20),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                                     ),
                                     child: const Text(
                                       'مرور (بدون سؤال)',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      style: TextStyle(fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                 ),
@@ -580,10 +848,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                               padding: EdgeInsets.only(top: 12.0),
                               child: Text(
                                 "نقاطك لا تكفي للشراء",
-                                style: TextStyle(
-                                  color: Colors.redAccent,
-                                  fontSize: 14,
-                                ),
+                                style: TextStyle(color: Colors.redAccent, fontSize: 14),
                               ),
                             ),
                         ],
@@ -768,6 +1033,30 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                 icon: Icon(Icons.arrow_back_ios_new, color: Colors.white, size: isSmall ? 18 : 22),
                 onPressed: () => Navigator.pop(context),
               ),
+              if (isSmall) ...[
+                const SizedBox(width: 4),
+                if (state.settings.winCondition == WinningCondition.time)
+                  _buildDynamicStat(
+                    Icons.timer,
+                    _formatTime(state.remainingSeconds),
+                    state.remainingSeconds < 30 ? Colors.redAccent : Colors.amberAccent,
+                    isSmall: true,
+                  )
+                else
+                  _buildDynamicStat(
+                    Icons.timer_outlined,
+                    _timeElapsedStr,
+                    Colors.amberAccent,
+                    isSmall: true,
+                  ),
+                const SizedBox(width: 4),
+                _buildDynamicStat(
+                  Icons.history,
+                  "${state.totalTurns}",
+                  Colors.blueAccent,
+                  isSmall: true,
+                ),
+              ],
               if (!isSmall) ...[
                 const SizedBox(width: 8),
                 IconButton(
@@ -793,12 +1082,25 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                     MaterialPageRoute(builder: (_) => const SettingsPage()),
                   ),
                 ),
-                const SizedBox(width: 16),
-                _buildDynamicStat(
-                  Icons.timer_outlined,
-                  _timeElapsedStr,
-                  Colors.amberAccent,
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.inventory, color: Colors.greenAccent, size: 26),
+                  tooltip: 'ممتلكاتي',
+                  onPressed: () => _showMyPropertiesDialog(context, state),
                 ),
+                const SizedBox(width: 16),
+                if (state.settings.winCondition == WinningCondition.time)
+                  _buildDynamicStat(
+                    Icons.timer,
+                    _formatTime(state.remainingSeconds),
+                    state.remainingSeconds < 30 ? Colors.redAccent : Colors.amberAccent,
+                  )
+                else
+                  _buildDynamicStat(
+                    Icons.timer_outlined,
+                    _timeElapsedStr,
+                    Colors.amberAccent,
+                  ),
                 const SizedBox(width: 20),
                 _buildDynamicStat(
                   Icons.history,
@@ -810,15 +1112,69 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (isSmall)
+              if (isSmall) ...[
+                IconButton(
+                  icon: const Icon(Icons.group_add, color: Colors.blueAccent, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TeamsManagementPage()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.inventory, color: Colors.greenAccent, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _showMyPropertiesDialog(context, state),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.list_alt, color: Colors.blueAccent, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _showLogsDialog(state.logs),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.settings, color: Colors.white70, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsPage()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.auto_awesome, color: Colors.amberAccent, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _restartGamePrompt(context, ref),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.stop_circle, color: Colors.redAccent, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _confirmEndGame(),
+                ),
+                const SizedBox(width: 8),
                 Builder(
                   builder: (scaffoldContext) => IconButton(
-                    icon: Icon(Icons.menu, color: Colors.white, size: isSmall ? 22 : 28),
+                    icon: Icon(Icons.menu, color: Colors.white, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                     onPressed: () => Scaffold.of(scaffoldContext).openEndDrawer(),
-                    visualDensity: VisualDensity.compact,
                   ),
-                )
-              else ...[
+                ),
+              ] else ...[
+                IconButton(
+                  icon: const Icon(Icons.history, color: Colors.blueAccent, size: 26),
+                  tooltip: 'سجل الأحداث',
+                  onPressed: () => _showLogsDialog(state.logs),
+                ),
                 IconButton(
                   icon: const Icon(Icons.stop_circle, color: Colors.redAccent, size: 26),
                   tooltip: 'إنهاء اللعبة',
@@ -836,23 +1192,24 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     );
   }
 
-  Widget _buildDynamicStat(IconData icon, String value, Color color) {
+  Widget _buildDynamicStat(IconData icon, String value, Color color, {bool isSmall = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: isSmall ? 6 : 10, vertical: isSmall ? 4 : 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(isSmall ? 8 : 10),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 14),
-          const SizedBox(width: 6),
+          Icon(icon, color: color, size: isSmall ? 12 : 14),
+          SizedBox(width: isSmall ? 3 : 6),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontSize: isSmall ? 10 : 13,
             ),
           ),
         ],
@@ -864,21 +1221,52 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   // KEY FIX: All non-interactive elements wrapped in IgnorePointer
   // so the MouseTracker never tracks them during animations/rebuilds.
 
+  double _calculatePlayerWealth(BankAlHazPlayer player, GameState state) {
+    double total = player.money;
+    if (state.settings.winCriteria == WinCriteria.moneyAndStations || 
+        state.settings.winCriteria == WinCriteria.cumulativeValue) {
+      for (var sid in player.ownedStationIds) {
+        final stations = state.board.where((st) => st.id == sid);
+        if (stations.isNotEmpty) {
+          final s = stations.first;
+          total += s.buyPrice;
+          if (state.settings.winCriteria == WinCriteria.cumulativeValue) {
+            for (var b in s.buildings) {
+              if (b.isPurchased) total += b.buyPrice;
+            }
+          }
+        }
+      }
+    }
+    return total;
+  }
+
   Widget _buildBoard(GameState state, GameEngine engine) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double availWidth = constraints.maxWidth;
         final double availHeight = constraints.maxHeight;
+        final bool isSmall = AppDesign.isSmallScreen(context);
 
         int total = state.board.length;
         if (total == 0) return const SizedBox.shrink();
 
-        // Calculate grid dimensions
-        int pPlus4 = total + 4;
-        int sumSides = (pPlus4 / 2).floor();
-        int widthCells = (sumSides / 2).ceil();
-        int heightCells = sumSides - widthCells;
-        if (2 * (widthCells + heightCells) - 4 < total) widthCells++;
+        // Calculate grid dimensions based on aspect ratio
+        final double aspect = availWidth / availHeight;
+        final int targetSum = ((total + 4) / 2).ceil();
+        
+        // Find H such that W/H is near aspect and 2W + 2H - 4 >= total
+        int hCells = (targetSum / (aspect + 1)).round().clamp(3, 12);
+        int wCells = targetSum - hCells;
+        
+        // Ensure we cover all stations
+        while (2 * (wCells + hCells) - 4 < total) {
+          wCells++;
+        }
+        
+        final int widthCells = wCells;
+        final int heightCells = hCells;
+        final int totalSlots = 2 * (widthCells + heightCells) - 4;
 
         // Board fills ALL available space - no margins
         final double finalWidth = availWidth;
@@ -903,22 +1291,21 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                 child: _buildCenterArea(finalWidth, finalHeight, state, engine),
               ),
               // Station cells
-              IgnorePointer(
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    for (int i = 0; i < total; i++)
-                      _buildStationCell(
-                        i,
-                        state.board[i],
-                        finalWidth,
-                        finalHeight,
-                        widthCells,
-                        heightCells,
-                        state,
-                      ),
-                  ],
-                ),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (int i = 0; i < totalSlots; i++)
+                    _buildStationCell(
+                      i,
+                      i < total ? state.board[i] : Station(id: null, name: ""),
+                      finalWidth / widthCells,
+                      finalHeight / heightCells,
+                      widthCells,
+                      heightCells,
+                      _calculateRectOffset(i, widthCells, heightCells, finalWidth, finalHeight),
+                      state,
+                    ),
+                ],
               ),
               // Player pieces
               IgnorePointer(
@@ -937,6 +1324,23 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                   ],
                 ),
               ),
+
+              // Event Toast - Moved here to be dynamically positioned between cells and center content
+              if (_currentEventLog != null)
+                Positioned(
+                  top: (finalHeight / heightCells) + (isSmall ? 4 : 12),
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: isSmall ? 340 : 500),
+                        child: _buildEventToast(_currentEventLog!),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -957,6 +1361,17 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         gameState.isEndingTurn;
     bool hasPending =
         gameState.pendingLandingStation != null || _isHandlingLanding;
+    final currentPlayerColor = [
+      Colors.red,
+      Colors.green,
+      Colors.blue,
+      Colors.orange,
+      Colors.purple,
+    ][gameState.currentPlayerIndex % 5];
+    
+    final winnerColor = gameState.winnerIndex != null 
+        ? [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple][gameState.winnerIndex! % 5]
+        : currentPlayerColor;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -972,139 +1387,285 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
             ),
           ),
           SizedBox(height: isSmall ? 2 : 10),
-          if (gameState.message.isNotEmpty)
+          if (gameState.message.isNotEmpty && !gameState.isGameOver)
             IgnorePointer(
-              child: Container(
-                margin: EdgeInsets.only(bottom: isSmall ? 4 : 10),
-                padding: EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: isSmall ? 3 : 10,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: boardWidth * 0.8,
+                  maxHeight: boardHeight * 0.4,
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.blueAccent.withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white24),
-                ),
-                child: Text(
-                  gameState.message,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: (math.min(boardWidth, boardHeight) * 0.05).clamp(14, 34).toDouble(),
+                child: Container(
+                  margin: EdgeInsets.only(bottom: isSmall ? 4 : 10),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: isSmall ? 10 : 20,
                   ),
-                  textAlign: TextAlign.center,
+                  decoration: BoxDecoration(
+                    color: currentPlayerColor.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Colors.white, width: 4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: currentPlayerColor.withOpacity(0.4),
+                        blurRadius: 30,
+                        spreadRadius: 8,
+                      )
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          gameState.message,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: (math.min(boardWidth, boardHeight) * 0.06)
+                                .clamp(20, 40)
+                                .toDouble(),
+                            shadows: const [
+                              Shadow(
+                                offset: Offset(0, 3),
+                                blurRadius: 6,
+                                color: Colors.black54,
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildActionButton(
-                label: "نرد",
-                icon: Icons.casino,
-                active: !isLock && !hasPending,
-                onTap: () => engine.rollDice(),
-                color: Colors.orangeAccent,
-                size: (math.min(boardWidth, boardHeight) * 0.06).clamp(28, 50).toDouble(),
-              ),
-              const SizedBox(width: 10),
-              GestureDetector(
-                onTap: (!isLock && !hasPending) ? () => engine.rollDice() : null,
-                child: ThreeDDice(
-                  size: (math.min(boardWidth, boardHeight) * 0.1).clamp(35, 70).toDouble(),
-                  value: gameState.currentDiceValue,
-                  rollCounter: gameState.rollCounter,
-                  onAnimationComplete: () {},
+          if (!gameState.isGameOver)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildActionButton(
+                  label: "نرد",
+                  icon: Icons.casino,
+                  active: !isLock && !hasPending,
+                  onTap: () => engine.rollDice(),
+                  color: Colors.orangeAccent,
+                  size: (math.min(boardWidth, boardHeight) * 0.06).clamp(28, 50).toDouble(),
                 ),
-              ),
-              const SizedBox(width: 10),
-              _buildActionButton(
-                label: "إنهاء",
-                icon: Icons.check_circle,
-                active: !isLock && !hasPending,
-                onTap: () {
-                  print("DEBUG: Finish button clicked! Forcing next turn.");
-                  engine.forceNextTurn();
-                },
-                color: Colors.greenAccent,
-                size: (math.min(boardWidth, boardHeight) * 0.06).clamp(28, 50).toDouble(),
-              ),
-            ],
-          ),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: (!isLock && !hasPending) ? () => engine.rollDice() : null,
+                  child: ThreeDDice(
+                    size: (math.min(boardWidth, boardHeight) * 0.1).clamp(35, 70).toDouble(),
+                    value: gameState.currentDiceValue,
+                    rollCounter: gameState.rollCounter,
+                    onAnimationComplete: () {},
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _buildActionButton(
+                  label: "إنهاء",
+                  icon: Icons.check_circle,
+                  active: !isLock && !hasPending,
+                  onTap: () {
+                    print("DEBUG: Finish button clicked! Forcing next turn.");
+                    engine.forceNextTurn();
+                  },
+                  color: Colors.greenAccent,
+                  size: (math.min(boardWidth, boardHeight) * 0.06).clamp(28, 50).toDouble(),
+                ),
+              ],
+            ),
           SizedBox(height: isSmall ? 6 : 20),
-          IgnorePointer(
-            child: _buildInternalPlayerStatsBar(gameState, boardWidth),
-          ),
+          _buildInternalPlayerStatsBar(gameState, boardWidth),
         ],
       ),
     );
   }
 
   Widget _buildInternalPlayerStatsBar(GameState state, double boardWidth) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: state.players.asMap().entries.map((entry) {
-          final isCurrent = state.currentPlayerIndex == entry.key;
-          final p = entry.value;
-          final color = [
-            Colors.red,
-            Colors.green,
-            Colors.blue,
-            Colors.orange,
-          ][entry.key % 4];
-          return Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: isCurrent ? Colors.white.withOpacity(0.9) : Colors.white10,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isCurrent ? color.withOpacity(0.5) : Colors.white10,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.directions_car, color: color, size: 12),
-                const SizedBox(width: 5),
-                Text(
-                  "${p.name}: ${p.money.toInt()}",
-                  style: TextStyle(
-                    color: isCurrent ? Colors.black87 : Colors.white70,
-                    fontSize: isCurrent ? 14 : 11,
-                    fontWeight: FontWeight.w900,
-                  ),
+    final bool isSmall = AppDesign.isSmallScreen(context);
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+    if (!isSmall) {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: state.players.asMap().entries.map((entry) {
+            final isCurrent = state.currentPlayerIndex == entry.key;
+            final p = entry.value;
+            final color = [
+              Colors.red,
+              Colors.green,
+              Colors.blue,
+              Colors.orange,
+              Colors.purple,
+            ][entry.key % 5];
+            return Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: isCurrent ? Colors.white.withOpacity(0.9) : Colors.white10,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isCurrent ? color.withOpacity(0.5) : Colors.white10,
                 ),
-                const SizedBox(width: 4),
-                Icon(Icons.monetization_on_rounded, color: Colors.amberAccent, size: isCurrent ? 14 : 11),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.directions_car, color: color, size: 12),
+                  const SizedBox(width: 5),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "${p.name}: ${p.money.toInt()}",
+                        style: TextStyle(
+                          color: isCurrent ? Colors.black87 : Colors.white70,
+                          fontSize: isCurrent ? 16 : 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      if (state.settings.winCriteria != WinCriteria.moneyOnly)
+                        Text(
+                          "الثروة: ${_calculatePlayerWealth(p, state).toInt()}",
+                          style: TextStyle(
+                            color: isCurrent
+                                ? Colors.blueAccent
+                                : Colors.amberAccent.withOpacity(0.7),
+                            fontSize: isCurrent ? 13 : 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.monetization_on_rounded, color: Colors.amberAccent, size: isCurrent ? 14 : 11),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => _showLogsDialog(state.logs, title: "سجل ${p.name}", filterPlayerIndex: entry.key),
+                    child: Icon(Icons.list_alt, color: isCurrent ? Colors.black54 : Colors.white38, size: isCurrent ? 18 : 14),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    // For mobile (small screens), stack them vertically as requested
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Using Wrap to handle landscape better even on "small" screens
+        Wrap(
+          direction: isLandscape ? Axis.horizontal : Axis.vertical,
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
+          children: state.players.asMap().entries.map((entry) {
+            final isCurrent = state.currentPlayerIndex == entry.key;
+            final p = entry.value;
+            final color = [
+              Colors.red,
+              Colors.green,
+              Colors.blue,
+              Colors.orange,
+              Colors.purple,
+            ][entry.key % 5];
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isCurrent ? Colors.white.withOpacity(0.9) : Colors.white10,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isCurrent ? color.withOpacity(0.5) : Colors.white10,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.directions_car, color: color, size: 10),
+                  const SizedBox(width: 4),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "${p.name}: ${p.money.toInt()}",
+                        style: TextStyle(
+                          color: isCurrent ? Colors.black87 : Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                       if (state.settings.winCriteria != WinCriteria.moneyOnly)
+                        Text(
+                          "الثروة: ${_calculatePlayerWealth(p, state).toInt()}",
+                          style: TextStyle(
+                            color: isCurrent ? Colors.blueAccent : Colors.amberAccent.withOpacity(0.7),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(Icons.monetization_on_rounded, color: Colors.amberAccent, size: 10),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () => _showLogsDialog(state.logs, title: "سجل ${p.name}", filterPlayerIndex: entry.key),
+                    child: Icon(Icons.list_alt, color: isCurrent ? Colors.black54 : Colors.white38, size: 14),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
   Widget _buildStationCell(
     int index,
     Station station,
-    double boardWidth,
-    double boardHeight,
+    double cw,
+    double ch,
     int wCount,
     int hCount,
+    Offset pos,
     GameState gameState,
   ) {
+    if (station.id == null && station.name.isEmpty) {
+      return Positioned(
+        left: pos.dx,
+        top: pos.dy,
+        child: Container(
+          width: cw,
+          height: ch,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white10, width: 0.5),
+          ),
+          child: Center(
+            child: Icon(Icons.blur_on, color: Colors.white.withOpacity(0.05), size: 24),
+          ),
+        ),
+      );
+    }
+
     final bool isSmall = AppDesign.isSmallScreen(context);
-    final pos = _calculateRectOffset(index, wCount, hCount, boardWidth, boardHeight);
-    double cw = boardWidth / wCount;
-    double ch = boardHeight / hCount;
-    bool isCorner =
-        index == 0 ||
+    final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+    bool isCorner = index == 0 ||
         index == wCount - 1 ||
         index == wCount + hCount - 2 ||
         index == 2 * wCount + hCount - 3;
+
     final bool isSpecial = station.type != StationType.property && station.type != StationType.question;
     final baseColor = isCorner
         ? Colors.grey.shade900
@@ -1113,123 +1674,113 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     return Positioned(
       left: pos.dx,
       top: pos.dy,
-      child: Container(
-        width: cw,
-        height: ch,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
-          border: Border.all(color: Colors.white.withOpacity(0.12)),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-          child: Column(
-            children: [
-              // Color Bar
-              Container(
-                height: ch * 0.22,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: baseColor.withOpacity(0.8),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                  boxShadow: [BoxShadow(color: baseColor.withOpacity(0.3), blurRadius: 4)],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            if (station.id != null) {
+              final ownerIndex = gameState.players.indexWhere((p) => p.ownedStationIds.contains(station.id));
+              if (ownerIndex != -1 && ownerIndex == gameState.currentPlayerIndex) {
+                 _showMyPropertyActionDialog(context, station, gameState, ref.read(gameEngineProvider.notifier));
+              }
+            }
+          },
+          child: Container(
+            width: cw,
+            height: ch,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              border: Border.all(color: Colors.white24, width: 1.5),
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 10,
+                  spreadRadius: 1,
                 ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 4.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
+              ],
+            ),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Stack(
+                children: [
+                Column(
+                  children: [
+                    Container(
+                      height: ch * 0.22,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: baseColor.withOpacity(0.85),
+                        border: const Border(bottom: BorderSide(color: Colors.white10, width: 1)),
+                      ),
+                      child: (station.type == StationType.card)
+                          ? Icon(
+                              station.cardType == "chance" ? Icons.auto_awesome : Icons.card_giftcard,
+                              color: Colors.white,
+                              size: (ch * 0.15).clamp(12, 24).toDouble(),
+                            )
+                          : null,
+                    ),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: Text(
                                 station.name,
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: isSmall ? (cw * 0.18).clamp(10, 16) : (cw * 0.25).clamp(14, 35),
-                                  fontWeight: FontWeight.w900,
+                                  fontSize: (isLandscape ? ch * 0.16 : cw * 0.18).clamp(10, 45).toDouble(),
                                   height: 1.1,
-                                  shadows: [Shadow(color: Colors.black45, blurRadius: 4)],
+                                  fontWeight: FontWeight.bold, // Bold font as requested
                                 ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                              if (station.type == StationType.card)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Icon(
-                                    station.cardType == "chance" 
-                                        ? Icons.auto_awesome_rounded 
-                                        : Icons.gavel_rounded,
-                                    color: station.cardType == "chance" 
-                                        ? Colors.amberAccent 
-                                        : Colors.blueAccent,
-                                    size: cw * 0.25,
-                                  ),
-                                ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(height: 4),
+                            if (!isCorner && station.buyPrice > 0)
+                              Builder(builder: (context) {
+                                final ownerIdx = gameState.players.indexWhere((p) => p.ownedStationIds.contains(station.id));
+                                if (ownerIdx != -1) {
+                                   double rent = station.baseRent > 0 ? station.baseRent : (station.buyPrice * 0.2);
+                                   for (var b in station.buildings) if (b.isPurchased) rent += b.additionalRent;
+                                   return Text(
+                                     "${rent.toInt()} R",
+                                     style: TextStyle(
+                                       color: Colors.white.withOpacity(0.6),
+                                       fontSize: (cw * 0.12).clamp(8, 14).toDouble(),
+                                       fontWeight: FontWeight.bold,
+                                     ),
+                                   );
+                                } else {
+                                  return Text(
+                                    "${station.buyPrice.toInt()} P",
+                                    style: TextStyle(
+                                      color: Colors.amberAccent,
+                                      fontSize: (cw * 0.14).clamp(9, 16).toDouble(),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                }
+                              }),
+                          ],
                         ),
                       ),
-                      if (!isCorner && station.buyPrice > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: () {
-                            // Check if any player owns this station
-                            final isOwned = gameState.players.any(
-                              (p) => p.ownedStationIds.contains(station.id),
-                            );
-                            if (isOwned) {
-                              // Show rent
-                              final rent = station.baseRent > 0
-                                  ? station.baseRent
-                                  : (station.buyPrice * 0.2).floorToDouble();
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: Colors.greenAccent.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    "إيجار: ${rent.toInt()}",
-                                    style: TextStyle(
-                                      color: Colors.greenAccent,
-                                      fontSize: (cw * 0.15).clamp(10, 18),
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                // Show buy price
-                                return Text(
-                                  "${station.buyPrice.toInt()}",
-                                  style: TextStyle(
-                                    color: Colors.amberAccent,
-                                    fontSize: (cw * 0.16).clamp(12, 20),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                );
-                              }
-                            }(),
-                          ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ),
-              _buildOwnerIndicator(station, cw, ch, gameState),
-            ],
+                _buildOwnerIndicator(station, cw, ch, gameState),
+              ],
+            ),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Offset _calculateRectOffset(int index, int w, int h, double boardWidth, double boardHeight) {
     double cw = boardWidth / w;
@@ -1248,23 +1799,52 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     double ch,
     GameState state,
   ) {
-    int? ownerIdx;
-    for (int i = 0; i < state.players.length; i++) {
-      if (state.players[i].ownedStationIds.contains(station.id)) {
-        ownerIdx = i;
-        break;
-      }
-    }
-    if (ownerIdx == null) return Container(height: 3);
-    return Container(
-      height: 6,
-      width: double.infinity,
-      color: [
-        Colors.red,
-        Colors.green,
-        Colors.blue,
-        Colors.orange,
-      ][ownerIdx % 4],
+    final ownerIndex = state.players.indexWhere((p) => p.ownedStationIds.contains(station.id));
+    if (ownerIndex == -1) return const SizedBox.shrink();
+
+    final ownerColor = [
+      Colors.redAccent,
+      Colors.greenAccent,
+      Colors.blueAccent,
+      Colors.orangeAccent,
+      Colors.purpleAccent,
+    ][ownerIndex % 5];
+
+    return Positioned(
+      bottom: 4,
+      left: cw * 0.1,
+      right: cw * 0.1,
+      child: Container(
+        height: 4,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          gradient: LinearGradient(
+            colors: [
+              ownerColor.withOpacity(0.2),
+              ownerColor,
+              ownerColor.withOpacity(0.2),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: ownerColor.withOpacity(0.6),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Center(
+          child: Container(
+            height: 1,
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1356,6 +1936,198 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     );
   }
 
+  // ==================== GAME OVER OVERLAY ====================
+
+  Widget _buildGameOverOverlay(GameState state, GameEngine engine, BuildContext context) {
+    if (!state.isGameOver) return const SizedBox.shrink();
+
+    final winnerColor = state.winnerIndex != null
+        ? [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple][state.winnerIndex! % 5]
+        : Colors.blueAccent;
+
+    return Stack(
+      children: [
+        // 1. Blur Background
+        Positioned.fill(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(color: Colors.black.withOpacity(0.6)),
+          ),
+        ),
+
+        // 2. Main Content
+        Center(
+          child: SingleChildScrollView(
+            child: Container(
+              margin: const EdgeInsets.all(24),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              constraints: const BoxConstraints(maxWidth: 550),
+              decoration: AppDesign.dialogDecoration.copyWith(
+                border: Border.all(color: winnerColor.withOpacity(0.5), width: 2),
+                boxShadow: [
+                  BoxShadow(color: winnerColor.withOpacity(0.2), blurRadius: 40, spreadRadius: 10),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Trophy with Shine
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(30),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.emoji_events_rounded, color: Colors.amber, size: 90),
+                      ),
+                      const SizedBox(
+                        width: 150,
+                        height: 150,
+                        child: ClipOval(child: _ShineAnimation(color: Colors.white24)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Title
+                  Text(
+                    "نهاية المباراة!",
+                    style: AppDesign.titleStyle.copyWith(fontSize: 34, letterSpacing: 1),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Winner Message
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                    decoration: BoxDecoration(
+                      color: winnerColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: winnerColor.withOpacity(0.2)),
+                    ),
+                    child: Text(
+                      state.message,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+                  const Row(
+                    children: [
+                      Expanded(child: Divider(color: Colors.white10)),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text("ترتيب النتائج", style: TextStyle(color: Colors.white38, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                      Expanded(child: Divider(color: Colors.white10)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Sorted Players List by Wealth
+                  ...(() {
+                    final sortedIndices = List<int>.generate(state.players.length, (i) => i);
+                    sortedIndices.sort((a, b) => _calculatePlayerWealth(state.players[b], state).compareTo(_calculatePlayerWealth(state.players[a], state)));
+
+                    return sortedIndices.map((idx) {
+                      final p = state.players[idx];
+                      final color = [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple][idx % 5];
+                      final wealth = _calculatePlayerWealth(p, state);
+                      final isWinner = idx == state.winnerIndex;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isWinner ? winnerColor.withOpacity(0.15) : Colors.white.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: isWinner ? winnerColor : Colors.white10, width: isWinner ? 1 : 0.5),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.directions_car_filled, color: color, size: 24),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                p.name,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: isWinner ? FontWeight.w900 : FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              "${wealth.toInt()} P",
+                              style: TextStyle(
+                                color: isWinner ? Colors.amberAccent : Colors.white70,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList();
+                  })(),
+
+                  const SizedBox(height: 40),
+
+                  // Actions
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => engine.restartGame(),
+                          icon: const Icon(Icons.refresh_rounded, size: 24),
+                          label: const Text(
+                            "لعبة أخرى",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 8,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.logout_rounded, size: 24),
+                          label: const Text(
+                            "خروج",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.white24, width: 2),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   // ==================== PREPARATION & RESTART ====================
 
   Widget _buildPreparationScreen(BuildContext context, WidgetRef ref) {
@@ -1376,6 +2148,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                   decoration: BoxDecoration(
                     color: Colors.amberAccent.withOpacity(0.1),
                     shape: BoxShape.circle,
+
                   ),
                   child: const Icon(Icons.auto_awesome, color: Colors.amberAccent, size: 64),
                 ),
@@ -1453,13 +2226,27 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
             onPressed: () async {
               Navigator.pop(dialogCtx);
               try {
-                await BankAlHazTemplateSeeder().seedGame();
+                final db = await DatabaseService.instance.database;
+                // 1. Seed the religious data as Template ID 1
+                await BankAlHazDefaultData.seed(db, force: true, templateId: 1);
+                
+                // 2. Force settings to use Template ID 1 (Religious)
+                final repo = ref.read(bankAlHazRepositoryProvider);
+                var currentSettings = await repo.getSettings();
+                currentSettings = currentSettings.copyWith(activeTemplateId: 1);
+                await repo.saveSettings(currentSettings);
+
                 await Future.delayed(const Duration(milliseconds: 600));
+                
+                // 3. Invalidate and re-read providers
                 ref.invalidate(gameEngineProvider);
                 ref.invalidate(stationsProvider);
                 ref.invalidate(cardsProvider);
+                ref.invalidate(gameSettingsProvider);
+                
                 final teams = await ref.read(teamsListProvider.future);
                 final settings = await ref.read(gameSettingsProvider.future);
+                
                 if (teams.isEmpty) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -1472,16 +2259,170 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                   }
                   return;
                 }
+                
+                // 4. Start the game!
                 await ref
                     .read(gameEngineProvider.notifier)
                     .initGame(teams.map((t) => t.name).toList(), settings);
               } catch (e) {
-                print("Error: $e");
+                print("Error starting religious template: $e");
               }
             },
             child: const Text("تأكيد"),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _handlePostPurchaseFlow(Station station, GameEngine engine) async {
+    // 1. Building Flow
+    if (station.buildings.isNotEmpty) {
+      await _showBuildPromptDialog(station, engine);
+    }
+    
+    // Refresh station state from board (it might have been updated by buildings)
+    final updatedStation = ref.read(gameEngineProvider).board.firstWhere((s) => s.id == station.id);
+
+    // 2. Tax Flow
+    if (updatedStation.allowsTax) {
+      await _showTaxSettingDialog(updatedStation, engine);
+    }
+  }
+
+  Future<void> _showBuildPromptDialog(Station station, GameEngine engine) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final gameState = ref.watch(gameEngineProvider);
+          final currentStation = gameState.board.firstWhere((s) => s.id == station.id);
+          final currentPlayer = gameState.players[gameState.currentPlayerIndex];
+          
+          return AlertDialog(
+            backgroundColor: AppDesign.slate800,
+            title: Text('البناء في ${station.name}', style: AppDesign.titleStyle),
+            content: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                   const Text('هل تريد شراء مباني لهذه المدينة؟', style: AppDesign.subtitleStyle),
+                   const SizedBox(height: 16),
+                   // Show current balance
+                   Container(
+                     padding: const EdgeInsets.all(12),
+                     decoration: BoxDecoration(
+                       color: Colors.white.withOpacity(0.05),
+                       borderRadius: BorderRadius.circular(12),
+                     ),
+                     child: Row(
+                       mainAxisAlignment: MainAxisAlignment.center,
+                       children: [
+                         const Icon(Icons.account_balance_wallet, color: Colors.amberAccent, size: 20),
+                         const SizedBox(width: 8),
+                         Text(
+                           "رصيدك الحالي: ${currentPlayer.money.toInt()} P",
+                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                         ),
+                       ],
+                     ),
+                   ),
+                   const SizedBox(height: 16),
+                  ...currentStation.buildings.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final b = entry.value;
+                    final canAfford = currentPlayer.money >= b.buyPrice;
+                    
+                    return ListTile(
+                      title: Text(b.name, style: const TextStyle(color: Colors.white)),
+                      subtitle: Text('ثمن: ${b.buyPrice} • إيجار إضافي: ${b.additionalRent}', style: const TextStyle(color: Colors.white70)),
+                      trailing: b.isPurchased 
+                        ? const Icon(Icons.check_circle, color: Colors.greenAccent)
+                        : ElevatedButton(
+                            onPressed: canAfford ? () async {
+                              await engine.buyBuilding(station.id!, idx);
+                              setState(() {});
+                            } : null,
+                            child: const Text('شراء'),
+                          ),
+                    );
+                  }).toList(),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إنهاء البناء'),
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
+
+  Future<void> _showTaxSettingDialog(Station station, GameEngine engine) async {
+    final controller = TextEditingController(text: station.taxAmount.toString());
+    bool taxEnabled = station.hasTax;
+    
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: AppDesign.slate800,
+          title: Text('إعدادات الضرائب - ${station.name}', style: AppDesign.titleStyle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                title: const Text('تفعيل الضرائب', style: TextStyle(color: Colors.white)),
+                subtitle: const Text('سيقوم اللاعبون بدفع مبلغ عند المرور بهذه الخانة أو الوقوف عليها', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                value: taxEnabled,
+                onChanged: (val) {
+                  setState(() {
+                    taxEnabled = val;
+                    if (val && (double.tryParse(controller.text) ?? 0) == 0) {
+                      // Set default to maximum limit
+                      controller.text = (station.buyPrice * 0.25).toInt().toString();
+                    }
+                  });
+                },
+              ),
+              if (taxEnabled)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: TextField(
+                    controller: controller,
+                    decoration: InputDecoration(
+                      labelText: 'قيمة الضريبة (بحد أقصى ${station.buyPrice * 0.25})',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
+                      focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.blueAccent)),
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                engine.toggleTax(station.id!, taxEnabled);
+                if (taxEnabled) {
+                  final amt = double.tryParse(controller.text) ?? 10.0;
+                  engine.setTaxAmount(station.id!, amt);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1499,7 +2440,618 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     ];
     return colors[(index / 2).floor() % colors.length].shade400;
   }
+
+  void _showLogsDialog(List<GameLog> logs, {String title = "سجل أحداث اللعبة", int? filterPlayerIndex}) {
+    final gameState = ref.read(gameEngineProvider);
+    final filteredLogs = filterPlayerIndex == null 
+      ? logs 
+      : logs.where((l) => l.playerIndex == filterPlayerIndex).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppDesign.slate800,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            const Icon(Icons.history, color: Colors.blueAccent),
+            const SizedBox(width: 12),
+            Text(title, style: AppDesign.titleStyle),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          height: 600,
+          child: filteredLogs.isEmpty
+            ? const Center(child: Text("لا توجد أحداث بعد", style: TextStyle(color: Colors.white54)))
+            : ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                itemCount: filteredLogs.length,
+                separatorBuilder: (context, index) => const Divider(color: Colors.white10),
+                itemBuilder: (context, index) {
+                  final log = filteredLogs[filteredLogs.length - 1 - index]; // Newest first
+                  final logPlayer = log.playerIndex != null ? gameState.players[log.playerIndex!] : null;
+                  
+                  return ListTile(
+                    dense: true,
+                    leading: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: _getLogColor(log.type).withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(_getLogIcon(log.type), color: _getLogColor(log.type), size: 16),
+                    ),
+                    title: RichText(
+                      text: TextSpan(
+                        children: [
+                          if (logPlayer != null)
+                            TextSpan(
+                              text: "${logPlayer.name}: ",
+                              style: TextStyle(
+                                color: [Colors.red, Colors.green, Colors.blue, Colors.orange][log.playerIndex! % 4].shade300,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          TextSpan(
+                            text: log.message,
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                    subtitle: Text(
+                      "${log.timestamp.hour}:${log.timestamp.minute.toString().padLeft(2, '0')}", 
+                      style: const TextStyle(color: Colors.white24, fontSize: 10)
+                    ),
+                  );
+                },
+              ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("إغلاق", style: TextStyle(color: Colors.blueAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getLogIcon(LogType type) {
+    switch (type) {
+      case LogType.moneyAdd: return Icons.add_circle;
+      case LogType.moneyRemove: return Icons.remove_circle;
+      case LogType.purchase: return Icons.shopping_cart;
+      case LogType.movement: return Icons.directions_walk;
+      case LogType.info: return Icons.info;
+    }
+  }
+
+  Color _getLogColor(LogType type) {
+    switch (type) {
+      case LogType.moneyAdd: return Colors.greenAccent;
+      case LogType.moneyRemove: return Colors.redAccent;
+      case LogType.purchase: return Colors.blueAccent;
+      case LogType.movement: return Colors.amberAccent;
+      case LogType.info: return Colors.white54;
+    }
+  }
+
+  Widget _buildBalanceDiff(BankAlHazPlayer player, double cost, bool active) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("رصيدك الحالي", style: TextStyle(color: Colors.white60, fontSize: 11)),
+              Text("${player.money.toInt()} P", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
+          const Icon(Icons.arrow_forward_rounded, color: Colors.white24, size: 28),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text("الرصيد بعد الشراء", style: TextStyle(color: Colors.white60, fontSize: 11)),
+              Text(
+                "${(player.money - cost).toInt()} P", 
+                style: TextStyle(
+                  color: active ? Colors.greenAccent : Colors.redAccent, 
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                )
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMyPropertiesDialog(BuildContext context, GameState state) {
+    final currentPlayer = state.players[state.currentPlayerIndex];
+    final ownedStations = state.board.where((s) => currentPlayer.ownedStationIds.contains(s.id)).toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey.shade900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.inventory, color: Colors.greenAccent),
+            const SizedBox(width: 10),
+            Text("ممتلكات ${currentPlayer.name}", style: const TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ownedStations.isEmpty
+              ? const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(height: 20),
+                    Icon(Icons.info_outline, color: Colors.white24, size: 48),
+                    SizedBox(height: 10),
+                    Text("لا تملك أي مدن حالياً", style: TextStyle(color: Colors.white60)),
+                    SizedBox(height: 20),
+                  ],
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: ownedStations.length,
+                  itemBuilder: (context, index) {
+                    final s = ownedStations[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(s.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  Text("القيمة: ${s.buyPrice.toInt()} P", style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            TextButton.icon(
+                              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _showSellDialog(context, s, state, ref.read(gameEngineProvider.notifier));
+                              },
+                              icon: const Icon(Icons.sell, size: 16),
+                              label: const Text("بيع", style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text("إغلاق")
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMyPropertyActionDialog(BuildContext context, Station station, GameState state, GameEngine notifier) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: EdgeInsets.zero,
+        content: Container(
+          width: 350,
+          decoration: AppDesign.dialogDecoration,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                decoration: BoxDecoration(
+                  color: _getCityColor(state.board.indexOf(station)).withOpacity(0.8),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.location_city, color: Colors.white, size: 48),
+                    const SizedBox(height: 12),
+                    Text(station.name, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    _buildDialogAction(
+                      icon: Icons.add_business,
+                      title: "بناء في المدينة",
+                      subtitle: "تطوير وتحسين العائد",
+                      color: Colors.amberAccent,
+                      onTap: () {
+                         Navigator.pop(ctx);
+                         _showBuildingDialog(context, state, station, notifier);
+                      },
+                    ),
+                    _buildDialogAction(
+                      icon: station.hasTax ? Icons.gavel : Icons.gavel_outlined,
+                      title: station.hasTax ? "إلغاء تفعيل الضريبة" : "تفعيل الضريبة",
+                      subtitle: "تحصيل رسوم من المارين",
+                      color: Colors.blueAccent,
+                      onTap: () {
+                         Navigator.pop(ctx);
+                         notifier.toggleTax(station.id!, !station.hasTax);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDialogAction(
+                      icon: Icons.sell,
+                      title: "بيع العقار",
+                      subtitle: "للـبنـــك أو لـلاعب آخـــر",
+                      color: Colors.redAccent,
+                      onTap: () {
+                         Navigator.pop(ctx);
+                         _showSellDialog(context, station, state, notifier);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("إغلاق", style: TextStyle(color: Colors.white54))),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showBuildingDialog(BuildContext context, GameState state, Station station, GameEngine engine) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey.shade900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text("بناء في ${station.name}", style: const TextStyle(color: Colors.white)),
+        content: SizedBox(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: station.buildings.asMap().entries.map((entry) {
+              final b = entry.value;
+              return ListTile(
+                title: Text(b.name, style: const TextStyle(color: Colors.white)),
+                subtitle: Text("عائد إضافي: ${b.additionalRent.toInt()} P", style: const TextStyle(color: Colors.white54)),
+                trailing: b.isPurchased 
+                  ? const Icon(Icons.check_circle, color: Colors.greenAccent)
+                  : ElevatedButton(
+                      onPressed: state.players[state.currentPlayerIndex].money >= b.buyPrice
+                          ? () {
+                              engine.addUpgradeToStation(station.id!, b.name);
+                              Navigator.pop(ctx);
+                            }
+                          : null,
+                      child: Text("${b.buyPrice.toInt()} P"),
+                    ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDialogAction({required IconData icon, required String title, required String subtitle, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSellDialog(BuildContext context, Station station, GameState state, GameEngine engine) {
+    final otherPlayers = state.players.asMap().entries.where((e) => e.key != state.currentPlayerIndex).toList();
+    
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        bool sellToBank = true;
+        int? selectedBuyerIdx;
+        double price = (station.buyPrice * 0.5).floorToDouble(); // Default for bank
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            backgroundColor: Colors.transparent,
+            contentPadding: EdgeInsets.zero,
+            content: Container(
+              width: 400,
+              decoration: AppDesign.dialogDecoration,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                   // Header
+                   Container(
+                     padding: const EdgeInsets.symmetric(vertical: 20),
+                     width: double.infinity,
+                     decoration: BoxDecoration(
+                        color: Colors.redAccent.withOpacity(0.8),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                     ),
+                     child: const Column(
+                       children: [
+                         Icon(Icons.sell, color: Colors.white, size: 40),
+                         SizedBox(height: 8),
+                         Text("بيع العقار", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                       ],
+                     ),
+                   ),
+                   
+                   Padding(
+                     padding: const EdgeInsets.all(24),
+                     child: Column(
+                       children: [
+                         Text(station.name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                         const SizedBox(height: 20),
+                         
+                         // Selection
+                         Row(
+                           children: [
+                             Expanded(
+                               child: _sellOptionChip(
+                                 label: "للـبنـــك",
+                                 icon: Icons.account_balance,
+                                 selected: sellToBank,
+                                 onTap: () => setDialogState(() {
+                                   sellToBank = true;
+                                   price = (station.buyPrice * 0.5).floorToDouble();
+                                 }),
+                               ),
+                             ),
+                             const SizedBox(width: 12),
+                             Expanded(
+                               child: _sellOptionChip(
+                                 label: "للاعـــب",
+                                 icon: Icons.person,
+                                 selected: !sellToBank,
+                                 onTap: () => setDialogState(() {
+                                   sellToBank = false;
+                                   price = station.buyPrice;
+                                 }),
+                               ),
+                             ),
+                           ],
+                         ),
+                         
+                         const SizedBox(height: 24),
+                         
+                         if (sellToBank) ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(15),
+                                border: Border.all(color: Colors.white10),
+                              ),
+                              child: Column(
+                                children: [
+                                  const Text("سعر البيع للبنك (50%)", style: TextStyle(color: Colors.white60)),
+                                  const SizedBox(height: 8),
+                                  Text("${price.toInt()} P", style: const TextStyle(color: Colors.greenAccent, fontSize: 24, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                         ] else ...[
+                            DropdownButtonHideUnderline(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.white10),
+                                ),
+                                child: DropdownButton<int?>(
+                                  hint: const Text("اختر المشتري", style: TextStyle(color: Colors.white54)),
+                                  dropdownColor: Colors.grey.shade900,
+                                  isExpanded: true,
+                                  value: selectedBuyerIdx,
+                                  items: otherPlayers.map((e) => DropdownMenuItem(
+                                    value: e.key, 
+                                    child: Text(e.value.name, style: const TextStyle(color: Colors.white))
+                                  )).toList(),
+                                  onChanged: (val) => setDialogState(() => selectedBuyerIdx = val),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: "السعر المطلوب",
+                                labelStyle: const TextStyle(color: Colors.white54),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                prefixIcon: const Icon(Icons.payments, color: Colors.greenAccent),
+                              ),
+                              style: const TextStyle(color: Colors.white),
+                              onChanged: (val) => price = double.tryParse(val) ?? price,
+                            ),
+                         ],
+                         
+                         const SizedBox(height: 32),
+                         Row(
+                           children: [
+                             Expanded(
+                               child: TextButton(
+                                 onPressed: () => Navigator.pop(dialogCtx),
+                                 child: const Text("إلغاء", style: TextStyle(color: Colors.white54)),
+                               ),
+                             ),
+                             Expanded(
+                               child: ElevatedButton(
+                                 onPressed: (sellToBank || selectedBuyerIdx != null) ? () {
+                                   if (sellToBank) {
+                                      engine.sellStationToBank(station.id!);
+                                   } else {
+                                      engine.sellStationToPlayer(station.id!, selectedBuyerIdx!, price);
+                                   }
+                                   Navigator.pop(dialogCtx);
+                                 } : null,
+                                 style: ElevatedButton.styleFrom(
+                                   backgroundColor: Colors.redAccent,
+                                   padding: const EdgeInsets.symmetric(vertical: 16),
+                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                 ),
+                                 child: const Text("تأكيد البيع", style: TextStyle(fontWeight: FontWeight.bold)),
+                               ),
+                             ),
+                           ],
+                         ),
+                       ],
+                     ),
+                   ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _sellOptionChip({required String label, required IconData icon, required bool selected, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? Colors.redAccent.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? Colors.redAccent : Colors.white10),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: selected ? Colors.redAccent : Colors.white24),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: selected ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
 }
+
+class _ShineAnimation extends StatefulWidget {
+  final Color color;
+  const _ShineAnimation({required this.color});
+
+  @override
+  State<_ShineAnimation> createState() => _ShineAnimationState();
+}
+
+class _ShineAnimationState extends State<_ShineAnimation> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(-200 + (_controller.value * 800), -100),
+          child: Transform.rotate(
+            angle: 0.5,
+            child: Container(
+              width: 100,
+              height: 400,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.white.withOpacity(0.0),
+                    Colors.white.withOpacity(0.2),
+                    Colors.white.withOpacity(0.0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 
 class _QuestionDialogContent extends StatefulWidget {
   final Question question;

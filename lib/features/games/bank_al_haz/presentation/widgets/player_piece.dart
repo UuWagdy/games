@@ -160,14 +160,17 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
                 // THE NAME (Floats above the car)
                 if (widget.label.isNotEmpty)
                   Positioned(
-                    top: -35, // Adjust this so the name stays above the car regardless of car height
+                    top: (widget.scale < 0.5) ? -22 : -35, // Reduced gap on mobile to prevent overlap
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: (widget.scale < 0.5) ? 6 : 10, 
+                        vertical: (widget.scale < 0.5) ? 2 : 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.85),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.white12, width: 0.5),
-                        boxShadow: [
+                        boxShadow: const [
                            BoxShadow(color: Colors.black45, blurRadius: 10, spreadRadius: 2),
                         ],
                       ),
@@ -175,7 +178,7 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
                         widget.label,
                         style: TextStyle(
                           color: Colors.white, 
-                          fontSize: (widget.scale < 1.0) ? (12 / widget.scale) : 18, 
+                          fontSize: (widget.scale < 0.5) ? 14 : ((widget.scale < 1.0) ? (12 / widget.scale) : 18), 
                           fontWeight: FontWeight.w900,
                         ),
                       ),

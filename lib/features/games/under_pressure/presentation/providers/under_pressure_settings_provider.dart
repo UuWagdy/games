@@ -9,6 +9,9 @@ class UnderPressureSettings extends _$UnderPressureSettings {
   static const _timerDurationKey = 'up_timer_duration';
   static const _pointsPerQuestionKey = 'up_points_per_question';
   static const _bonusPointsKey = 'up_bonus_points';
+  static const _correctKey = 'up_correct_key';
+  static const _wrongKey = 'up_wrong_key';
+  static const _skipKey = 'up_skip_key';
 
   @override
   Future<Map<String, dynamic>> build() async {
@@ -18,6 +21,9 @@ class UnderPressureSettings extends _$UnderPressureSettings {
       'timer_duration': prefs.getInt(_timerDurationKey) ?? 60,
       'points_per_question': prefs.getInt(_pointsPerQuestionKey) ?? 1,
       'bonus_points': prefs.getInt(_bonusPointsKey) ?? 10,
+      'correct_key': prefs.getString(_correctKey) ?? '1',
+      'wrong_key': prefs.getString(_wrongKey) ?? '2',
+      'skip_key': prefs.getString(_skipKey) ?? '3',
     };
   }
 
@@ -42,6 +48,24 @@ class UnderPressureSettings extends _$UnderPressureSettings {
   Future<void> setBonusPoints(int points) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_bonusPointsKey, points);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setCorrectKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_correctKey, key);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setWrongKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_wrongKey, key);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setSkipKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_skipKey, key);
     ref.invalidateSelf();
   }
 }
