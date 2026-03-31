@@ -39,8 +39,10 @@
 📥تقدر تحمله من هنا:
 للكمبيوتر:💻
 🔗https://drive.google.com/file/d/18fnSxtSsiJZ6Yolbg1qhAjQpKnKLzr0k/view?usp=drive_link🔗
+
 للأندرويد:📱
 🔗https://drive.google.com/file/d/1wqx8SLzG9dEpZw3r5w0k8UnfXHQTpcmL/view?usp=drive_link🔗
+
 📢 رأيك هيفرق في تطوير النسخة الجاية جدًا
 
 جربوه… وشوفوا بنفسكم 👇
