@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
+import 'package:games/core/design/app_themes.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
+import '../../../../features/settings/presentation/providers/settings_providers.dart';
 import '../../../../features/games/bank_al_haz/presentation/pages/bank_al_haz_settings_page.dart';
 import '../../../../features/games/wheel/presentation/pages/wheel_game_page.dart';
 import '../../../../features/games/penalty_shootout/presentation/pages/penalty_shootout_page.dart';
@@ -10,6 +13,7 @@ import '../../../../features/games/snakes_and_ladders/presentation/pages/snakes_
 import '../../../../features/games/quiz_arena/presentation/pages/quiz_arena_settings_page.dart';
 import '../../../../features/games/ludo_quiz/presentation/pages/ludo_game_page.dart';
 import '../../../../features/games/spy_game/presentation/pages/spy_setup_page.dart';
+import '../../../../features/games/tic_tac_toe/presentation/pages/tic_tac_toe_page.dart';
 import '../../../../features/settings/presentation/pages/settings_page.dart';
 
 class MainScreen extends ConsumerWidget {
@@ -18,13 +22,22 @@ class MainScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: _buildContent(context, ref),
       ),
     );
   }
 
   Widget _buildContent(BuildContext context, WidgetRef ref) {
+    // We can also watch the theme here if we want colors for other things
+    final settingsAsync = ref.watch(generalSettingsProvider);
+    final themeId = settingsAsync.when(
+      data: (s) => s['app_theme'] as String? ?? 'default',
+      loading: () => 'default',
+      error: (_, __) => 'default',
+    );
+    final theme = AppThemes.getThemeById(themeId);
+    
     final teamsAsync = ref.watch(teamsListProvider);
     final teams = teamsAsync.value ?? [];
 
@@ -45,14 +58,6 @@ class MainScreen extends ConsumerWidget {
         title: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              "استمتع بأفضل الألعاب التنافسية مع أصدقائك",
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -60,18 +65,36 @@ class MainScreen extends ConsumerWidget {
                   'GAMES PLATFORM',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    fontSize: 22,
+                    fontSize: 24,
                     color: Colors.white,
-                    letterSpacing: 1.5,
+                    letterSpacing: 1.2,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Image.asset(
-                  'assets/images/logo.png',
-                  width: 24,
-                  height: 24,
+                const SizedBox(width: 10),
+                Icon(
+                  theme.icon,
+                  color: theme.primaryColor,
+                  size: 26,
                 ),
               ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Text(
+                "استمتع بأفضل الألعاب التنافسية مع أصدقائك",
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.45),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 0.2,
+                ),
+              ),
             ),
           ],
         ),
@@ -173,58 +196,65 @@ class MainScreen extends ConsumerWidget {
       {
         'title': 'تحت الضغط',
         'subtitle': 'اختبار السرعة والذكاء',
-        'icon': Icons.timer_outlined,
+        'icon': Icons.bolt_rounded,
         'color': Colors.purpleAccent,
         'page': const UnderPressurePage(),
       },
       {
         'title': 'ضربات الجزاء',
         'subtitle': 'المواجهة المباشرة والمثيرة',
-        'icon': Icons.sports_soccer,
+        'icon': Icons.sports_soccer_rounded,
         'color': Colors.cyanAccent,
         'page': const PenaltyShootoutPage(),
       },
       {
         'title': 'بنك الحظ',
         'subtitle': 'اللعبة اللوحية الشهيرة',
-        'icon': Icons.map_outlined,
+        'icon': Icons.account_balance_rounded,
         'color': Colors.tealAccent,
         'page': const BankAlHazSettingsPage(),
       },
       {
         'title': 'عجلة الحظ',
         'subtitle': 'لف العجلة واربح النقاط',
-        'icon': Icons.casino_outlined,
+        'icon': Icons.adjust_rounded,
         'color': Colors.blueAccent,
         'page': const WheelGamePage(),
       },
       {
         'title': 'ساحة التحدي',
         'subtitle': 'تحدى أصدقائك في مسابقة ثقافية',
-        'icon': Icons.quiz_outlined,
+        'icon': Icons.workspace_premium_rounded,
         'color': Colors.indigoAccent,
         'page': const QuizArenaSettingsPage(),
       },
       {
         'title': 'السلم والثعبان',
         'subtitle': 'اصعد للقمة وتجنب الثعابين',
-        'icon': Icons.grid_on_outlined,
+        'icon': Icons.grid_4x4_rounded,
         'color': Colors.orangeAccent,
         'page': const SnakesLaddersGamePage(),
       },
       {
         'title': 'لودو الأسئلة',
         'subtitle': 'لعبة اللودو الكلاسيكية بلمسة ثقافية',
-        'icon': Icons.gamepad_outlined,
+        'icon': Icons.grid_view_rounded,
         'color': Colors.pinkAccent,
         'page': const LudoGamePage(),
       },
       {
         'title': 'لعبة الجاسوس',
         'subtitle': 'احذر من الجاسوس بينكم',
-        'icon': Icons.person_search,
+        'icon': Icons.person_search_rounded,
         'color': Colors.redAccent,
         'page': const SpyGameMainScreen(),
+      },
+      {
+        'title': 'لعبة XO',
+        'subtitle': 'تحدى الكمبيوتر في لعبة إكس أو',
+        'icon': Icons.grid_3x3_rounded,
+        'color': Colors.blueAccent,
+        'page': const TicTacToePage(),
       },
     ];
 

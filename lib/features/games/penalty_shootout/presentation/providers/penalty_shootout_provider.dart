@@ -12,7 +12,7 @@ import 'package:games/features/teams/presentation/providers/team_providers.dart'
 
 part 'penalty_shootout_provider.g.dart';
 
-@riverpod
+@Riverpod(keepAlive: true)
 class PenaltyShootout extends _$PenaltyShootout {
   Timer? _timer;
 
@@ -27,6 +27,9 @@ class PenaltyShootout extends _$PenaltyShootout {
   void startGame(Team tA, Team tB, List<int>? categoryIds) async {
     final settingsAsync = await ref.read(penaltySettingsProvider.future);
 
+    final previousQuestions = state.templateQuestions;
+    final previousName = state.templateName;
+
     state = PenaltyShootoutState(
       teamAAttempts: List.filled(5, null),
       teamBAttempts: List.filled(5, null),
@@ -38,11 +41,23 @@ class PenaltyShootout extends _$PenaltyShootout {
       teamBKey: settingsAsync['team_b_key'] ?? 'l',
       timerDuration: settingsAsync['timer_duration'] ?? 10,
       timer: settingsAsync['timer_duration'] ?? 10,
+      maxPenalties: settingsAsync['max_penalties'] ?? 20,
+      templateQuestions: previousQuestions,
+      templateName: previousName,
+      currentQuestionIndex: 0,
     );
+
+    if (state.templateQuestions == null || state.templateQuestions!.isEmpty) {
+      await generateTemplate(categoryIds, 'قالب مقترح');
+    }
+    
     _nextQuestion(categoryIds);
   }
 
-  Future<void> _nextQuestion(List<int>? categoryIds) async {
+  Future<void> generateTemplate(List<int>? categoryIds, String name) async {
+    final settingsAsync = await ref.read(penaltySettingsProvider.future);
+    final countLimit = settingsAsync['max_penalties'] ?? 20;
+
     List<Question> questions = [];
     if (categoryIds == null || categoryIds.isEmpty) {
       questions = await ref.read(questionsProvider(null).future);
@@ -51,12 +66,30 @@ class PenaltyShootout extends _$PenaltyShootout {
         questions.addAll(await ref.read(questionsProvider(id).future));
       }
     }
+    
+    questions.shuffle();
+    final limit = countLimit > questions.length ? questions.length : countLimit;
+    final filtered = questions.sublist(0, limit);
+    
+    state = state.copyWith(templateQuestions: filtered, templateName: name);
+  }
 
-    if (questions.isEmpty) return;
+  Future<void> _nextQuestion(List<int>? categoryIds) async {
+    if (state.templateQuestions == null || state.templateQuestions!.isEmpty || state.currentQuestionIndex >= state.templateQuestions!.length) {
+      await generateTemplate(categoryIds, 'قالب تلقائي');
+      state = state.copyWith(currentQuestionIndex: 0);
+    }
 
-    final question = questions[Random().nextInt(questions.length)];
+    final questionsPool = List<Question>.from(state.templateQuestions!);
+    if (questionsPool.isEmpty) return;
+    
+    // Pick the question consistently without removing it from the pool
+    final int qIndex = state.currentQuestionIndex;
+    final question = questionsPool[qIndex];
+
     state = state.copyWith(
       currentQuestion: question,
+      currentQuestionIndex: qIndex + 1,
       status: PenaltyGameStatus.playing,
       clearBuzzedTurn: true,
       failedTurnsInCurrentQuestion: [],
@@ -272,6 +305,9 @@ class PenaltyShootout extends _$PenaltyShootout {
           winnerId = newTeamAScore > newTeamBScore
               ? state.teamA?.id
               : state.teamB?.id;
+        } else if (state.teamAAttempts.length >= state.maxPenalties) {
+           decided = true;
+           state = state.copyWith(isTie: true);
         }
       }
     } else {
@@ -298,12 +334,20 @@ class PenaltyShootout extends _$PenaltyShootout {
   void nextTurn(List<int>? categoryIds) async {
     if (state.status != PenaltyGameStatus.feedback) return;
 
-    if (state.winner != null) {
+    if (state.winner != null || state.isTie) {
       state = state.copyWith(status: PenaltyGameStatus.finished);
 
-      if (state.winnerId != null) {
-        final settings = ref.read(generalSettingsProvider).value;
-        final winPoints = settings?['penalty_win_points'] ?? 25;
+      final settings = ref.read(generalSettingsProvider).value;
+      final winPoints = settings?['penalty_win_points'] ?? 25;
+
+      if (state.isTie) {
+        if (state.teamA?.id != null) {
+          try { await ref.read(teamsListProvider.notifier).updateScore(state.teamA!.id!, winPoints, reason: 'تعادل في ضربات الجزاء'); } catch(e){}
+        }
+        if (state.teamB?.id != null) {
+          try { await ref.read(teamsListProvider.notifier).updateScore(state.teamB!.id!, winPoints, reason: 'تعادل في ضربات الجزاء'); } catch(e){}
+        }
+      } else if (state.winnerId != null) {
         try {
           await ref
               .read(teamsListProvider.notifier)
@@ -374,6 +418,9 @@ class PenaltyShootout extends _$PenaltyShootout {
   }
 
   void reset() {
+    final tQ = state.templateQuestions;
+    final tN = state.templateName;
     state = build();
+    state = state.copyWith(templateQuestions: tQ, templateName: tN);
   }
 }

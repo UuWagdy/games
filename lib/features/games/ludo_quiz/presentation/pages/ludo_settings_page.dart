@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:games/features/questions/domain/entities/category.dart';
 import 'package:games/features/questions/presentation/providers/question_providers.dart';
 import 'package:games/features/questions/presentation/pages/questions_management_page.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'package:games/features/teams/domain/entities/team.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
 import '../../domain/entities/ludo_entities.dart';
@@ -10,7 +11,8 @@ import '../providers/ludo_controller.dart';
 import '../../domain/models/ludo_state.dart';
 
 class LudoSettingsPage extends ConsumerStatefulWidget {
-  const LudoSettingsPage({super.key});
+  final bool isView;
+  const LudoSettingsPage({super.key, this.isView = false});
 
   @override
   ConsumerState<LudoSettingsPage> createState() => _LudoSettingsPageState();
@@ -28,6 +30,7 @@ class _LudoSettingsPageState extends ConsumerState<LudoSettingsPage> {
   final Map<LudoColor, int> _playerTeamsMapping = {};
   late List<int> _exitNumbers;
   late bool _isDoubleMoveEnabled;
+  late bool _isVsComputer;
 
   @override
   void initState() {
@@ -50,7 +53,11 @@ class _LudoSettingsPageState extends ConsumerState<LudoSettingsPage> {
         _playerTeamsMapping[LudoColor.blue] = 1;
     }
     
-    final teams = ref.read(teamsListProvider).value ?? [];
+    final settings = ref.read(generalSettingsProvider).value;
+    final globalAiEnabled = settings?['global_ai_enabled'] ?? false;
+    final allTeams = ref.read(teamsListProvider).value ?? [];
+    final teams = globalAiEnabled ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+    
     for (int i = 0; i < teams.length; i++) {
       final team = teams[i];
       final existingColor = currentState.colorTeamNames.entries
@@ -145,6 +152,7 @@ class _LudoSettingsPageState extends ConsumerState<LudoSettingsPage> {
       selection, 
       isTeamMode: _isTeamMode, 
       playerTeams: _playerTeamsMapping,
+      vsComputer: _isVsComputer,
     );
     Navigator.pop(context);
   }
@@ -162,35 +170,27 @@ class _LudoSettingsPageState extends ConsumerState<LudoSettingsPage> {
   Widget build(BuildContext context) {
     final teamsAsync = ref.watch(teamsListProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
+    final settingsAsync = ref.watch(generalSettingsProvider);
+    final globalAiEnabled = settingsAsync.value?['global_ai_enabled'] ?? false;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1B1B2F),
-      appBar: AppBar(
-        title: const Text("إعدادات لودو الأسئلة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () {
-            _saveSettings();
-            Navigator.pop(context);
-          },
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
+    final content = ListView(
+        padding: EdgeInsets.all(widget.isView ? 16 : 20),
         children: [
           _sectionHeader("اختيار ألوان الفرق", Icons.group_outlined),
           teamsAsync.when(
-            data: (teams) => Column(
-              children: teams.map((team) => _buildTeamColorTile(team)).toList(),
-            ),
+            data: (rawTeams) {
+              final allTeams = List<Team>.from(rawTeams);
+              final filteredTeams = globalAiEnabled ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+              return Column(
+                children: filteredTeams.map((team) => _buildTeamColorTile(team)).toList(),
+              );
+            },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, s) => Text("خطأ في تحميل الفرق: $e", style: const TextStyle(color: Colors.red)),
           ),
           const SizedBox(height: 24),
-          _sectionHeader("نظام الفرق (شراكة)", Icons.people_outline),
           _buildTeamModeSettings(),
+          const SizedBox(height: 24),
           const SizedBox(height: 24),
           
           InkWell(
@@ -206,9 +206,9 @@ class _LudoSettingsPageState extends ConsumerState<LudoSettingsPage> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.play_circle_fill, color: Colors.cyanAccent, size: 28),
-                  SizedBox(width: 12),
-                  Text("بدء اللعب بالفرق المختارة", style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                   Icon(Icons.play_circle_fill, color: Colors.cyanAccent, size: 28),
+                   SizedBox(width: 12),
+                   Text("بدء اللعب بالفرق المختارة", style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 16)),
                 ],
               ),
             ),
@@ -258,11 +258,30 @@ class _LudoSettingsPageState extends ConsumerState<LudoSettingsPage> {
                   fillColor: Colors.white.withOpacity(0.08),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 ),
+                onChanged: (_) => _saveSettings(),
               ),
             ),
           ),
         ],
+      );
+
+    if (widget.isView) return content;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF1B1B2F),
+      appBar: AppBar(
+        title: const Text("إعدادات لودو الأسئلة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () {
+            _saveSettings();
+            Navigator.pop(context);
+          },
+        ),
       ),
+      body: content,
     );
   }
 

@@ -8,9 +8,14 @@ import 'package:games/features/games/under_pressure/presentation/pages/under_pre
 import 'package:games/features/games/quiz_arena/presentation/pages/quiz_arena_settings_page.dart';
 import 'package:games/features/games/snakes_and_ladders/presentation/widgets/snakes_ladders_settings_dialog.dart';
 import 'package:games/features/games/bank_al_haz/presentation/pages/bank_al_haz_settings_page.dart';
+import 'package:games/features/games/ludo_quiz/presentation/pages/ludo_settings_page.dart';
+import 'package:games/features/games/spy_game/presentation/pages/spy_settings_page.dart';
 import 'package:games/features/settings/presentation/pages/general_settings_page.dart';
+import 'package:games/features/settings/presentation/pages/themes_page.dart';
 import 'package:games/features/settings/presentation/pages/about_page.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/app_themes.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'dart:ui';
 
 class SettingsPage extends ConsumerWidget {
@@ -19,8 +24,16 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settingsAsync = ref.watch(generalSettingsProvider);
+    final themeId = settingsAsync.when(
+      data: (s) => s['app_theme'] as String? ?? 'default',
+      loading: () => 'default',
+      error: (_, __) => 'default',
+    );
+    final theme = AppThemes.getThemeById(themeId);
+
     return DefaultTabController(
-      length: 10,
+      length: 13,
       initialIndex: initialIndex,
       child: Scaffold(
         extendBodyBehindAppBar: true,
@@ -51,10 +64,10 @@ class SettingsPage extends ConsumerWidget {
               );
             }
           ),
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
-            indicatorColor: Colors.amber,
-            labelColor: Colors.amber,
+            indicatorColor: theme.primaryColor,
+            labelColor: theme.primaryColor,
             unselectedLabelColor: Colors.white60,
             tabs: [
               Tab(icon: Icon(Icons.settings), text: 'عام'),
@@ -66,49 +79,33 @@ class SettingsPage extends ConsumerWidget {
               Tab(icon: Icon(Icons.psychology), text: 'ساحة التحدي'),
               Tab(icon: Icon(Icons.grid_4x4), text: 'السلم والثعبان'),
               Tab(icon: Icon(Icons.account_balance), text: 'بنك الحظ'),
+              Tab(icon: Icon(Icons.casino), text: 'لودو الأسئلة'),
+              Tab(icon: Icon(Icons.visibility_off), text: 'لعبة الجاسوس'),
+              Tab(icon: Icon(Icons.color_lens), text: 'الأثواب'),
               Tab(icon: Icon(Icons.info_outline), text: 'عن البرنامج'),
             ],
           ),
         ),
-        body: Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+        body: AppDesign.backgroundWrapper(
+          theme: theme,
+          child: const SafeArea(
+            child: TabBarView(
+              children: [
+                GeneralSettingsPage(),
+                TeamsManagementPage(),
+                QuestionsManagementPage(),
+                WheelSettingsPage(),
+                PenaltySettingsPage(),
+                UnderPressureSettingsPage(),
+                QuizArenaSettingsPage(isView: true),
+                SnakesLaddersSettingsView(),
+                BankAlHazSettingsPage(isView: true),
+                LudoSettingsPage(isView: true),
+                SpySettingsPage(isView: true),
+                ThemesPage(),
+                AboutPage(),
+              ],
             ),
-          ),
-          child: Stack(
-            children: [
-              Positioned(
-                top: -50,
-                right: -50,
-                child: Container(width: 300, height: 300, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.blueAccent.withOpacity(0.05))),
-              ),
-              Positioned(
-                bottom: -50,
-                left: -100,
-                child: Container(width: 250, height: 250, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.purpleAccent.withOpacity(0.05))),
-              ),
-              const SafeArea(
-                child: TabBarView(
-                  children: [
-                    GeneralSettingsPage(),
-                    TeamsManagementPage(),
-                    QuestionsManagementPage(),
-                    WheelSettingsPage(),
-                    PenaltySettingsPage(),
-                    UnderPressureSettingsPage(),
-                    QuizArenaSettingsPage(isView: true),
-                    SnakesLaddersSettingsView(),
-                    BankAlHazSettingsPage(isView: true),
-                    AboutPage(),
-                  ],
-                ),
-              ),
-            ],
           ),
         ),
       ),
@@ -123,7 +120,13 @@ class SnakesLaddersSettingsView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return const Scaffold(
       backgroundColor: Colors.transparent,
-      body: SnakesLaddersSettingsDialogContent(),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: SnakesLaddersSettingsDialogContent(),
+        ),
+      ),
     );
   }
 }
+

@@ -42,7 +42,7 @@ final class QuizArenaSettingsNotifierProvider
 }
 
 String _$quizArenaSettingsNotifierHash() =>
-    r'd81cb399d3bc4586d5b1669bd1491e0df77d4cb6';
+    r'36580656b20031adda578bfa2cc1fc173eaa7258';
 
 abstract class _$QuizArenaSettingsNotifier
     extends $Notifier<QuizArenaSettings> {
@@ -95,7 +95,7 @@ final class QuizArenaGameProvider
   }
 }
 
-String _$quizArenaGameHash() => r'92ace63e8855879a34c28bccadfbb13dff3386d1';
+String _$quizArenaGameHash() => r'e3681d4aa7d9507a556d5d4e46835a368a5829e7';
 
 abstract class _$QuizArenaGame extends $Notifier<QuizArenaGameState> {
   QuizArenaGameState build();

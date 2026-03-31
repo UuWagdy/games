@@ -71,12 +71,14 @@ class LudoPlayer {
   final List<LudoToken> tokens;
   final int score;
   final bool hasUsedVision; // Used for "Per Player" vision scope
+  final bool isComputer;
 
   LudoPlayer({
     required this.color,
     required this.tokens,
     this.score = 0,
     this.hasUsedVision = false,
+    this.isComputer = false,
   });
 
   bool get isWinner => tokens.every((t) => t.position == 57);
@@ -85,12 +87,14 @@ class LudoPlayer {
     List<LudoToken>? tokens,
     int? score,
     bool? hasUsedVision,
+    bool? isComputer,
   }) {
     return LudoPlayer(
       color: color,
       tokens: tokens ?? this.tokens,
       score: score ?? this.score,
       hasUsedVision: hasUsedVision ?? this.hasUsedVision,
+      isComputer: isComputer ?? this.isComputer,
     );
   }
 }

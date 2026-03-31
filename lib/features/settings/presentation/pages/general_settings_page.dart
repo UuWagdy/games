@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/settings_providers.dart';
-import 'package:games/features/questions/presentation/providers/question_providers.dart';
+import 'backup_restore_page.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
+import 'package:games/features/questions/presentation/providers/question_providers.dart';
+import '../providers/settings_providers.dart';
+import 'package:games/features/games/penalty_shootout/presentation/providers/penalty_settings_provider.dart';
+import 'package:games/features/games/under_pressure/presentation/providers/under_pressure_settings_provider.dart';
+import 'package:games/features/games/snakes_and_ladders/presentation/providers/snakes_ladders_providers.dart';
+import 'package:games/features/games/quiz_arena/presentation/providers/quiz_arena_provider.dart';
+import 'package:games/features/games/spy_game/presentation/providers/spy_game_provider.dart';
+import 'package:games/features/games/ludo_quiz/presentation/providers/ludo_controller.dart';
+
 
 class GeneralSettingsPage extends ConsumerWidget {
   const GeneralSettingsPage({super.key});
@@ -10,6 +18,12 @@ class GeneralSettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(generalSettingsProvider);
+    final penaltySettings = ref.watch(penaltySettingsProvider);
+    final underPressureSettings = ref.watch(underPressureSettingsProvider);
+    final snakesLaddersGame = ref.watch(snakesLaddersGameProvider);
+    final quizArenaSettings = ref.watch(quizArenaSettingsProvider);
+    final spyGame = ref.watch(spyGameProvider);
+    final ludoGame = ref.watch(ludoControllerProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -88,6 +102,27 @@ class GeneralSettingsPage extends ConsumerWidget {
                   title: const Text('تصفير كل النقاط', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                   onTap: () => _confirmResetScores(context, ref),
                 ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.cleaning_services_outlined, color: Colors.orangeAccent),
+                  title: const Text('حذف الأسئلة المكررة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: const Text('يقوم بالبحث عنها بالاسم وحذف المكرر منها', style: TextStyle(color: Colors.white60)),
+                  onTap: () => _confirmRemoveDuplicates(context, ref),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.category_outlined, color: Colors.amberAccent),
+                  title: const Text('حذف الفئات المكررة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: const Text('يتم دمج الفئات التي لها نفس الاسم وحذف المكرر', style: TextStyle(color: Colors.white60)),
+                  onTap: () => _confirmRemoveDuplicateCategories(context, ref),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
+                  title: const Text('مسح كافة البيانات (أسئلة وفئات)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: const Text('سيتم حذف كافة الأسئلة والفئات بالكامل من قاعدة البيانات', style: TextStyle(color: Colors.white60)),
+                  onTap: () => _confirmDeleteAllCategories(context, ref),
+                ),
               ]),
               const SizedBox(height: 32),
               const Text(
@@ -103,20 +138,151 @@ class GeneralSettingsPage extends ConsumerWidget {
                   onTap: () => _showSpinDurationPicker(context, ref, settings['wheel_spin_duration']),
                 ),
                 const Divider(),
-                SwitchListTile(
-                  title: const Text('تفعيل عداد وقت السؤال', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  secondary: const Icon(Icons.av_timer_outlined, color: Colors.cyanAccent),
-                  value: settings['enable_question_timer'] ?? false,
-                  onChanged: (val) => ref.read(generalSettingsProvider.notifier).setEnableQuestionTimer(val),
-                ),
-                if (settings['enable_question_timer'] == true)
-                  ListTile(
-                    title: const Text('مدة وقت السؤال', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    subtitle: Text(_formatDuration(settings['question_timer_duration']), style: const TextStyle(color: Colors.white60)),
-                    trailing: const Icon(Icons.edit_note_outlined, color: Colors.white70),
-                    onTap: () => _showQuestionDurationPicker(context, ref, settings['question_timer_duration']),
-                  ),
               ]),
+              const SizedBox(height: 32),
+              const Text(
+                'إعدادات الألعاب',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.amber),
+              ),
+              const SizedBox(height: 16),
+              
+              // Penalty Shootout Section
+              _buildSectionTitle('ضربات الجزاء', Icons.sports_soccer),
+              _buildCard(context, [
+                ListTile(
+                  title: const Text('نقاط الفوز', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${settings['penalty_win_points'] ?? 25} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط الفوز في ضربات الجزاء', settings['penalty_win_points'] ?? 25, (val) => ref.read(generalSettingsProvider.notifier).setPenaltyWinPoints(val)),
+                ),
+                const Divider(),
+                SwitchListTile(
+                  title: const Text('الوضع التنافسي', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: const Text('تبادل الأدوار بين الفرق في كل محاولة', style: TextStyle(color: Colors.white60)),
+                  value: penaltySettings.value?['competitive_mode'] ?? true,
+                  onChanged: (val) => ref.read(penaltySettingsProvider.notifier).setCompetitiveMode(val),
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text('وقت التسديد', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${penaltySettings.value?['timer_duration'] ?? 10} ثانية', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showSecondsPicker(context, ref, 'وقت التسديد', penaltySettings.value?['timer_duration'] ?? 10, (val) => ref.read(penaltySettingsProvider.notifier).setTimerDuration(val)),
+                ),
+              ]),
+              const SizedBox(height: 24),
+
+              // Tic Tac Toe Section
+              _buildSectionTitle('لعبة XO', Icons.grid_3x3_rounded),
+              _buildCard(context, [
+                ListTile(
+                  title: const Text('نقاط الفوز', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${settings['tic_tac_toe_win_points'] ?? 20} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط الفوز في XO', settings['tic_tac_toe_win_points'] ?? 20, (val) => ref.read(generalSettingsProvider.notifier).setTicTacToeWinPoints(val)),
+                ),
+              ]),
+              const SizedBox(height: 24),
+
+              // Under Pressure Section
+              _buildSectionTitle('تحت الضغط', Icons.speed),
+              _buildCard(context, [
+                ListTile(
+                  title: const Text('وقت التحدي', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${underPressureSettings.value?['timer_duration'] ?? 60} ثانية', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showSecondsPicker(context, ref, 'وقت التحدي', underPressureSettings.value?['timer_duration'] ?? 60, (val) => ref.read(underPressureSettingsProvider.notifier).setTimerDuration(val)),
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text('نقاط البونص', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${underPressureSettings.value?['bonus_points'] ?? 10} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط البونص', underPressureSettings.value?['bonus_points'] ?? 10, (val) => ref.read(underPressureSettingsProvider.notifier).setBonusPoints(val)),
+                ),
+              ]),
+              const SizedBox(height: 24),
+
+              // Snakes and Ladders Section
+              _buildSectionTitle('السلم والثعبان', Icons.extension),
+              _buildCard(context, [
+                ListTile(
+                  title: const Text('نقاط الفوز', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${snakesLaddersGame.winPoints} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط الفوز في السلم والثعبان', snakesLaddersGame.winPoints, (val) => ref.read(snakesLaddersGameProvider.notifier).setWinPoints(val)),
+                ),
+                const Divider(),
+                SwitchListTile(
+                  title: const Text('تفعيل الأسئلة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: const Text('هل يجب الإجابة على سؤال قبل التحرك؟', style: TextStyle(color: Colors.white60)),
+                  value: snakesLaddersGame.questionsEnabled,
+                  onChanged: (val) => ref.read(snakesLaddersGameProvider.notifier).setQuestionsEnabled(val),
+                ),
+              ]),
+              const SizedBox(height: 24),
+
+              // Bank Al Haz Section
+              _buildSectionTitle('بنك الحظ', Icons.monetization_on),
+              _buildCard(context, [
+                ListTile(
+                  title: const Text('نقاط الفوز', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${settings['bank_al_haz_win_points'] ?? 50} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط الفوز في بنك الحظ', settings['bank_al_haz_win_points'] ?? 50, (val) => ref.read(generalSettingsProvider.notifier).setBankAlHazWinPoints(val)),
+                ),
+              ]),
+              const SizedBox(height: 24),
+
+              // Quiz Arena Section
+              _buildSectionTitle('ساحة الاختبار (Quiz Arena)', Icons.quiz),
+              _buildCard(context, [
+                SwitchListTile(
+                  title: const Text('تفعيل عداد الوقت', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  value: quizArenaSettings.timerEnabled,
+                  onChanged: (val) => ref.read(quizArenaSettingsProvider.notifier).updateSettings(quizArenaSettings.copyWith(timerEnabled: val)),
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text('وقت الإجابة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${quizArenaSettings.timeLimitSeconds} ثانية', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showSecondsPicker(context, ref, 'وقت الإجابة في ساحة الاختبار', quizArenaSettings.timeLimitSeconds, (val) => ref.read(quizArenaSettingsProvider.notifier).updateSettings(quizArenaSettings.copyWith(timeLimitSeconds: val))),
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text('عدد الجولات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${quizArenaSettings.rounds} جولات', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showRoundsPicker(context, ref, 'عدد جولات ساحة الاختبار', quizArenaSettings.rounds, (val) => ref.read(quizArenaSettingsProvider.notifier).updateSettings(quizArenaSettings.copyWith(rounds: val))),
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text('نقاط الفوز (للفائز في نهاية الجولات)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${quizArenaSettings.winPoints} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط الفوز في ساحة الاختبار', quizArenaSettings.winPoints, (val) => ref.read(quizArenaSettingsProvider.notifier).updateSettings(quizArenaSettings.copyWith(winPoints: val))),
+                ),
+              ]),
+              const SizedBox(height: 24),
+
+              // Spy Game Section
+              _buildSectionTitle('لعبة الجاسوس (Spy Game)', Icons.visibility_off),
+              _buildCard(context, [
+                ListTile(
+                  title: const Text('نقاط الجاسوس عند الفوز', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${spyGame.settings.spyWinPoints} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط فوز الجاسوس', spyGame.settings.spyWinPoints, (val) => ref.read(spyGameProvider.notifier).updateSettings(spyGame.settings.copyWith(spyWinPoints: val))),
+                ),
+                const Divider(),
+                ListTile(
+                  title: const Text('نقاط اللاعبين عند الفوز', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${spyGame.settings.playersWinPoints} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط فوز اللاعبين', spyGame.settings.playersWinPoints, (val) => ref.read(spyGameProvider.notifier).updateSettings(spyGame.settings.copyWith(playersWinPoints: val))),
+                ),
+              ]),
+              const SizedBox(height: 24),
+
+              // Ludo Quiz Section
+              _buildSectionTitle('لودو الأسئلة (Ludo Quiz)', Icons.grid_on),
+              _buildCard(context, [
+                ListTile(
+                  title: const Text('نقاط الفوز بلعبة لودو', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${ludoGame.winPoints} نقطة', style: const TextStyle(color: Colors.white60)),
+                  onTap: () => _showPointsPicker(context, ref, 'نقاط الفوز في لودو', ludoGame.winPoints, (val) => ref.read(ludoControllerProvider.notifier).updateSettings(winPoints: val)),
+                ),
+              ]),
+
               const SizedBox(height: 32),
               const Text(
                 'النقاط والمزامنة',
@@ -130,20 +296,25 @@ class GeneralSettingsPage extends ConsumerWidget {
                   value: settings['sync_scores'] ?? false,
                   onChanged: (val) => ref.read(generalSettingsProvider.notifier).setSyncScores(val),
                 ),
-                const Divider(),
+              ]),
+              const SizedBox(height: 32),
+              const Text(
+                'البيانات والنظام',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.amber),
+              ),
+              const SizedBox(height: 16),
+              _buildCard(context, [
                 ListTile(
-                  title: const Text('نقاط الفوز في ضربات الجزاء', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  subtitle: Text('${settings['penalty_win_points'] ?? 25} نقطة', style: const TextStyle(color: Colors.white60)),
-                  onTap: () => _showPointsPicker(context, ref, 'نقاط الفوز في ضربات الجزاء', settings['penalty_win_points'] ?? 25, (val) => ref.read(generalSettingsProvider.notifier).setPenaltyWinPoints(val)),
-                ),
-                const Divider(),
-                ListTile(
-                  title: const Text('نقاط الفوز في بنك الحظ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  subtitle: Text('${settings['bank_al_haz_win_points'] ?? 50} نقطة', style: const TextStyle(color: Colors.white60)),
-                  onTap: () => _showPointsPicker(context, ref, 'نقاط الفوز في بنك الحظ', settings['bank_al_haz_win_points'] ?? 50, (val) => ref.read(generalSettingsProvider.notifier).setBankAlHazWinPoints(val)),
+                  leading: const Icon(Icons.backup_outlined, color: Colors.blueAccent),
+                  title: const Text('النسخ الاحتياطي والاستعادة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: const Text('حفظ نسخة من بياناتك أو استعادتها (قاعدة البيانات)', style: TextStyle(color: Colors.white60)),
+                  onTap: () => Navigator.push(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const BackupRestorePage())
+                  ),
                 ),
               ]),
-              const SizedBox(height: 40),
+              const SizedBox(height: 64),
             ],
           ),
         ),
@@ -209,6 +380,99 @@ class GeneralSettingsPage extends ConsumerWidget {
     );
   }
 
+  void _confirmRemoveDuplicates(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('حذف الأسئلة المكررة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text('سيتم البحث عن جميع الأسئلة التي لها نفس النص وحذف النسخ الإضافية.', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final count = await ref.read(questionsProvider(null).notifier).removeDuplicateQuestions();
+              
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(count > 0 ? 'تم حذف $count سؤال مكرر بنجاح' : 'لا توجد أسئلة مكررة حالياً'), 
+                    backgroundColor: count > 0 ? Colors.green : Colors.blueGrey
+                  )
+                );
+              }
+            },
+            child: const Text('تأكيد الحذف'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRemoveDuplicateCategories(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('حذف الفئات المكررة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text('سيتم البحث عن الفئات التي لها نفس الاسم ودمجها في فئة واحدة وحذف المكرر.', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amberAccent, foregroundColor: Colors.black),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final count = await ref.read(categoriesProvider.notifier).removeDuplicateCategories();
+              
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(count > 0 ? 'تم حذف ودمج $count فئة مكررة بنجاح' : 'لا توجد فئات مكررة حالياً'), 
+                    backgroundColor: count > 0 ? Colors.green : Colors.blueGrey
+                  )
+                );
+              }
+            },
+            child: const Text('تأكيد الحذف والدمج'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAllCategories(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('مسح كافة البيانات (أسئلة وفئات)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text('هل أنت متأكد من مسح كافة الأسئلة والفئات بالكامل من قاعدة البيانات؟\nسيتم حذف 4010 سؤال تماماً ولا يمكن استعادة البيانات إلا عبر نسخة احتياطية.', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(categoriesProvider.notifier).deleteAllCategories();
+              
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تم مسح كافة البيانات (الأسئلة والفئات) بنجاح'), 
+                    backgroundColor: Colors.redAccent
+                  )
+                );
+              }
+            },
+            child: const Text('حذف الكل'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showSpinDurationPicker(BuildContext context, WidgetRef ref, int current) {
     int val = current;
     showDialog(
@@ -243,47 +507,7 @@ class GeneralSettingsPage extends ConsumerWidget {
     );
   }
 
-  String _formatDuration(int seconds) {
-    if (seconds < 60) return '$seconds ثانية';
-    int mins = seconds ~/ 60;
-    int secs = seconds % 60;
-    return secs == 0 ? '$mins دقيقة' : '$mins دقيقة و $secs ثانية';
-  }
 
-  void _showQuestionDurationPicker(BuildContext context, WidgetRef ref, int current) {
-    int val = current;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('وقت الإجابة', style: TextStyle(color: Colors.white)),
-        content: StatefulBuilder(
-          builder: (context, setState) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_formatDuration(val), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.white)),
-              const SizedBox(height: 10),
-              Slider(
-                value: val.toDouble(),
-                min: 5, max: 300, divisions: 59,
-                onChanged: (newVal) => setState(() => val = newVal.toInt()),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () {
-              ref.read(generalSettingsProvider.notifier).setQuestionTimerDuration(val);
-              Navigator.pop(context);
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _showPointsPicker(BuildContext context, WidgetRef ref, String title, int current, Function(int) onSave) {
     int val = current;
@@ -314,6 +538,92 @@ class GeneralSettingsPage extends ConsumerWidget {
               Navigator.pop(context);
             },
             child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSecondsPicker(BuildContext context, WidgetRef ref, String title, int current, Function(int) onSave) {
+    int val = current;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: StatefulBuilder(
+          builder: (context, setState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$val ثانية', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Colors.white)),
+              Slider(
+                value: val.toDouble(),
+                min: 1, max: 60, divisions: 59,
+                activeColor: Colors.amber,
+                onChanged: (newVal) => setState(() => val = newVal.toInt()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () {
+              onSave(val);
+              Navigator.pop(context);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRoundsPicker(BuildContext context, WidgetRef ref, String title, int current, Function(int) onSave) {
+    int val = current;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: StatefulBuilder(
+          builder: (context, setState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$val جولة', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Colors.white)),
+              Slider(
+                value: val.toDouble(),
+                min: 1, max: 50, divisions: 49,
+                activeColor: Colors.amber,
+                onChanged: (newVal) => setState(() => val = newVal.toInt()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () {
+              onSave(val);
+              Navigator.pop(context);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.amber, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70),
           ),
         ],
       ),

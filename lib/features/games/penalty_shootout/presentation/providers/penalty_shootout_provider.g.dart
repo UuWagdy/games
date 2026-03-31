@@ -20,7 +20,7 @@ final class PenaltyShootoutProvider
         argument: null,
         retry: null,
         name: r'penaltyShootoutProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -41,7 +41,7 @@ final class PenaltyShootoutProvider
   }
 }
 
-String _$penaltyShootoutHash() => r'6a1292d3108c4eec7855405a508c29cf72f8a89e';
+String _$penaltyShootoutHash() => r'a2138b062eedf566d9b708520b7148c4221287ea';
 
 abstract class _$PenaltyShootout extends $Notifier<PenaltyShootoutState> {
   PenaltyShootoutState build();

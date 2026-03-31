@@ -1,12 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:games/core/utils/arabic_utils.dart';
+import 'package:games/features/questions/presentation/providers/question_providers.dart';
+import 'package:games/features/questions/domain/entities/question.dart';
 import '../../domain/entities/bank_al_haz_entities.dart';
-import '../../../../questions/domain/entities/question.dart';
-import '../../../../questions/presentation/providers/question_providers.dart';
-import '../../../../settings/presentation/providers/settings_providers.dart';
-import '../../../../teams/presentation/providers/team_providers.dart';
 import 'bank_al_haz_providers.dart';
+import '../../../../teams/presentation/providers/team_providers.dart';
 
 
 class GameState {
@@ -28,6 +29,9 @@ class GameState {
   final int remainingSeconds;
   final List<GameLog> logs;
   final int? winnerIndex;
+  final double currentCheckInterest;
+  final int elapsedSeconds;
+  final int turnRemainingSeconds;
 
   const GameState({
     this.players = const [],
@@ -48,6 +52,9 @@ class GameState {
     this.remainingSeconds = 0,
     this.logs = const [],
     this.winnerIndex,
+    this.currentCheckInterest = 0.05,
+    this.elapsedSeconds = 0,
+    this.turnRemainingSeconds = 0,
   });
 
   GameState copyWith({
@@ -69,6 +76,9 @@ class GameState {
     int? remainingSeconds,
     List<GameLog>? logs,
     int? winnerIndex,
+    double? currentCheckInterest,
+    int? elapsedSeconds,
+    int? turnRemainingSeconds,
     bool clearPendingLandingStation = false,
     bool clearWinnerIndex = false,
     bool clearCurrentCard = false,
@@ -92,51 +102,148 @@ class GameState {
       remainingSeconds: remainingSeconds ?? this.remainingSeconds,
       logs: logs ?? this.logs,
       winnerIndex: clearWinnerIndex ? null : (winnerIndex ?? this.winnerIndex),
+      currentCheckInterest: currentCheckInterest ?? this.currentCheckInterest,
+      elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'players': players.map((p) => p.toJson()).toList(),
+    'board': board.map((s) => s.toJson()).toList(),
+    'currentPlayerIndex': currentPlayerIndex,
+    'currentDiceValue': currentDiceValue,
+    'rollCounter': rollCounter,
+    'isRollingDice': isRollingDice,
+    'isMovingPlayer': isMovingPlayer,
+    'isGameOver': isGameOver,
+    'message': message,
+    'pendingLandingStation': pendingLandingStation?.toJson(),
+    'currentCard': currentCard?.toJson(),
+    'startTime': startTime?.toIso8601String(),
+    'totalTurns': totalTurns,
+    'isEndingTurn': isEndingTurn,
+    'settings': settings.toJson(),
+    'remainingSeconds': remainingSeconds,
+    'logs': logs.map((l) => l.toJson()).toList(),
+    'winnerIndex': winnerIndex,
+    'currentCheckInterest': currentCheckInterest,
+    'elapsedSeconds': elapsedSeconds,
+    'turnRemainingSeconds': turnRemainingSeconds,
+  };
+
+  factory GameState.fromJson(Map<String, dynamic> json) {
+    return GameState(
+      players: (json['players'] as List).map((p) => BankAlHazPlayer.fromJson(p)).toList(),
+      board: (json['board'] as List).map((s) => Station.fromJson(s)).toList(),
+      currentPlayerIndex: json['currentPlayerIndex'],
+      currentDiceValue: json['currentDiceValue'],
+      rollCounter: json['rollCounter'],
+      isRollingDice: json['isRollingDice'],
+      isMovingPlayer: json['isMovingPlayer'],
+      isGameOver: json['isGameOver'],
+      message: json['message'],
+      pendingLandingStation: json['pendingLandingStation'] != null ? Station.fromJson(json['pendingLandingStation']) : null,
+      currentCard: json['currentCard'] != null ? BankAlHazCard.fromJson(json['currentCard']) : null,
+      startTime: json['startTime'] != null ? DateTime.parse(json['startTime']) : null,
+      totalTurns: json['totalTurns'],
+      isEndingTurn: json['isEndingTurn'],
+      settings: BankAlHazSettings.fromJson(json['settings']),
+      remainingSeconds: json['remainingSeconds'],
+      logs: (json['logs'] as List).map((l) => GameLog.fromJson(l)).toList(),
+      winnerIndex: json['winnerIndex'],
+      currentCheckInterest: (json['currentCheckInterest'] as num?)?.toDouble() ?? 0.05,
+      elapsedSeconds: json['elapsedSeconds'] ?? 0,
+      turnRemainingSeconds: json['turnRemainingSeconds'] ?? 0,
+    );
+  }
+
+  String toJsonString() => jsonEncode(toJson());
+
+  factory GameState.fromJsonString(String jsonStr) => GameState.fromJson(jsonDecode(jsonStr));
 }
+
 
 class GameEngine extends Notifier<GameState> {
   final _random = math.Random();
-  // Track auto-next-turn timer to prevent double-calling
-  Timer? _autoNextTurnTimer;
   Timer? _gameDurationTimer;
+  Timer? _turnTimer;
 
   @override
   GameState build() {
     return const GameState();
   }
 
+  Future<void> _saveState() async {
+    final repo = ref.read(bankAlHazRepositoryProvider);
+    await repo.saveGameState(state.toJsonString());
+  }
+
+  Future<bool> loadSavedGame() async {
+    final repo = ref.read(bankAlHazRepositoryProvider);
+    final savedJson = await repo.getGameState();
+    if (savedJson != null) {
+      try {
+        final savedState = GameState.fromJsonString(savedJson);
+        state = savedState;
+        if ((state.remainingSeconds > 0 || state.settings.inflationEnabled) && !state.isGameOver) {
+          _startGameDurationTimer();
+        }
+        _addLog("تم استعادة اللعبة السابقة", type: LogType.info);
+        return true;
+      } catch (e) {
+        print("Error loading saved game: $e");
+      }
+    }
+    return false;
+  }
+
+  Future<void> clearSavedGame() async {
+    final repo = ref.read(bankAlHazRepositoryProvider);
+    await repo.clearGameState();
+  }
+
   Future<void> initGame(List<String> playerNames, BankAlHazSettings settings) async {
-    _autoNextTurnTimer?.cancel();
+    _turnTimer?.cancel();
     _gameDurationTimer?.cancel();
     
     final bankRepo = ref.read(bankAlHazRepositoryProvider);
-    final stations = await bankRepo.getStations();
 
     int? initialSeconds;
     if (settings.winCondition == WinningCondition.time && settings.maxTimeMinutes > 0) {
       initialSeconds = settings.maxTimeMinutes * 60;
     }
     
-    final players = playerNames.asMap().entries.map((entry) => BankAlHazPlayer(
-      id: entry.key + 1,
-      name: entry.value,
-      money: settings.initialMoney,
-    )).toList();
+    final players = playerNames.asMap().entries.map((entry) {
+      return BankAlHazPlayer(
+        id: entry.key + 1,
+        name: entry.value,
+        money: settings.initialMoney,
+      );
+    }).toList();
 
+    // Auto-link stations with categories if possible
+    await bankRepo.autoLinkStationsWithCategories();
+    
+    // Load stations and ensure that any station with an owner category requires a question
+    var updatedStations = await bankRepo.getStations();
+    
+    // Ensure all linked stations require questions at runtime
+    updatedStations = updatedStations.map((s) {
+      if ((s.ownerCategoryId != null || s.passerCategoryId != null) && !s.requiresQuestion) {
+        return s.copyWith(requiresQuestion: true, type: StationType.question);
+      }
+      return s;
+    }).toList();
+    
     state = state.copyWith(
       players: players,
-      board: stations,
+      board: updatedStations,
       currentPlayerIndex: 0,
       isGameOver: false,
-      message: "بدأت اللعبة! دور ${players[0].name}",
-      clearPendingLandingStation: true,
-      startTime: DateTime.now(),
-      totalTurns: 0,
-      isEndingTurn: false,
       settings: settings,
       remainingSeconds: initialSeconds,
+      turnRemainingSeconds: settings.turnTimerEnabled ? settings.turnTimerSeconds : 0,
+      currentCheckInterest: settings.checkInterestRate,
       logs: [
         GameLog(
           timestamp: DateTime.now(), 
@@ -146,10 +253,12 @@ class GameEngine extends Notifier<GameState> {
       ],
     );
 
-    if (initialSeconds != null) {
+    if (initialSeconds != null || settings.inflationEnabled) {
       _startGameDurationTimer();
     }
+    _saveState();
   }
+
 
   void _addLog(String message, {LogType type = LogType.info, int? playerIndex, double? amount}) {
     final log = GameLog(
@@ -170,6 +279,10 @@ class GameEngine extends Notifier<GameState> {
         return;
       }
 
+      int nextElapsed = state.elapsedSeconds + 1;
+      state = state.copyWith(elapsedSeconds: nextElapsed);
+
+
       if (state.remainingSeconds > 0) {
         state = state.copyWith(remainingSeconds: state.remainingSeconds - 1);
         if (state.remainingSeconds <= 0) {
@@ -177,75 +290,115 @@ class GameEngine extends Notifier<GameState> {
           endGame();
         }
       }
+
+      if (state.settings.inflationEnabled && nextElapsed > 0 && nextElapsed % (state.settings.inflationIntervalMinutes * 60) == 0) {
+        _applyInflation();
+      }
     });
   }
+
 
   void syncPlayers(List<String> currentNames) {
     if (state.players.isEmpty) return;
     
-    final existingPlayerNames = state.players.map((p) => p.name).toSet();
-    final newPlayersToAdd = <BankAlHazPlayer>[];
+    final namesToKeep = currentNames.toSet();
+    final List<BankAlHazPlayer> finalPlayers = [];
+    final existingPlayerNames = <String>{};
+    bool changed = false;
     
-    // Initial money from first player as fallback
-    double initialMoney = state.players.isNotEmpty ? state.players[0].money : 1000;
-    
-    int maxId = 0;
     for (var p in state.players) {
-       if (p.id > maxId) maxId = p.id;
+      // Keep AI regardless of namesToKeep if it was added manually? No, follow currentNames.
+      // Actually, let's keep the logic as is but handle AI specially in toggle.
+      if (namesToKeep.contains(p.name)) {
+        finalPlayers.add(p);
+        existingPlayerNames.add(p.name);
+      } else {
+        _reclaimProperties(p.id);
+        changed = true;
+        _addLog("تم استبعاد ${p.name} من اللعبة", type: LogType.info);
+      }
     }
+    
+    double initialMoney = state.settings.initialMoney;
+    int maxId = state.players.fold(0, (mx, p) => p.id > mx ? p.id : mx);
     
     for (var name in currentNames) {
       if (!existingPlayerNames.contains(name)) {
         maxId++;
-        newPlayersToAdd.add(BankAlHazPlayer(
+        finalPlayers.add(BankAlHazPlayer(
           id: maxId,
           name: name,
           money: initialMoney,
           currentPosition: 0,
         ));
+        changed = true;
+        _addLog("انضم ${name} إلى اللعبة", type: LogType.info);
       }
     }
     
-    if (newPlayersToAdd.isNotEmpty) {
-      state = state.copyWith(players: [...state.players, ...newPlayersToAdd]);
+    if (changed) {
+      int newCurrentIndex = state.currentPlayerIndex;
+      if (newCurrentIndex >= finalPlayers.length) {
+        newCurrentIndex = 0;
+      }
+      state = state.copyWith(players: finalPlayers, currentPlayerIndex: newCurrentIndex);
+      _saveState();
     }
   }
 
 
+
+  void _reclaimProperties(int playerId) {
+    final player = state.players.firstWhere((p) => p.id == playerId, orElse: () => const BankAlHazPlayer(id: -1, name: ''));
+    if (player.id == -1) return;
+    
+    final ownedIds = player.ownedStationIds.toSet();
+    if (ownedIds.isEmpty) return;
+
+    final updatedBoard = state.board.map((s) {
+      if (ownedIds.contains(s.id)) {
+        return s.copyWith(
+          buildings: s.buildings.map((b) => b.copyWith(isPurchased: false)).toList(),
+          hasTax: false,
+          taxAmount: 0,
+        );
+      }
+      return s;
+    }).toList();
+    
+    state = state.copyWith(board: updatedBoard);
+  }
+
   Future<void> rollDice() async {
     if (state.isGameOver || state.isMovingPlayer || state.isRollingDice || state.pendingLandingStation != null || state.isEndingTurn) return;
+    _turnTimer?.cancel();
 
-    _autoNextTurnTimer?.cancel();
-
-    // 1. Generate the final dice result once
     final int diceResult = _random.nextInt(6) + 1;
     final multiplier = state.players[state.currentPlayerIndex].nextDiceMultiplier;
     final int totalSteps = (diceResult * multiplier).toInt();
 
-    // 2. Trigger the dice animation — show spinning message, NOT the result yet
     state = state.copyWith(
       isRollingDice: true, 
       currentDiceValue: diceResult, 
       rollCounter: state.rollCounter + 1,
       message: "يرمي النرد...",
     );
+    _addLog("${state.players[state.currentPlayerIndex].name} يرمي النرد...", type: LogType.info, playerIndex: state.currentPlayerIndex);
     
-    // 3. Wait for the dice animation to complete
     await Future.delayed(const Duration(milliseconds: 1600));
 
-    // 4. NOW show the result after animation finishes
     state = state.copyWith(
       isRollingDice: false, 
       message: "لف النرد: $diceResult — تحرك $totalSteps خانات",
     );
+    _addLog("النتيجة: $diceResult (تحرك $totalSteps)", type: LogType.info, playerIndex: state.currentPlayerIndex);
     
-    // Clear multiplier for next turn
     if (multiplier != 1.0) {
       final updatedPlayers = [...state.players];
       updatedPlayers[state.currentPlayerIndex] = updatedPlayers[state.currentPlayerIndex].copyWith(nextDiceMultiplier: 1.0);
       state = state.copyWith(players: updatedPlayers);
     }
-
+    
     await _movePlayerSequentially(totalSteps);
   }
 
@@ -256,10 +409,13 @@ class GameEngine extends Notifier<GameState> {
     for (int i = 0; i < steps; i++) {
       final currentIdx = state.currentPlayerIndex;
       final currentPos = state.players[currentIdx].currentPosition;
-      int nextPos = (currentPos + 1) % state.board.length;
+      final int nextPos = (currentPos + 1) % state.board.length;
       final currentPlayer = state.players[currentIdx];
-      final updatedPlayers = [for (var p in state.players) p];
+      final List<BankAlHazPlayer> updatedPlayers = [for (var p in state.players) p];
       
+      final Station stationPassed = state.board[nextPos];
+      final bool isCity = stationPassed.type == StationType.property || stationPassed.type == StationType.question;
+
       if (nextPos == 0 && currentPos != 0) {
         updatedPlayers[currentIdx] = updatedPlayers[currentIdx].copyWith(
           currentPosition: nextPos,
@@ -271,22 +427,27 @@ class GameEngine extends Notifier<GameState> {
           totalTurns: state.totalTurns + 1,
           message: "مرت ${currentPlayer.name} بـ البداية! دورة جديدة +${state.settings.salaryPerLap} P",
         );
-        _addLog(
-          "${currentPlayer.name} أتم دورة وحصل على ${state.settings.salaryPerLap} P",
-          type: LogType.moneyAdd,
-          playerIndex: currentIdx,
-          amount: state.settings.salaryPerLap,
-        );
+        
+        if (state.settings.certificatesEnabled) {
+          _payoutCertificates(currentIdx, isPerCycle: true, isPerStation: true, isCityPassed: isCity);
+        }
+        _addLog("${currentPlayer.name} أتم دورة وحصل على ${state.settings.salaryPerLap} P", type: LogType.moneyAdd, playerIndex: currentIdx, amount: state.settings.salaryPerLap);
       } else {
-        updatedPlayers[currentIdx] = updatedPlayers[currentIdx].copyWith(
-          currentPosition: nextPos,
-        );
+        updatedPlayers[currentIdx] = updatedPlayers[currentIdx].copyWith(currentPosition: nextPos);
         state = state.copyWith(players: updatedPlayers);
+        if (state.settings.certificatesEnabled) {
+          _payoutCertificates(currentIdx, isPerStation: true, isCityPassed: isCity);
+        }
       }
       
-      // TAX LOGIC: If the station has tax and is owned by someone else
-      final stationPassed = state.board[nextPos];
-      if (stationPassed.hasTax && stationPassed.taxAmount > 0) {
+      bool applyTax = false;
+      if (state.settings.taxMode == BankAlHazTaxMode.all) {
+        applyTax = stationPassed.type != StationType.card && stationPassed.type != StationType.none;
+      } else if (state.settings.taxMode == BankAlHazTaxMode.custom) {
+        applyTax = stationPassed.hasTax && stationPassed.taxAmount > 0;
+      }
+
+      if (applyTax) {
         int? taxOwnerIdx;
         for (int j = 0; j < state.players.length; j++) {
           if (state.players[j].ownedStationIds.contains(stationPassed.id)) {
@@ -298,36 +459,22 @@ class GameEngine extends Notifier<GameState> {
           final taxAmt = stationPassed.taxAmount;
           final taxOwner = state.players[taxOwnerIdx];
           final pUpdated = [for (var p in state.players) p];
-          pUpdated[currentIdx] = pUpdated[currentIdx].copyWith(
-            money: pUpdated[currentIdx].money - taxAmt,
-          );
-          pUpdated[taxOwnerIdx] = pUpdated[taxOwnerIdx].copyWith(
-            money: pUpdated[taxOwnerIdx].money + taxAmt,
-          );
+          pUpdated[currentIdx] = pUpdated[currentIdx].copyWith(money: pUpdated[currentIdx].money - taxAmt);
+          pUpdated[taxOwnerIdx] = pUpdated[taxOwnerIdx].copyWith(money: pUpdated[taxOwnerIdx].money + taxAmt);
           state = state.copyWith(
             players: pUpdated,
             message: "${currentPlayer.name} دفع ضريبة ${taxAmt.toInt()} لـ ${taxOwner.name} (مرور بـ ${stationPassed.name})",
           );
-          _addLog(
-            "${currentPlayer.name} دفع ضريبة ${taxAmt.toInt()} لـ ${taxOwner.name} (مرور بـ ${stationPassed.name})",
-            type: LogType.moneyRemove,
-            playerIndex: currentIdx,
-            amount: taxAmt,
-          );
-          _addLog(
-            "${taxOwner.name} حصل على ضريبة ${taxAmt.toInt()} من ${currentPlayer.name}",
-            type: LogType.moneyAdd,
-            playerIndex: taxOwnerIdx,
-            amount: taxAmt,
-          );
+          _addLog("${currentPlayer.name} دفع ضريبة ${taxAmt.toInt()} لـ ${taxOwner.name} (مرور بـ ${stationPassed.name})", type: LogType.moneyRemove, playerIndex: currentIdx, amount: taxAmt);
+          _addLog("${taxOwner.name} حصل على ضريبة ${taxAmt.toInt()} من ${currentPlayer.name}", type: LogType.moneyAdd, playerIndex: taxOwnerIdx, amount: taxAmt);
         }
       }
-      
       await Future.delayed(const Duration(milliseconds: 350));
     }
     
     state = state.copyWith(isMovingPlayer: false);
     _handleLanding(state.players[state.currentPlayerIndex].currentPosition);
+    _saveState();
   }
 
   void _handleLanding(int position) {
@@ -335,23 +482,37 @@ class GameEngine extends Notifier<GameState> {
     final station = state.board[position];
     final currentPlayer = state.players[state.currentPlayerIndex];
     state = state.copyWith(pendingLandingStation: station, message: "${currentPlayer.name} وصل إلى ${station.name}");
-    
-    // Auto-resolve non-action stations like "Start" or empty paths
-    if (station.type == StationType.none) {
-       resolveLanding();
-    }
+    if (station.type == StationType.none) resolveLanding();
   }
 
-  Future<Question?> getRandomQuestion(int? categoryId) async {
-    if (categoryId == null) return null;
+  Future<Question?> getRandomQuestion(int? categoryId, {String? fallbackStationName}) async {
+    final qRepo = ref.read(questionRepositoryProvider);
+
+    int? targetId = categoryId;
+    
+    // Last resort fallback: if no current ID, try to re-link on the fly
+    if (targetId == null && fallbackStationName != null) {
+       final allCats = await qRepo.getCategories();
+       final normalizedStation = ArabicUtils.normalize(fallbackStationName);
+       final cleanStation = normalizedStation.replaceAll(' ', '').replaceAll('-', '').replaceAll(RegExp(r'\(.*\)'), '').replaceAll('(', '').replaceAll(')', '');
+       
+       for (var c in allCats) {
+          final normalizedCat = ArabicUtils.normalize(c.name);
+          final cleanCat = normalizedCat.replaceAll(' ', '').replaceAll('-', '').replaceAll(RegExp(r'\(.*\)'), '').replaceAll('(', '').replaceAll(')', '');
+          if (cleanCat == "${cleanStation}مالك" || cleanCat == "مالك${cleanStation}" || cleanCat == cleanStation) {
+             targetId = c.id;
+             break;
+          }
+       }
+    }
+
+    if (targetId == null) return null;
+
     try {
-      // MUST use the repository directly and await the result.
-      final repo = ref.read(questionRepositoryProvider);
-      final questions = await repo.getQuestions(categoryId);
+      final questions = await qRepo.getQuestions(targetId);
       if (questions.isEmpty) return null;
       return questions[_random.nextInt(questions.length)];
     } catch (e) {
-      print("Error getting question for category $categoryId: $e");
       return null;
     }
   }
@@ -371,580 +532,480 @@ class GameEngine extends Notifier<GameState> {
   void applyCardEffect(BankAlHazCard card) {
     final currentPlayer = state.players[state.currentPlayerIndex];
     BankAlHazPlayer updatedPlayer = currentPlayer;
-    final String pName = currentPlayer.name;
     String effectMsg = "";
 
     switch (card.effectType) {
       case CardEffectType.addMoney:
         updatedPlayer = currentPlayer.copyWith(money: currentPlayer.money + card.effectValue);
-        effectMsg = "مبروك $pName! حصلت على ${card.effectValue}";
-        _addLog("كارت ${card.title}: $pName حصل على ${card.effectValue} P", type: LogType.moneyAdd, playerIndex: state.currentPlayerIndex, amount: card.effectValue.toDouble());
+        effectMsg = "حصل على ${card.effectValue}";
+        _addLog("كارت ${card.title}: ${currentPlayer.name} حصل على ${card.effectValue} P", type: LogType.moneyAdd, playerIndex: state.currentPlayerIndex, amount: card.effectValue.toDouble());
         break;
       case CardEffectType.removeMoney:
         updatedPlayer = currentPlayer.copyWith(money: currentPlayer.money - card.effectValue);
-        effectMsg = "يا للهول $pName! خسرت ${card.effectValue}";
-        _addLog("كارت ${card.title}: $pName دفع ${card.effectValue} P", type: LogType.moneyRemove, playerIndex: state.currentPlayerIndex, amount: card.effectValue.toDouble());
+        effectMsg = "خسر ${card.effectValue}";
+        _addLog("كارت ${card.title}: ${currentPlayer.name} دفع ${card.effectValue} P", type: LogType.moneyRemove, playerIndex: state.currentPlayerIndex, amount: card.effectValue.toDouble());
         break;
       case CardEffectType.skipTurn:
         updatedPlayer = currentPlayer.copyWith(skipNextTurn: true);
-        effectMsg = "عذراً $pName، ستفقد دورك القادم";
+        effectMsg = "سيفقد دوره القادم";
         break;
       case CardEffectType.diceMultiplier:
         updatedPlayer = currentPlayer.copyWith(nextDiceMultiplier: card.effectValue.toDouble());
-        effectMsg = "$pName، مضاعف النرد القادم: ${card.effectValue}";
+        effectMsg = "مضاعف النرد القادم: ${card.effectValue}";
         break;
       case CardEffectType.moveSteps:
-        effectMsg = "تحرك ${card.effectValue} خطوات";
-        // Update message first, then move. Return early to avoid state overwrite.
-        state = state.copyWith(
-          clearPendingLandingStation: true,
-          message: "كارت ${card.title}: $pName $effectMsg",
-        );
+        state = state.copyWith(clearPendingLandingStation: true, message: "كارت ${card.title}: ${currentPlayer.name} تحرك ${card.effectValue} خطوات");
         _movePlayerSequentially(card.effectValue);
-        return; // ← CRITICAL: Don't let code below overwrite player position
+        return;
       case CardEffectType.moveToStation:
         final targetName = card.targetStationName?.trim() ?? "";
-        
-        // Find by name - being a bit more flexible with whitespace
         int targetIdx = state.board.indexWhere((s) => s.name.trim() == targetName);
-        
-        // If not found, try a more aggressive match (contains or similar)
         if (targetIdx == -1 && targetName.isNotEmpty) {
            targetIdx = state.board.indexWhere((s) => s.name.replaceAll('أ', 'ا').replaceAll('إ', 'ا').replaceAll('ة', 'ه').contains(targetName.replaceAll('أ', 'ا').replaceAll('إ', 'ا').replaceAll('ة', 'ه')));
         }
-        
         if (targetIdx != -1) {
-           final finalTarget = state.board[targetIdx];
-           int currentPos = state.players[state.currentPlayerIndex].currentPosition;
+           int currentPos = currentPlayer.currentPosition;
            int steps = (targetIdx - currentPos + state.board.length) % state.board.length;
-           
-           // Clear current landing state and update message
-           state = state.copyWith(
-             clearPendingLandingStation: true, 
-             message: "كارت ${card.title}: توجه إلى ${finalTarget.name}...",
-           );
-           
-           if (steps == 0) {
-             _handleLanding(targetIdx);
-           } else {
-             _movePlayerSequentially(steps);
-           }
+           state = state.copyWith(clearPendingLandingStation: true, message: "كارت ${card.title}: توجه إلى ${state.board[targetIdx].name}...");
+           if (steps == 0) _handleLanding(targetIdx); else _movePlayerSequentially(steps);
         } else {
-           state = state.copyWith(
-             clearPendingLandingStation: true,
-             message: "كارت ${card.title}: لم نجد وجهة '$targetName'!",
-           );
+           state = state.copyWith(clearPendingLandingStation: true, message: "كارت ${card.title}: لم تم العثور على وجهة!");
            _scheduleAutoNextTurn();
         }
-        return; // ← CRITICAL: Don't let code below overwrite player position
+        return;
     }
 
-    // Only non-movement effects reach here (addMoney, removeMoney, skipTurn, diceMultiplier)
     final updatedPlayers = [for (var p in state.players) p];
-    updatedPlayers[state.currentPlayerIndex] = updatedPlayer.copyWith(nextDiceMultiplier: updatedPlayer.nextDiceMultiplier);
-
-    state = state.copyWith(
-      players: updatedPlayers,
-      clearPendingLandingStation: true,
-      message: "كارت ${card.title}: $pName $effectMsg",
-      isEndingTurn: true,
-    );
-
-    _scheduleAutoNextTurn();
+    updatedPlayers[state.currentPlayerIndex] = updatedPlayer;
+    state = state.copyWith(players: updatedPlayers, clearPendingLandingStation: true, message: "كارت ${card.title}: ${currentPlayer.name} $effectMsg", isEndingTurn: true);
+    if (state.settings.bankruptcyEnabled && (card.effectType == CardEffectType.removeMoney) && updatedPlayers[state.currentPlayerIndex].money <= 0) {
+      if (_checkBankruptcy(state.currentPlayerIndex)) return;
+    }
+    
+       _scheduleAutoNextTurn();
   }
 
-  /// Cancels any pending auto-turn and advances immediately
   void forceNextTurn() {
-    _autoNextTurnTimer?.cancel();
+    _turnTimer?.cancel();
     nextTurn();
   }
 
   void resolveLanding({bool bought = false, bool correctlyAnsweredPasser = false, bool tookPasserQuestion = false, bool skipAutoNextTurn = false}) {
-    try {
-      if (state.pendingLandingStation == null) return;
-      final station = state.pendingLandingStation!;
-      int pIdx = state.currentPlayerIndex;
-      final currentPlayer = state.players[pIdx];
-      
-      int? ownerIdx;
-      for (int i = 0; i < state.players.length; i++) {
-        if (state.players[i].ownedStationIds.contains(station.id)) {
-          ownerIdx = i;
-          break;
-        }
+    if (state.pendingLandingStation == null) return;
+    final station = state.pendingLandingStation!;
+    int pIdx = state.currentPlayerIndex;
+    final currentPlayer = state.players[pIdx];
+    
+    int? ownerIdx;
+    for (int i = 0; i < state.players.length; i++) {
+      if (state.players[i].ownedStationIds.contains(station.id)) {
+        ownerIdx = i;
+        break;
       }
-
-      final updatedPlayers = [for (var p in state.players) p];
-      String resultMsg = "";
-
-      // Logic for Unbuyable Station (NPC/Character)
-      if (station.isUnbuyable) {
-        if (tookPasserQuestion && correctlyAnsweredPasser) {
-          updatedPlayers[pIdx] = currentPlayer.copyWith(money: currentPlayer.money + station.buyPrice);
-          resultMsg = "${currentPlayer.name} تحدى ${station.name} بنجاح! ربح ${station.buyPrice}";
-          _addLog("${currentPlayer.name} ربح التحدي مع ${station.name} وحصل على ${station.buyPrice} P", type: LogType.moneyAdd, playerIndex: pIdx, amount: station.buyPrice);
-        } else if (tookPasserQuestion && !correctlyAnsweredPasser) {
-          updatedPlayers[pIdx] = currentPlayer.copyWith(money: currentPlayer.money - station.baseRent);
-          resultMsg = "${currentPlayer.name} خسر التحدي مع ${station.name}! دفع غرامة ${station.baseRent}";
-          _addLog("${currentPlayer.name} خسر التحدي مع ${station.name} ودفع غرامة ${station.baseRent} P", type: LogType.moneyRemove, playerIndex: pIdx, amount: station.baseRent);
-        } else {
-          resultMsg = "${currentPlayer.name} مر بـ ${station.name} بسلام";
-        }
-      } else if (bought && station.id != null) {
-          if (currentPlayer.money < station.buyPrice) {
-             resultMsg = "لا تملك رصيداً كافياً لشراء ${station.name}"; 
-          } else {
-             updatedPlayers[pIdx] = currentPlayer.copyWith(
-               money: currentPlayer.money - station.buyPrice,
-               ownedStationIds: [...currentPlayer.ownedStationIds, station.id!],
-             );
-             resultMsg = "مبروك ${currentPlayer.name}! اشتريت ${station.name}";
-             _addLog("${currentPlayer.name} اشترى ${station.name} بـ ${station.buyPrice} P", type: LogType.purchase, playerIndex: pIdx, amount: station.buyPrice);
-          }
-      } else if (ownerIdx != null && ownerIdx != pIdx) {
-          final ownerName = state.players[ownerIdx].name;
-          double rent = station.baseRent > 0 ? station.baseRent : (station.buyPrice * 0.2);
-          
-          // ADD BUILDINGS RENT
-          for (var b in station.buildings) {
-            if (b.isPurchased) {
-              rent += b.additionalRent;
-            }
-          }
-          
-          if (tookPasserQuestion && correctlyAnsweredPasser) {
-            rent = (rent / 2).floorToDouble();
-            resultMsg = "إجابة صحيحة! ${currentPlayer.name} دفع نصف الإيجار ($rent) لـ ${ownerName}";
-          } else if (tookPasserQuestion && !correctlyAnsweredPasser) {
-            rent = rent.floorToDouble();
-            resultMsg = "إجابة خاطئة! ${currentPlayer.name} دفع الإيجار كاملاً ($rent) لـ ${ownerName}";
-          } else {
-            rent = rent.floorToDouble();
-            resultMsg = "${currentPlayer.name} دفع إيجار بقيمة ($rent) لـ ${ownerName}";
-          }
-
-          updatedPlayers[pIdx] = updatedPlayers[pIdx].copyWith(money: updatedPlayers[pIdx].money - rent);
-          updatedPlayers[ownerIdx] = updatedPlayers[ownerIdx].copyWith(money: updatedPlayers[ownerIdx].money + rent);
-          
-          if (updatedPlayers[pIdx].money < 0) {
-             _addLog("دخل في غرامة/مديونية بقيمة ${updatedPlayers[pIdx].money.abs().toInt()} P لـ ${state.players[ownerIdx].name}!", type: LogType.moneyRemove, playerIndex: pIdx, amount: rent);
-          }
-          
-          _addLog("${updatedPlayers[pIdx].name} دفع إيجار $rent لـ ${state.players[ownerIdx].name} في ${station.name}", type: LogType.moneyRemove, playerIndex: pIdx, amount: rent);
-          _addLog("${state.players[ownerIdx].name} حصل على إيجار $rent من ${state.players[pIdx].name} في ${station.name}", type: LogType.moneyAdd, playerIndex: ownerIdx, amount: rent);
-      } else if (ownerIdx == pIdx) {
-         resultMsg = "${currentPlayer.name} في مدينته ${station.name}";
-      } else {
-         resultMsg = station.type == StationType.none ? "" : "تم المرور بـ ${station.name} بواسطة ${currentPlayer.name}";
-      }
-
-      state = state.copyWith(
-        players: updatedPlayers,
-        clearPendingLandingStation: true,
-        message: resultMsg,
-        isEndingTurn: true, // IMPORTANT: Lock buttons until actual nextTurn()
-      );
-
-      // Check for bankruptcy if enabled
-      if (state.settings.bankruptcyEnabled && updatedPlayers[pIdx].money < 0) {
-         _checkBankruptcy(pIdx);
-      }
-
-      // Schedule auto-next-turn (cancels any existing timer first)
-      if (!skipAutoNextTurn) {
-        _scheduleAutoNextTurn();
-      }
-    } catch (e) {
-      print("Error in resolveLanding: $e");
-      state = state.copyWith(clearPendingLandingStation: true, message: "انتهى الموقف");
-      _scheduleAutoNextTurn();
     }
+
+    final updatedPlayers = [for (var p in state.players) p];
+    String resultMsg = "";
+    bool chargeLandingTax = false;
+    double taxAmtToCharge = 0;
+
+    if (state.settings.taxMode == BankAlHazTaxMode.all) {
+        if (station.type != StationType.card && station.type != StationType.none) {
+           chargeLandingTax = true;
+           taxAmtToCharge = station.taxAmount > 0 ? station.taxAmount : 50.0;
+        }
+    } else if (state.settings.taxMode == BankAlHazTaxMode.custom) {
+        if (station.hasTax && station.taxAmount > 0) {
+           chargeLandingTax = true;
+           taxAmtToCharge = station.taxAmount;
+        }
+    }
+
+    if (chargeLandingTax) {
+        updatedPlayers[pIdx] = updatedPlayers[pIdx].copyWith(money: updatedPlayers[pIdx].money - taxAmtToCharge);
+        _addLog("${currentPlayer.name} دفع ضرائب بقيمة ${taxAmtToCharge.toInt()} في ${station.name}", type: LogType.moneyRemove, playerIndex: pIdx, amount: taxAmtToCharge);
+        resultMsg = "${currentPlayer.name} دفع ضرائب بقيمة ${taxAmtToCharge.toInt()} في ${station.name}";
+    }
+
+    if (station.isUnbuyable) {
+      if (tookPasserQuestion && correctlyAnsweredPasser) {
+        updatedPlayers[pIdx] = currentPlayer.copyWith(money: currentPlayer.money + station.buyPrice);
+        resultMsg = "${currentPlayer.name} تحدى ${station.name} بنجاح! ربح ${station.buyPrice}";
+      } else if (tookPasserQuestion && !correctlyAnsweredPasser) {
+        updatedPlayers[pIdx] = currentPlayer.copyWith(money: currentPlayer.money - station.baseRent);
+        resultMsg = "${currentPlayer.name} خسر التحدي مع ${station.name}! دفع غرامة ${station.baseRent}";
+      } else resultMsg = "${currentPlayer.name} مر بـ ${station.name} بسلام";
+    } else if (bought && station.id != null) {
+        if (currentPlayer.money >= station.buyPrice) {
+           updatedPlayers[pIdx] = currentPlayer.copyWith(money: currentPlayer.money - station.buyPrice, ownedStationIds: [...currentPlayer.ownedStationIds, station.id!]);
+           resultMsg = "مبروك ${currentPlayer.name}! اشتريت ${station.name}";
+           _addLog("${currentPlayer.name} اشترى ${station.name} بـ ${station.buyPrice} P", type: LogType.purchase, playerIndex: pIdx, amount: station.buyPrice);
+        } else resultMsg = "لا تملك رصيداً كافياً لشراء ${station.name}";
+    } else if (ownerIdx != null && ownerIdx != pIdx) {
+        double rent = station.baseRent > 0 ? station.baseRent : (station.buyPrice * 0.2);
+        for (var b in station.buildings) if (b.isPurchased) rent += b.additionalRent;
+        if (tookPasserQuestion && correctlyAnsweredPasser) rent = (rent / 2).floorToDouble();
+        updatedPlayers[pIdx] = updatedPlayers[pIdx].copyWith(money: updatedPlayers[pIdx].money - rent);
+        updatedPlayers[ownerIdx] = updatedPlayers[ownerIdx].copyWith(money: updatedPlayers[ownerIdx].money + rent);
+        resultMsg = "${currentPlayer.name} دفع إيجار $rent لـ ${state.players[ownerIdx].name}";
+        _addLog("${currentPlayer.name} دفع إيجار $rent لـ ${state.players[ownerIdx].name} في ${station.name}", type: LogType.moneyRemove, playerIndex: pIdx, amount: rent);
+    } else if (ownerIdx == pIdx) {
+       resultMsg = "${currentPlayer.name} في مدينته ${station.name}";
+    } else resultMsg = "تم المرور بـ ${station.name}";
+
+    state = state.copyWith(players: updatedPlayers, clearPendingLandingStation: true, message: resultMsg, isEndingTurn: true);
+    if (state.settings.bankruptcyEnabled && updatedPlayers[pIdx].money <= 0) {
+       if (_checkBankruptcy(pIdx)) return;
+    }
+    
+    if (!skipAutoNextTurn) {
+        _scheduleAutoNextTurn();
+    }
+    _saveState();
   }
 
-  /// Centralized auto-next-turn with timer management.
-  /// Only ONE timer can be active at a time — prevents double nextTurn() calls.
   void _scheduleAutoNextTurn() {
-    _autoNextTurnTimer?.cancel();
-    _autoNextTurnTimer = Timer(const Duration(milliseconds: 300), () => nextTurn());
+    _turnTimer?.cancel();
+    _turnTimer = Timer(const Duration(milliseconds: 300), () => nextTurn());
   }
 
   void nextTurn() {
-    // Cancel any pending auto-advance timer (user clicked "إنها" manually)
-    _autoNextTurnTimer?.cancel();
-
+    _turnTimer?.cancel();
     if (state.isGameOver || state.isMovingPlayer || state.isRollingDice || state.pendingLandingStation != null) {
-       // Reset ending flag if blocked
        state = state.copyWith(isEndingTurn: false);
        return;
     }
 
-    // 1. Check Time-based ending
+    if (state.settings.loansEnabled) _processLoans();
+    
+    if (state.settings.bankruptcyEnabled) {
+      final player = state.players[state.currentPlayerIndex];
+      if (player.money <= 0) {
+        if (_checkBankruptcy(state.currentPlayerIndex)) return;
+        if (state.players[state.currentPlayerIndex].money <= 0) {
+          state = state.copyWith(message: "رصيد ${player.name} هو ${player.money.toInt()}! يجب بيع ممتلكاتك أولاً.", isEndingTurn: true);
+          return;
+        }
+      }
+    }
+
     if (state.settings.winCondition == WinningCondition.time && state.startTime != null) {
-      final elapsed = DateTime.now().difference(state.startTime!);
-      if (elapsed.inMinutes >= state.settings.maxTimeMinutes) {
-        state = state.copyWith(message: "انتهى الوقت لصالح ${state.players[state.currentPlayerIndex].name}!");
+      if (DateTime.now().difference(state.startTime!).inMinutes >= state.settings.maxTimeMinutes) {
         endGame();
         return;
       }
     }
 
-    // 2. Check Round-based ending logic
     if (state.settings.winCondition == WinningCondition.rounds) {
-       bool everyoneFinished = state.players.every((p) => p.lapsCompleted >= state.settings.maxRounds);
-       if (everyoneFinished) {
-         state = state.copyWith(message: "انتهت جميع الدورات!");
+       if (state.players.every((p) => p.lapsCompleted >= state.settings.maxRounds)) {
          endGame();
          return;
        }
     }
 
     int nextIndex = (state.currentPlayerIndex + 1) % state.players.length;
-    
-    // 3. Skip players who have finished their required rounds
     if (state.settings.winCondition == WinningCondition.rounds) {
-       int startIndex = nextIndex;
+       int start = nextIndex;
        while (state.players[nextIndex].lapsCompleted >= state.settings.maxRounds) {
          nextIndex = (nextIndex + 1) % state.players.length;
-         if (nextIndex == startIndex) {
-           // Everyone is finished (this should be caught by everyoneFinished above, but safety first)
-           endGame();
-           return;
-         }
+         if (nextIndex == start) { endGame(); return; }
        }
     }
 
     final nextPlayer = state.players[nextIndex];
-
     if (nextPlayer.skipNextTurn) {
-       final updatedNextPlayer = nextPlayer.copyWith(skipNextTurn: false);
        final updatedPlayers = [for (var p in state.players) p];
-       updatedPlayers[nextIndex] = updatedNextPlayer;
+       updatedPlayers[nextIndex] = nextPlayer.copyWith(skipNextTurn: false);
        state = state.copyWith(players: updatedPlayers, currentPlayerIndex: nextIndex, message: "تخطى ${nextPlayer.name} دوره", isEndingTurn: true);
-       // Deferred — NOT synchronous recursive call
-       _autoNextTurnTimer?.cancel();
-       _autoNextTurnTimer = Timer(const Duration(milliseconds: 500), () => nextTurn());
+       _turnTimer = Timer(const Duration(milliseconds: 500), () => nextTurn());
        return;
     }
 
     state = state.copyWith(
+      players: state.players,
       currentPlayerIndex: nextIndex,
-      currentDiceValue: 0, 
-      message: "دور ${state.players[nextIndex].name}",
       isEndingTurn: false,
+      message: "دور ${state.players[nextIndex].name}",
+      clearPendingLandingStation: true,
+      turnRemainingSeconds: state.settings.turnTimerEnabled ? state.settings.turnTimerSeconds : 0,
     );
+    
+    _saveState();
+    _startTurnTimer();
+  }
+
+  void _startTurnTimer() {
+    _turnTimer?.cancel();
+    if (!state.settings.turnTimerEnabled || state.isGameOver) return;
+
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (state.isGameOver) {
+        timer.cancel();
+        return;
+      }
+      
+      if (state.turnRemainingSeconds > 0) {
+        state = state.copyWith(turnRemainingSeconds: state.turnRemainingSeconds - 1);
+      } else {
+        timer.cancel();
+        _addLog("انتهى وقت الدور لـ ${state.players[state.currentPlayerIndex].name}", type: LogType.info);
+        forceNextTurn();
+      }
+    });
   }
 
   Future<void> buyBuilding(int stationId, int buildingIdx) async {
     final station = state.board.firstWhere((s) => s.id == stationId);
     if (buildingIdx >= station.buildings.length) return;
-    
     final building = station.buildings[buildingIdx];
     if (building.isPurchased) return;
     
-    final currentPlayer = state.players[state.currentPlayerIndex];
-    if (currentPlayer.money < building.buyPrice) {
-      state = state.copyWith(message: "ليس لديك بركة كافية لبناء ${building.name}");
+    final pIdx = state.players.indexWhere((p) => p.ownedStationIds.contains(stationId));
+    if (pIdx == -1) return;
+    
+    final owner = state.players[pIdx];
+    if (owner.money < building.buyPrice) {
+      state = state.copyWith(message: "ليس لدى ${owner.name} رصيد كافي לבناء ${building.name}");
       return;
     }
-
-    // Update building
     final updatedBuildings = [...station.buildings];
     updatedBuildings[buildingIdx] = updatedBuildings[buildingIdx].copyWith(isPurchased: true);
-    
-    // Update station in board
-    final updatedBoard = [...state.board];
-    final stationIdx = updatedBoard.indexWhere((s) => s.id == stationId);
-    updatedBoard[stationIdx] = updatedBoard[stationIdx].copyWith(buildings: updatedBuildings);
-    
-    // Update player money
+    final updatedBoard = state.board.map((s) => s.id == stationId ? s.copyWith(buildings: updatedBuildings) : s).toList();
     final updatedPlayers = [...state.players];
-    updatedPlayers[state.currentPlayerIndex] = currentPlayer.copyWith(
-      money: currentPlayer.money - building.buyPrice,
-    );
-    
-    state = state.copyWith(
-      board: updatedBoard,
-      players: updatedPlayers,
-      message: "${currentPlayer.name} بنى ${building.name} في ${station.name}!",
-    );
-    _addLog("${currentPlayer.name} بنى ${building.name} في ${station.name} بـ ${building.buyPrice} P", type: LogType.purchase, playerIndex: state.currentPlayerIndex, amount: building.buyPrice);
-    
-    // If we were in a landing state, we keep it so the user can see the result or build more
-    // unless you want to end turn. Usually building doesn't end turn in Monopoly.
+    updatedPlayers[pIdx] = owner.copyWith(money: owner.money - building.buyPrice);
+    state = state.copyWith(board: updatedBoard, players: updatedPlayers, message: "${owner.name} بنى ${building.name} في ${station.name}!");
+    _addLog("${owner.name} بنى ${building.name} في ${station.name} بـ ${building.buyPrice} P", type: LogType.purchase, playerIndex: pIdx, amount: building.buyPrice);
+    _saveState();
+  }
+
+  Future<void> lendToPlayer(int fromIdx, int toIdx, double amount) async {
+    if (amount <= 0 || fromIdx == toIdx) return;
+    final sender = state.players[fromIdx], receiver = state.players[toIdx];
+    final interestRate = state.currentCheckInterest;
+    final totalToDeduct = amount * (1 + interestRate);
+    if (sender.money < totalToDeduct) return;
+    final updatedPlayers = [...state.players];
+    updatedPlayers[fromIdx] = sender.copyWith(money: sender.money - totalToDeduct);
+    updatedPlayers[toIdx] = receiver.copyWith(money: receiver.money + amount);
+    state = state.copyWith(players: updatedPlayers, currentCheckInterest: state.currentCheckInterest + state.settings.checkInterestIncrement, message: "${sender.name} حول ${amount.toInt()} P لـ ${receiver.name}");
+    _addLog("${sender.name} حول ${amount.toInt()} P لـ ${receiver.name}", type: LogType.moneyRemove, playerIndex: fromIdx, amount: totalToDeduct);
+    _saveState();
+  }
+
+  void _payoutCertificates(int playerIndex, {bool isPerStation = false, bool isPerCycle = false, bool isCityPassed = true}) {
+    final player = state.players[playerIndex];
+    if (player.activeCertificates.isEmpty) return;
+    List<BankAlHazCertificate> updatedCerts = [];
+    double totalPayout = 0;
+    int cityCount = state.board.where((s) => s.type == StationType.property || s.type == StationType.question).length;
+    if (cityCount == 0) cityCount = 12;
+
+    for (var cert in player.activeCertificates) {
+      double payout = 0;
+      int newCycles = cert.cyclesCompleted;
+      if (isPerCycle) {
+        newCycles++;
+        if (state.settings.certificatePayoutMode == CertificatePayoutMode.perCycle) payout += cert.principal * (1 + cert.interestRate);
+      }
+      if (isPerStation && isCityPassed && state.settings.certificatePayoutMode == CertificatePayoutMode.perStation) {
+        payout += (cert.principal * (1 + cert.interestRate)) / cityCount;
+      }
+      totalPayout += payout;
+      if (isPerCycle && newCycles >= cert.totalCycles) {
+        totalPayout += cert.principal;
+      } else {
+        updatedCerts.add(cert.copyWith(cyclesCompleted: newCycles));
+      }
+    }
+    if (totalPayout > 0) {
+      final newPlayers = [for (var p in state.players) p];
+      newPlayers[playerIndex] = player.copyWith(money: player.money + totalPayout, activeCertificates: updatedCerts);
+      state = state.copyWith(players: newPlayers);
+      _addLog("فائدة الشهادات لـ ${player.name}: ${totalPayout.toInt()} P", type: LogType.moneyAdd, playerIndex: playerIndex, amount: totalPayout);
+    }
+  }
+
+  void _applyInflation() {
+    final multiplier = 1.0 + state.settings.inflationRate;
+    final newBoard = state.board.map((s) => s.id == null ? s : s.copyWith(
+      buyPrice: s.buyPrice * multiplier, baseRent: s.baseRent * multiplier,
+      buildings: s.buildings.map((b) => b.copyWith(buyPrice: b.buyPrice * multiplier, additionalRent: b.additionalRent * multiplier)).toList(),
+    )).toList();
+    state = state.copyWith(board: newBoard, settings: state.settings.copyWith(loanInterestRate: state.settings.loanInterestRate * multiplier, salaryPerLap: state.settings.salaryPerLap * multiplier), message: "⚠️ تضخم! ارتفعت الأسعار!");
+    _saveState();
+  }
+
+  void buyCertificate(double amount) {
+    final player = state.players[state.currentPlayerIndex];
+    if (player.money < amount) return;
+    final newCert = BankAlHazCertificate(principal: amount, interestRate: state.settings.certificateInterestRate, totalCycles: state.settings.certificateCycles, purchaseTime: DateTime.now());
+    final newPlayers = [for (var p in state.players) p];
+    newPlayers[state.currentPlayerIndex] = player.copyWith(money: player.money - amount, activeCertificates: [...player.activeCertificates, newCert]);
+    state = state.copyWith(players: newPlayers, message: "تم شراء شهادة بمبلغ ${amount.toInt()} P");
+    _saveState();
   }
 
   Future<void> sellStation(int stationId) async {
-    final station = state.board.firstWhere((s) => s.id == stationId);
-    final pIdx = state.currentPlayerIndex;
-    final player = state.players[pIdx];
-    
-    if (!player.ownedStationIds.contains(stationId)) return;
-    
-    // Calculate half price for everything
-    double totalValue = station.buyPrice;
-    for (var b in station.buildings) {
-       if (b.isPurchased) totalValue += b.buyPrice;
-    }
-    
-    double sellPrice = (totalValue / 2).floorToDouble();
-    
-    // Update player
+    final sIdx = state.board.indexWhere((s) => s.id == stationId);
+    if (sIdx == -1) return;
+    final station = state.board[sIdx];
+    final pIdx = state.players.indexWhere((p) => p.ownedStationIds.contains(stationId));
+    if (pIdx == -1) return;
+    double val = station.buyPrice;
+    for (var b in station.buildings) if (b.isPurchased) val += b.buyPrice;
+    double price = val / 2;
     final updatedPlayers = [...state.players];
-    final updatedOwned = [...player.ownedStationIds]..remove(stationId);
-    updatedPlayers[pIdx] = player.copyWith(
-      money: player.money + sellPrice,
-      ownedStationIds: updatedOwned,
-    );
-    
-    // Reset station in board
+    updatedPlayers[pIdx] = updatedPlayers[pIdx].copyWith(money: updatedPlayers[pIdx].money + price, ownedStationIds: updatedPlayers[pIdx].ownedStationIds.where((id) => id != stationId).toList());
     final updatedBoard = [...state.board];
-    final sIdx = updatedBoard.indexWhere((s) => s.id == stationId);
-    updatedBoard[sIdx] = updatedBoard[sIdx].copyWith(
-      buildings: updatedBoard[sIdx].buildings.map((b) => b.copyWith(isPurchased: false)).toList(),
-      hasTax: false,
-      taxAmount: 0,
-    );
-    
+    updatedBoard[sIdx] = updatedBoard[sIdx].copyWith(buildings: updatedBoard[sIdx].buildings.map((b) => b.copyWith(isPurchased: false)).toList(), hasTax: false);
     state = state.copyWith(players: updatedPlayers, board: updatedBoard);
-    _addLog("${player.name} باع ${station.name} وجميع مبانيها للبنك بنصف الثمن ($sellPrice P)", type: LogType.moneyAdd, playerIndex: pIdx, amount: sellPrice);
+    _saveState();
   }
 
-  void toggleTax(int stationId, bool enabled) {
-    final updatedBoard = state.board.map((s) {
-      if (s.id == stationId) {
-        return s.copyWith(hasTax: enabled);
-      }
-      return s;
-    }).toList();
+  void toggleStationTax(int stationId) {
+    final updatedBoard = state.board.map((s) => s.id == stationId ? s.copyWith(hasTax: !s.hasTax, taxAmount: !s.hasTax ? (s.buyPrice * 0.15) : 0) : s).toList();
     state = state.copyWith(board: updatedBoard);
-    _addLog("${enabled ? 'تفعيل' : 'إلغاء'} الضريبة على ${state.board.firstWhere((s) => s.id == stationId).name}", type: LogType.info);
-  }
-
-  void setTaxAmount(int stationId, double amount) {
-    final updatedBoard = [...state.board];
-    final idx = updatedBoard.indexWhere((s) => s.id == stationId);
-    if (idx != -1) {
-      final station = updatedBoard[idx];
-      // Max tax: 25% of buy price
-      final maxTax = station.buyPrice * 0.25;
-      final finalAmount = amount > maxTax ? maxTax : amount;
-      
-      updatedBoard[idx] = updatedBoard[idx].copyWith(taxAmount: finalAmount);
-      state = state.copyWith(board: updatedBoard);
-    }
+    _saveState();
   }
 
   Future<void> endGame() async {
-    _autoNextTurnTimer?.cancel();
+    _turnTimer?.cancel();
     _gameDurationTimer?.cancel();
     if (state.players.isEmpty) return;
-
-    // Find winner by total assets (money + owned station prices)
-    BankAlHazPlayer? winner;
-    double maxAssets = -1;
-
-    for (var p in state.players) {
-      double score = 0;
-      
-      switch (state.settings.winCriteria) {
-        case WinCriteria.moneyOnly:
-          score = p.money;
-          break;
-        case WinCriteria.moneyAndStations:
-          double stationValue = 0;
-          for (var sid in p.ownedStationIds) {
-            final s = state.board.firstWhere((st) => st.id == sid);
-            stationValue += s.buyPrice;
-          }
-          score = p.money + stationValue;
-          break;
-        case WinCriteria.cumulativeValue:
-          double totalValue = 0;
-          for (var sid in p.ownedStationIds) {
-            final s = state.board.firstWhere((st) => st.id == sid);
-            totalValue += s.buyPrice;
-            for (var b in s.buildings) {
-               if (b.isPurchased) totalValue += b.buyPrice;
-            }
-          }
-          score = p.money + totalValue;
-          break;
+    double maxScore = -1;
+    List<int> winners = [];
+    for (int i = 0; i < state.players.length; i++) {
+      double score = state.players[i].money;
+      if (state.settings.winCriteria != WinCriteria.moneyOnly) {
+         for (var sid in state.players[i].ownedStationIds) {
+           final s = state.board.firstWhere((st) => st.id == sid);
+           score += s.buyPrice;
+           if (state.settings.winCriteria == WinCriteria.cumulativeValue) for (var b in s.buildings) if (b.isPurchased) score += b.buyPrice;
+         }
       }
-
-      if (score > maxAssets) {
-        maxAssets = score;
-        winner = p;
-      }
+      if (score > maxScore) { maxScore = score; winners = [i]; } else if (score == maxScore) winners.add(i);
     }
-
-    if (winner != null) {
-      int winnerIdx = state.players.indexOf(winner);
-      state = state.copyWith(
-        isGameOver: true, 
-        winnerIndex: winnerIdx,
-        message: "انتهت اللعبة! الفائز هو ${winner.name} بإجمالي ثروة $maxAssets",
-      );
-      
-      // Award winner points
+    if (winners.isNotEmpty) {
+      state = state.copyWith(isGameOver: true, winnerIndex: winners.length == 1 ? winners.first : null, message: "انتهت اللعبة! الفائز بـ ${maxScore.toInt()} P");
       final teams = await ref.read(teamsListProvider.future);
-      final winningTeam = teams.firstWhere((t) => t.name == winner!.name, orElse: () => teams.first);
-      
-      final winPoints = state.settings.winPoints;
-      
-      await ref.read(teamsListProvider.notifier).updateScore(winningTeam.id!, winPoints, reason: 'فوز في بنك الحظ');
+      for (int wIdx in winners) {
+        final winner = state.players[wIdx];
+        final team = teams.firstWhere((t) => t.name == winner.name, orElse: () => teams.first);
+        if (team.id != null) await ref.read(teamsListProvider.notifier).updateScore(team.id!, state.settings.winPoints);
+      }
     }
+    clearSavedGame();
   }
 
-  void _checkBankruptcy(int playerIdx) {
-    if (playerIdx >= state.players.length) return;
-    final player = state.players[playerIdx];
-    if (player.money >= 0) return;
-    
-    // Check if they have ANYTHING to sell
-    if (player.ownedStationIds.isEmpty) {
-        // Bankrupt!
-        _addLog("${player.name} أفلس وخرج من اللعبة!", type: LogType.info, playerIndex: playerIdx);
-        
-        final updatedPlayers = state.players.where((p) => p.id != player.id).toList();
-        
-        // Return properties to bank is complex since we don't track which station was whose easily here, 
-        // but wait, player.ownedStationIds has them.
-        final updatedBoard = state.board.map((s) {
-          if (player.ownedStationIds.contains(s.id)) {
-              return s.copyWith(
-                buildings: s.buildings.map((b) => b.copyWith(isPurchased: false)).toList(),
-                hasTax: false,
-                taxAmount: 0,
-              );
-          }
-          return s;
-        }).toList();
-        
-        state = state.copyWith(players: updatedPlayers, board: updatedBoard, message: "أفلس ${player.name}!");
-        
-        if (updatedPlayers.length <= 1) {
-            endGame();
-        }
-    } else {
-       state = state.copyWith(message: "${player.name} عليه ديون! يجب بيع بعض الممتلكات.");
-    }
+  bool _checkBankruptcy(int pIdx) {
+    final p = state.players[pIdx];
+    if (p.money > 0) return false;
+    if (p.ownedStationIds.isEmpty) { _eliminatePlayer(pIdx); return true; }
+    state = state.copyWith(message: "رصيد ${p.name} سالب! يجب بيع الممتلكات.");
+    return false;
+  }
+
+  void _eliminatePlayer(int pIdx) {
+    final p = state.players[pIdx];
+    final newBoard = state.board.map((s) => p.ownedStationIds.contains(s.id) ? s.copyWith(buildings: s.buildings.map((b) => b.copyWith(isPurchased: false)).toList(), hasTax: false) : s).toList();
+    final newPlayers = state.players.where((pl) => pl.id != p.id).toList();
+    state = state.copyWith(players: newPlayers, board: newBoard, message: "خرج ${p.name} من اللعبة!");
+    if (newPlayers.length <= 1) endGame(); else nextTurn();
+  }
+
+  void addGameLog(String message, {LogType type = LogType.info, int? playerIndex, double? amount}) {
+    final newLog = GameLog(
+      timestamp: DateTime.now(),
+      message: message,
+      type: type,
+      playerIndex: playerIndex,
+      amount: amount,
+    );
+    state = state.copyWith(logs: [newLog, ...state.logs]);
+    _saveState();
   }
 
   void restartGame() {
     if (state.players.isEmpty) return;
-    final names = state.players.map((p) => p.name).toList();
-    final settings = state.settings;
-    initGame(names, settings);
+    initGame(state.players.map((p) => p.name).toList(), state.settings);
   }
 
-  Future<void> sellStationToPlayer(int stationId, int buyerIndex, double price) async {
-    if (buyerIndex < 0 || buyerIndex >= state.players.length) return;
-    
-    final station = state.board.firstWhere((s) => s.id == stationId);
-    final sellerIndex = state.players.indexWhere((p) => p.ownedStationIds.contains(stationId));
-    if (sellerIndex == -1) return;
-    
-    final seller = state.players[sellerIndex];
-    final buyer = state.players[buyerIndex];
-    
-    if (buyer.money < price) {
-       _addLog("فشل البيع: ${buyer.name} لا يملك رصيد كافي", type: LogType.info);
-       return;
-    }
-
-    final updatedPlayers = state.players.map((p) {
-      if (p.id == seller.id) {
-        return p.copyWith(
-          money: p.money + price,
-          ownedStationIds: p.ownedStationIds.where((id) => id != stationId).toList(),
-        );
-      }
-      if (p.id == buyer.id) {
-        return p.copyWith(
-          money: p.money - price,
-          ownedStationIds: [...p.ownedStationIds, stationId],
-        );
-      }
+  Future<void> sellStationToPlayer(int sId, int bIdx, double price) async {
+    final sIdx = state.players.indexWhere((p) => p.ownedStationIds.contains(sId));
+    if (sIdx == -1 || bIdx == -1 || state.players[bIdx].money < price) return;
+    final newPlayers = state.players.map((p) {
+      if (state.players.indexOf(p) == sIdx) return p.copyWith(money: p.money + price, ownedStationIds: p.ownedStationIds.where((id) => id != sId).toList());
+      if (state.players.indexOf(p) == bIdx) return p.copyWith(money: p.money - price, ownedStationIds: [...p.ownedStationIds, sId]);
       return p;
     }).toList();
-    
-    _addLog("${seller.name} باع ${station.name} لـ ${buyer.name} مقابل ${price.toInt()} P", type: LogType.purchase, playerIndex: buyerIndex);
-    state = state.copyWith(players: updatedPlayers);
+    state = state.copyWith(players: newPlayers);
+    _saveState();
   }
 
-  void sellStationToBank(int stationId) {
-    final station = state.board.firstWhere((s) => s.id == stationId);
-    final sellerIndex = state.players.indexWhere((p) => p.ownedStationIds.contains(stationId));
-    if (sellerIndex == -1) return;
-
-    final seller = state.players[sellerIndex];
-    double backAmount = station.buyPrice / 2;
-    for (var b in station.buildings) if (b.isPurchased) backAmount += b.buyPrice / 2;
-
-    final updatedPlayers = [...state.players];
-    updatedPlayers[sellerIndex] = updatedPlayers[sellerIndex].copyWith(
-      money: updatedPlayers[sellerIndex].money + backAmount,
-      ownedStationIds: updatedPlayers[sellerIndex].ownedStationIds.where((id) => id != stationId).toList(),
-    );
-
-    final updatedBoard = state.board.map((s) {
-      if (s.id == stationId) {
-        return s.copyWith(
-          buildings: s.buildings.map((b) => b.copyWith(isPurchased: false)).toList(),
-          hasTax: false,
-          taxAmount: 0,
-        );
-      }
-      return s;
-    }).toList();
-
-    _addLog("${seller.name} باع ${station.name} للبنك مقابل ${backAmount.toInt()} P", type: LogType.moneyAdd, playerIndex: sellerIndex, amount: backAmount);
-    state = state.copyWith(players: updatedPlayers, board: updatedBoard);
+  void sellStationToBank(int sId, [double? price]) {
+    final sIdx = state.players.indexWhere((p) => p.ownedStationIds.contains(sId));
+    if (sIdx == -1) return;
+    final station = state.board.firstWhere((s) => s.id == sId);
+    double amt = price ?? (station.buyPrice / 2);
+    if (price == null) for (var b in station.buildings) if (b.isPurchased) amt += b.buyPrice / 2;
+    final newPlayers = [...state.players];
+    newPlayers[sIdx] = newPlayers[sIdx].copyWith(money: newPlayers[sIdx].money + amt, ownedStationIds: newPlayers[sIdx].ownedStationIds.where((id) => id != sId).toList());
+    final newBoard = state.board.map((s) => s.id == sId ? s.copyWith(buildings: s.buildings.map((b) => b.copyWith(isPurchased: false)).toList(), hasTax: false) : s).toList();
+    state = state.copyWith(players: newPlayers, board: newBoard);
+    _checkBankruptcy(sIdx);
+    _saveState();
   }
 
-  void toggleStationTax(int stationId) {
-    final updatedBoard = state.board.map((s) {
-      if (s.id == stationId) {
-        final newTax = !s.hasTax;
-        return s.copyWith(
-          hasTax: newTax,
-          taxAmount: newTax ? (s.buyPrice * 0.15).clamp(50, 1000).toDouble() : 0,
-        );
-      }
-      return s;
-    }).toList();
-
-    final stationName = state.board.firstWhere((s) => s.id == stationId).name;
-    final isTaxOn = updatedBoard.firstWhere((s) => s.id == stationId).hasTax;
-    _addLog("تغيير حالة الضريبة في $stationName إلى ${isTaxOn ? 'مفعلة' : 'معطلة'}");
-    state = state.copyWith(board: updatedBoard);
+  Future<void> takeLoan(double amt, int dur) async {
+    final player = state.players[state.currentPlayerIndex];
+    final loan = Loan(amountBorrowed: amt, amountToRepay: amt * (1 + state.settings.loanInterestRate), remainingTurns: dur, startTurn: state.totalTurns);
+    final newPlayers = [...state.players];
+    newPlayers[state.currentPlayerIndex] = player.copyWith(money: player.money + amt, activeLoans: [...player.activeLoans, loan]);
+    state = state.copyWith(players: newPlayers);
+    _saveState();
   }
 
-  void addUpgradeToStation(int stationId, String buildingName) {
-    final station = state.board.firstWhere((s) => s.id == stationId);
-    final ownerIdx = state.players.indexWhere((p) => p.ownedStationIds.contains(stationId));
-    if (ownerIdx == -1) return;
-
-    final building = station.buildings.firstWhere((b) => b.name == buildingName);
-    if (state.players[ownerIdx].money < building.buyPrice) return;
-
-    final updatedBoard = state.board.map((s) {
-      if (s.id == stationId) {
-        return s.copyWith(
-          buildings: s.buildings.map((b) => b.name == buildingName ? b.copyWith(isPurchased: true) : b).toList(),
-        );
-      }
-      return s;
-    }).toList();
-
-    final updatedPlayers = [...state.players];
-    updatedPlayers[ownerIdx] = updatedPlayers[ownerIdx].copyWith(
-      money: updatedPlayers[ownerIdx].money - building.buyPrice,
-    );
-
-    _addLog("${state.players[ownerIdx].name} بنى $buildingName في ${station.name}", type: LogType.moneyRemove, playerIndex: ownerIdx, amount: building.buyPrice);
-    state = state.copyWith(board: updatedBoard, players: updatedPlayers);
+  void repayLoan(int idx) {
+    final p = state.players[state.currentPlayerIndex];
+    final loan = p.activeLoans[idx];
+    if (p.money < loan.amountToRepay) return;
+    final newLoans = [...p.activeLoans]..removeAt(idx);
+    final newPlayers = [...state.players];
+    newPlayers[state.currentPlayerIndex] = p.copyWith(money: p.money - loan.amountToRepay, activeLoans: newLoans);
+    state = state.copyWith(players: newPlayers);
+    _saveState();
   }
+
+  void _processLoans() {
+    final p = state.players[state.currentPlayerIndex];
+    if (p.activeLoans.isEmpty) return;
+    final newLoans = <Loan>[];
+    double total = 0;
+    bool expired = false;
+    for (var l in p.activeLoans) {
+      if (l.remainingTurns <= 1) { total += l.amountToRepay; expired = true; }
+      else newLoans.add(l.copyWith(remainingTurns: l.remainingTurns - 1));
+    }
+    if (expired) {
+      final newPlayers = [...state.players];
+      newPlayers[state.currentPlayerIndex] = p.copyWith(money: p.money - total, activeLoans: newLoans);
+      state = state.copyWith(players: newPlayers);
+      _checkBankruptcy(state.currentPlayerIndex);
+    } else {
+      final newPlayers = [...state.players];
+      newPlayers[state.currentPlayerIndex] = p.copyWith(activeLoans: newLoans);
+      state = state.copyWith(players: newPlayers);
+    }
+  }
+
+  Future<void> saveCurrentSetupAsTemplate(String name) async {
+    final repo = ref.read(bankAlHazRepositoryProvider);
+    final id = await repo.saveTemplate(BankAlHazTemplate(name: name));
+    await repo.deleteAllStations(templateId: id);
+    for (var s in state.board) await repo.addStation(s.copyWith(buildings: s.buildings.map((b) => b.copyWith(isPurchased: false)).toList(), hasTax: false), templateId: id);
+    ref.invalidate(templatesProvider);
+  }
+
 }
 
 final gameEngineProvider = NotifierProvider<GameEngine, GameState>(GameEngine.new);

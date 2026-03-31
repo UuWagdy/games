@@ -25,6 +25,11 @@ class CardManagementPage extends ConsumerWidget {
               title: Text('إدارة الكروت', style: AppDesign.titleStyle.copyWith(fontSize: 22)),
               actions: [
                 IconButton(
+                  tooltip: 'حفظ كمجموعة (قالب)',
+                  icon: const Icon(Icons.save_as, color: Colors.cyanAccent),
+                  onPressed: () => _showSaveAsTemplateDialog(context, ref),
+                ),
+                IconButton(
                   icon: const Icon(Icons.add_circle, color: Colors.amberAccent, size: 30),
                   onPressed: () => _showCardDialog(context, ref),
                 ),
@@ -125,6 +130,7 @@ class CardManagementPage extends ConsumerWidget {
     CardEffectType selectedType = card?.effectType ?? CardEffectType.addMoney;
     String? targetStation = card?.targetStationName;
     Uint8List? pickedImageData = card?.imageData;
+    String selectedCardType = card?.type ?? 'chance';
 
     showDialog(
       context: context,
@@ -257,6 +263,25 @@ class CardManagementPage extends ConsumerWidget {
                     ),
                   ],
                   const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedCardType,
+                    decoration: InputDecoration(
+                      labelText: 'جهة الإضافة (المكان)',
+                      prefixIcon: const Icon(Icons.location_on_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    items: const [
+                       DropdownMenuItem(value: 'chance', child: Text('حظك اليوم')),
+                       DropdownMenuItem(value: 'chest', child: Text('المحكمة')),
+                    ],
+
+                    onChanged: (val) {
+                       setState(() => selectedCardType = val!);
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   // Image Picker Section
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -327,6 +352,7 @@ class CardManagementPage extends ConsumerWidget {
                   id: card?.id,
                   title: titleController.text,
                   description: descController.text,
+                  type: selectedCardType,
                   effectType: selectedType,
                   effectValue: int.tryParse(valueController.text) ?? 0,
                   targetStationName: targetStation,
@@ -339,6 +365,7 @@ class CardManagementPage extends ConsumerWidget {
               child: const Text('حفظ'),
             ),
           ],
+
         ),
       ),
     );
@@ -379,6 +406,73 @@ class CardManagementPage extends ConsumerWidget {
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text('حذف', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSaveAsTemplateDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('حفظ كمجموعة (قالب) جديد', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'اسم القالب الجديد',
+            labelStyle: TextStyle(color: Colors.white60),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                final repo = ref.read(bankAlHazRepositoryProvider);
+                final settings = await ref.read(gameSettingsProvider.future);
+                final currentId = settings.activeTemplateId ?? 1;
+                
+                final newId = await repo.duplicateTemplate(currentId, controller.text);
+                ref.invalidate(templatesProvider);
+                
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  _showSwitchPrompt(context, ref, controller.text, newId);
+                }
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSwitchPrompt(BuildContext context, WidgetRef ref, String name, int id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('تم الحفظ بنجاح', style: TextStyle(color: Colors.white)),
+        content: Text('تم حفظ القالب "$name". هل تريد تفعيله الآن ليكون هو القالب النشط في اللعبة؟', style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('لاحقاً')),
+          ElevatedButton(
+            onPressed: () async {
+              final repo = ref.read(bankAlHazRepositoryProvider);
+              final settings = await repo.getSettings();
+              await repo.saveSettings(settings.copyWith(activeTemplateId: id));
+              ref.invalidate(gameSettingsProvider);
+              ref.invalidate(stationsProvider);
+              ref.invalidate(cardsProvider);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('تفعيل الآن'),
           ),
         ],
       ),

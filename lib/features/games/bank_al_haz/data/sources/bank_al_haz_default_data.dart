@@ -39,69 +39,75 @@ class BankAlHazDefaultData {
         );
         await txn.delete('bah_buildings');
       }
-      // 2. Create Categories & Questions
-      final jerusalemOldCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "أورشليم (القديم)",
-        _jerusalemOldQuestions,
-      );
-      final jerusalemNewCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "أورشليم (الجديد)",
-        _jerusalemNewQuestions,
-      );
-      final babelCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "بابل",
-        _babelQuestions,
-      );
-      final egyptCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "مصر",
-        _egyptQuestions,
-      );
-      final jerichoCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "أريحا",
-        _jerichoQuestions,
-      );
-      final bethlehemCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "بيت لحم",
-        _bethlehemQuestions,
-      );
-      final nazarethCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "الناصرة",
-        _nazarethQuestions,
-      );
-      final capernaumCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "كفرناحوم",
-        _capernaumQuestions,
-      );
-      final bethanyCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "بيت عنيا",
-        _bethanyQuestions,
-      );
-      final damascusCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "دمشق",
-        _damascusQuestions,
-      );
-      final antiochCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "أنطاكية",
-        _antiochQuestions,
-      );
-      final romeCat = await _txnCreateCategoryAndQuestions(
-        txn,
-        "روما",
-        _romeQuestions,
-      );
 
-      // 3. Add Stations
+      // 3. Create/Link Categories (Owner/Passerby)
+      // We look for existing categories first to avoid duplicates
+      Future<int?> findOrLinkCategory(String name, List<Map<String, String>> defaultData) async {
+        // Try exact match
+        final existing = await txn.query('categories', where: 'name = ?', whereArgs: [name], limit: 1);
+        if (existing.isNotEmpty) return existing.first['id'] as int;
+        
+        // Try base name match (e.g. "أريحا" instead of "أريحا - مالك")
+        final baseName = name.split(' - ').first;
+        final baseMatch = await txn.query('categories', where: 'name = ?', whereArgs: [baseName], limit: 1);
+        if (baseMatch.isNotEmpty) return baseMatch.first['id'] as int;
+
+        // If no default data and no existing match, return null to avoid creating empty categories
+        if (defaultData.isEmpty) return null;
+
+        // Otherwise create it
+        return await _txnCreateCategoryAndQuestions(txn, name, defaultData);
+      }
+
+      // Old Testament Cities
+      final jerusalemOldOwner = await findOrLinkCategory("أورشليم (ق) - مالك", _jerusalemOldQuestions);
+      final jerusalemOldPasser = await findOrLinkCategory("أورشليم (ق) - عابر", _jerusalemOldQuestions);
+      
+      final babelOwner = await findOrLinkCategory("بابل - مالك", _babelQuestions);
+      final babelPasser = await findOrLinkCategory("بابل - عابر", _babelQuestions);
+      
+      final egyptOwner = await findOrLinkCategory("مصر - مالك", _egyptQuestions);
+      final egyptPasser = await findOrLinkCategory("مصر - عابر", _egyptQuestions);
+      
+      final jerichoOwner = await findOrLinkCategory("أريحا - مالك", _jerichoQuestions);
+      final jerichoPasser = await findOrLinkCategory("أريحا - عابر", _jerichoQuestions);
+      
+      final hebronOwner = await findOrLinkCategory("حبرون - مالك", _hebronQuestions);
+      final hebronPasser = await findOrLinkCategory("حبرون - عابر", _hebronQuestions);
+      
+      final sodomOwner = await findOrLinkCategory("سدوم وعمورة - مالك", _sodomQuestions);
+      final sodomPasser = await findOrLinkCategory("سدوم وعمورة - عابر", _sodomQuestions);
+      
+      final beitElOwner = await findOrLinkCategory("بيت إيل - مالك", _beitElQuestions);
+      final beitElPasser = await findOrLinkCategory("بيت إيل - عابر", _beitElQuestions);
+
+      // New Testament Cities
+      final jerusalemNewOwner = await findOrLinkCategory("أورشليم (ج) - مالك", _jerusalemNewQuestions);
+      final jerusalemNewPasser = await findOrLinkCategory("أورشليم (ج) - عابر", _jerusalemNewQuestions);
+
+      final bethlehemOwner = await findOrLinkCategory("بيت لحم - مالك", _bethlehemQuestions);
+      final bethlehemPasser = await findOrLinkCategory("بيت لحم - عابر", _bethlehemQuestions);
+
+      final nazarethOwner = await findOrLinkCategory("الناصرة - مالك", _nazarethQuestions);
+      final nazarethPasser = await findOrLinkCategory("الناصرة - عابر", _nazarethQuestions);
+
+      final capernaumOwner = await findOrLinkCategory("كفرناحوم - مالك", _capernaumQuestions);
+      final capernaumPasser = await findOrLinkCategory("كفرناحوم - عابر", _capernaumQuestions);
+
+      final bethanyOwner = await findOrLinkCategory("بيت عنيا - مالك", _bethanyQuestions);
+      final bethanyPasser = await findOrLinkCategory("بيت عنيا - عابر", _bethanyQuestions);
+
+      final damascusOwner = await findOrLinkCategory("دمشق - مالك", _damascusQuestions);
+      final damascusPasser = await findOrLinkCategory("دمشق - عابر", _damascusQuestions);
+
+      final antiochOwner = await findOrLinkCategory("أنطاكية - مالك", _antiochQuestions);
+      final antiochPasser = await findOrLinkCategory("أنطاكية - عابر", _antiochQuestions);
+
+      final romeOwner = await findOrLinkCategory("روما - مالك", _romeQuestions);
+      final romePasser = await findOrLinkCategory("روما - عابر", _romeQuestions);
+
+
+      // 4. Add Stations
       final stations = [
         const Station(
           id: 1,
@@ -113,18 +119,15 @@ class BankAlHazDefaultData {
           id: 2,
           name: "أورشليم(ق)",
           buyPrice: 200,
-          ownerCategoryId: jerusalemOldCat,
-          passerCategoryId: jerusalemOldCat,
+          ownerCategoryId: jerusalemOldOwner,
+          passerCategoryId: jerusalemOldPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.oldTestament,
           buildings: [
             const Building(name: "الهيكل", buyPrice: 300, additionalRent: 150),
-            const Building(
-              name: "خيمة الاجتماع",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "خيمة الاجتماع", buyPrice: 200, additionalRent: 100),
+            const Building(name: "المجمع اليهودي", buyPrice: 100, additionalRent: 50),
           ],
         ),
         const Station(
@@ -137,21 +140,27 @@ class BankAlHazDefaultData {
           id: 4,
           name: "بابل",
           buyPrice: 180,
-          ownerCategoryId: babelCat,
-          passerCategoryId: babelCat,
+          ownerCategoryId: babelOwner,
+          passerCategoryId: babelPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.oldTestament,
+          buildings: [
+            const Building(name: "المجمع اليهودي", buyPrice: 100, additionalRent: 50),
+          ],
         ),
         Station(
           id: 5,
           name: "مصر",
           buyPrice: 220,
-          ownerCategoryId: egyptCat,
-          passerCategoryId: egyptCat,
+          ownerCategoryId: egyptOwner,
+          passerCategoryId: egyptPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.oldTestament,
+          buildings: [
+            const Building(name: "المجمع اليهودي", buyPrice: 100, additionalRent: 50),
+          ],
         ),
         const Station(
           id: 6,
@@ -163,49 +172,66 @@ class BankAlHazDefaultData {
           id: 7,
           name: "أريحا",
           buyPrice: 160,
-          ownerCategoryId: jerichoCat,
-          passerCategoryId: jerichoCat,
+          ownerCategoryId: jerichoOwner,
+          passerCategoryId: jerichoPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.oldTestament,
+          buildings: [
+            const Building(name: "المجمع اليهودي", buyPrice: 100, additionalRent: 50),
+          ],
         ),
-        const Station(
+        Station(
           id: 8,
           name: "بيت إيل",
           buyPrice: 140,
-          type: StationType.property,
+          ownerCategoryId: beitElOwner,
+          passerCategoryId: beitElPasser,
+          requiresQuestion: true,
+          type: StationType.question,
           era: Era.oldTestament,
+          buildings: [
+            const Building(name: "المجمع اليهودي", buyPrice: 100, additionalRent: 50),
+          ],
         ),
         Station(
           id: 9,
           name: "حبرون",
           buyPrice: 150,
-          type: StationType.property,
+          ownerCategoryId: hebronOwner,
+          passerCategoryId: hebronPasser,
+          requiresQuestion: true,
+          type: StationType.question,
           era: Era.oldTestament,
+          buildings: [
+            const Building(name: "المجمع اليهودي", buyPrice: 100, additionalRent: 50),
+          ],
         ),
         Station(
           id: 10,
           name: "سدوم وعمورة",
           buyPrice: 130,
-          type: StationType.property,
+          ownerCategoryId: sodomOwner,
+          passerCategoryId: sodomPasser,
+          requiresQuestion: true,
+          type: StationType.question,
           era: Era.oldTestament,
+          buildings: [
+            const Building(name: "المجمع اليهودي", buyPrice: 100, additionalRent: 50),
+          ],
         ),
 
         Station(
           id: 11,
           name: "بيت لحم",
           buyPrice: 240,
-          ownerCategoryId: bethlehemCat,
-          passerCategoryId: bethlehemCat,
+          ownerCategoryId: bethlehemOwner,
+          passerCategoryId: bethlehemPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.newTestament,
           buildings: [
-            const Building(
-              name: "دير",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "دير", buyPrice: 200, additionalRent: 100),
             const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
             const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
           ],
@@ -220,17 +246,13 @@ class BankAlHazDefaultData {
           id: 13,
           name: "الناصرة",
           buyPrice: 200,
-          ownerCategoryId: nazarethCat,
-          passerCategoryId: nazarethCat,
+          ownerCategoryId: nazarethOwner,
+          passerCategoryId: nazarethPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.newTestament,
           buildings: [
-            const Building(
-              name: "دير",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "دير", buyPrice: 200, additionalRent: 100),
             const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
             const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
           ],
@@ -239,17 +261,13 @@ class BankAlHazDefaultData {
           id: 14,
           name: "كفرناحوم",
           buyPrice: 220,
-          ownerCategoryId: capernaumCat,
-          passerCategoryId: capernaumCat,
+          ownerCategoryId: capernaumOwner,
+          passerCategoryId: capernaumPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.newTestament,
           buildings: [
-            const Building(
-              name: "دير",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "دير", buyPrice: 200, additionalRent: 100),
             const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
             const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
           ],
@@ -264,17 +282,13 @@ class BankAlHazDefaultData {
           id: 16,
           name: "أورشليم(ج)",
           buyPrice: 300,
-          ownerCategoryId: jerusalemNewCat,
-          passerCategoryId: jerusalemNewCat,
+          ownerCategoryId: jerusalemNewOwner,
+          passerCategoryId: jerusalemNewPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.newTestament,
           buildings: [
-            const Building(
-              name: "دير",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "دير", buyPrice: 200, additionalRent: 100),
             const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
             const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
           ],
@@ -283,17 +297,13 @@ class BankAlHazDefaultData {
           id: 17,
           name: "بيت عنيا",
           buyPrice: 190,
-          ownerCategoryId: bethanyCat,
-          passerCategoryId: bethanyCat,
+          ownerCategoryId: bethanyOwner,
+          passerCategoryId: bethanyPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.newTestament,
           buildings: [
-            const Building(
-              name: "دير",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "دير", buyPrice: 200, additionalRent: 100),
             const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
             const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
           ],
@@ -303,17 +313,13 @@ class BankAlHazDefaultData {
           id: 18,
           name: "دمشق",
           buyPrice: 170,
-          ownerCategoryId: damascusCat,
-          passerCategoryId: damascusCat,
+          ownerCategoryId: damascusOwner,
+          passerCategoryId: damascusPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.newTestament,
           buildings: [
-            const Building(
-              name: "دير",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "دير", buyPrice: 200, additionalRent: 100),
             const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
             const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
           ],
@@ -328,17 +334,13 @@ class BankAlHazDefaultData {
           id: 20,
           name: "أنطاكية",
           buyPrice: 210,
-          ownerCategoryId: antiochCat,
-          passerCategoryId: antiochCat,
+          ownerCategoryId: antiochOwner,
+          passerCategoryId: antiochPasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.newTestament,
           buildings: [
-            const Building(
-              name: "دير",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "دير", buyPrice: 200, additionalRent: 100),
             const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
             const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
           ],
@@ -347,17 +349,13 @@ class BankAlHazDefaultData {
           id: 21,
           name: "روما",
           buyPrice: 260,
-          ownerCategoryId: romeCat,
-          passerCategoryId: romeCat,
+          ownerCategoryId: romeOwner,
+          passerCategoryId: romePasser,
           requiresQuestion: true,
           type: StationType.question,
           era: Era.newTestament,
           buildings: [
-            const Building(
-              name: "دير",
-              buyPrice: 200,
-              additionalRent: 100,
-            ),
+            const Building(name: "دير", buyPrice: 200, additionalRent: 100),
             const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
             const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
           ],
@@ -503,71 +501,48 @@ class BankAlHazDefaultData {
         where: 'text = ?',
         whereArgs: [qText],
       );
-      if (existingQ.isNotEmpty) continue;
+      int questionId;
+      if (existingQ.isNotEmpty) {
+        questionId = existingQ.first['id'] as int;
+      } else {
+        questionId = await txn.insert('questions', {
+          'text': qText,
+          'answer': q['a']!,
+          'type': 'essay',
+          'is_multiple': 0,
+        });
+      }
 
-      int questionId = await txn.insert('questions', {
-        'text': qText,
-        'answer': q['a']!,
-        'type': 'essay',
-        'is_multiple': 0,
-      });
-
-      await txn.insert('question_categories', {
-        'question_id': questionId,
-        'category_id': catId,
-        'is_used': 0,
-      });
+      // Ensure linked to this category
+      final linked = await txn.query('question_categories', 
+        where: 'question_id = ? AND category_id = ?', 
+        whereArgs: [questionId, catId]);
+      
+      if (linked.isEmpty) {
+        await txn.insert('question_categories', {
+          'question_id': questionId,
+          'category_id': catId,
+          'is_used': 0,
+        });
+      }
     }
     return catId;
   }
 
-  // Question Data (Truncated for brevity, but I should include enough)
-  static final List<Map<String, String>> _jerusalemOldQuestions = [
-    {'q': 'ما هي المدينة التي كانت عاصمة داود؟', 'a': 'أورشليم'},
-    {'q': 'أين بُني هيكل سليمان؟', 'a': 'أورشليم'},
-  ];
-  static final List<Map<String, String>> _jerusalemNewQuestions = [
-    {'q': 'أين صُلب السيد المسيح؟', 'a': 'أورشليم'},
-    {'q': 'أين حدثت قيامة المسيح؟', 'a': 'أورشليم'},
-  ];
-  static final List<Map<String, String>> _babelQuestions = [
-    {'q': 'ما المدينة التي سُبي إليها اليهود؟', 'a': 'بابل'},
-    {'q': 'من الملك المرتبط ببابل؟', 'a': 'نبوخذنصر'},
-  ];
-  static final List<Map<String, String>> _egyptQuestions = [
-    {'q': 'في أي بلد عاش بنو إسرائيل في العبودية؟', 'a': 'مصر'},
-    {'q': 'من قاد الشعب للخروج من مصر؟', 'a': 'موسى'},
-  ];
-  static final List<Map<String, String>> _jerichoQuestions = [
-    {'q': 'ما أول مدينة فتحها يشوع؟', 'a': 'أريحا'},
-    {'q': 'كيف سقطت أسوار أريحا؟', 'a': 'بالدوران والهتاف'},
-  ];
-  static final List<Map<String, String>> _bethlehemQuestions = [
-    {'q': 'أين وُلد المسيح؟', 'a': 'بيت لحم'},
-    {'q': 'ماذا تعني بيت لحم؟', 'a': 'بيت الخبز'},
-  ];
-  static final List<Map<String, String>> _nazarethQuestions = [
-    {'q': 'أين نشأ المسيح؟', 'a': 'الناصرة'},
-    {'q': 'من بشر العذراء مريم؟', 'a': 'الملاك جبرائيل'},
-  ];
-  static final List<Map<String, String>> _capernaumQuestions = [
-    {'q': 'ما المدينة التي كانت مركز خدمة المسيح في الجليل؟', 'a': 'كفرناحوم'},
-    {'q': 'على أي بحر تقع كفرناحوم؟', 'a': 'بحر الجليل'},
-  ];
-  static final List<Map<String, String>> _bethanyQuestions = [
-    {'q': 'أين عاش لعازر؟', 'a': 'بيت عنيا'},
-    {'q': 'من أختا لعازر؟', 'a': 'مريم ومرثا'},
-  ];
-  static final List<Map<String, String>> _damascusQuestions = [
-    {'q': 'أين اهتدى بولس الرسول؟', 'a': 'دمشق'},
-    {'q': 'من صلى لأجل بولس في دمشق؟', 'a': 'حنانيا'},
-  ];
-  static final List<Map<String, String>> _antiochQuestions = [
-    {'q': 'أين دُعي التلاميذ مسيحيين أولاً؟', 'a': 'أنطاكية'},
-    {'q': 'من كرز هناك مع بولس؟', 'a': 'برنابا'},
-  ];
-  static final List<Map<String, String>> _romeQuestions = [
-    {'q': 'ما عاصمة الإمبراطورية الرومانية؟', 'a': 'روما'},
-    {'q': 'من كتب رسالة إلى أهل روما؟', 'a': 'بولس'},
-  ];
+  // Question Data - Cleared to ensure all questions come from imported data only
+  static final List<Map<String, String>> _jerusalemOldQuestions = [];
+  static final List<Map<String, String>> _jerusalemNewQuestions = [];
+  static final List<Map<String, String>> _babelQuestions = [];
+  static final List<Map<String, String>> _egyptQuestions = [];
+  static final List<Map<String, String>> _jerichoQuestions = [];
+  static final List<Map<String, String>> _bethlehemQuestions = [];
+  static final List<Map<String, String>> _nazarethQuestions = [];
+  static final List<Map<String, String>> _capernaumQuestions = [];
+  static final List<Map<String, String>> _bethanyQuestions = [];
+  static final List<Map<String, String>> _damascusQuestions = [];
+  static final List<Map<String, String>> _antiochQuestions = [];
+  static final List<Map<String, String>> _romeQuestions = [];
+  static final List<Map<String, String>> _hebronQuestions = [];
+  static final List<Map<String, String>> _sodomQuestions = [];
+  static final List<Map<String, String>> _beitElQuestions = [];
 }

@@ -20,7 +20,7 @@ final class UnderPressureProvider
         argument: null,
         retry: null,
         name: r'underPressureProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -41,7 +41,7 @@ final class UnderPressureProvider
   }
 }
 
-String _$underPressureHash() => r'8434d5e5bfae364b5074c1109eedadb42072eca2';
+String _$underPressureHash() => r'dc0f28e07e5fbbf98f5cc005126f4ab626a96fd1';
 
 abstract class _$UnderPressure extends $Notifier<UnderPressureState> {
   UnderPressureState build();

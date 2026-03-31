@@ -8,12 +8,27 @@ import '../providers/bank_al_haz_providers.dart';
 import '../../../../questions/presentation/providers/question_providers.dart';
 import 'package:games/core/design/app_design.dart';
 import '../../data/sources/bank_al_haz_csv_service.dart';
+import 'package:games/core/utils/arabic_utils.dart';
 
-class StationManagementPage extends ConsumerWidget {
+class StationManagementPage extends ConsumerStatefulWidget {
   const StationManagementPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<StationManagementPage> createState() => _StationManagementPageState();
+}
+
+class _StationManagementPageState extends ConsumerState<StationManagementPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(bankAlHazRepositoryProvider).autoLinkStationsWithCategories();
+      if (mounted) ref.invalidate(stationsProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final stationsAsync = ref.watch(stationsProvider);
 
     return Scaffold(
@@ -40,6 +55,24 @@ class StationManagementPage extends ConsumerWidget {
                   tooltip: 'استيراد من CSV',
                   icon: const Icon(Icons.upload_file, color: Colors.orangeAccent),
                   onPressed: () => _importCsv(context, ref),
+                ),
+                IconButton(
+                  tooltip: 'حفظ كمجموعة (قالب)',
+                  icon: const Icon(Icons.save_as, color: Colors.cyanAccent),
+                  onPressed: () => _showSaveAsTemplateDialog(context, ref),
+                ),
+                IconButton(
+                  tooltip: 'ربط تلقائي لكل المحطات',
+                  icon: const Icon(Icons.sync_alt, color: Colors.amberAccent),
+                  onPressed: () async {
+                    final count = await ref.read(bankAlHazRepositoryProvider).autoLinkStationsWithCategories();
+                    ref.invalidate(stationsProvider);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('تم ربط $count محطة تلقائياً بالفئات المناسبة')),
+                      );
+                    }
+                  },
                 ),
                 IconButton(
                   icon: const Icon(Icons.add_circle, color: Colors.blueAccent, size: 30),
@@ -193,303 +226,351 @@ class StationManagementPage extends ConsumerWidget {
               Text(station == null ? 'إضافة محطة جديدة' : 'تعديل محطة'),
             ],
           ),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (selectedType != StationType.card)
-                    SwitchListTile(
-                      title: const Text(
-                        'مرتبطة بأسئلة؟',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: const Text(
-                        'إذا تم الإلغاء ستعمل كاللعبة الأصلية',
-                      ),
-                      value: requiresQuestion,
-                      onChanged: (val) =>
-                          setState(() => requiresQuestion = val),
-                    ),
-                  SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 12),
-                  TextField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: selectedType == StationType.card
-                          ? 'اسم مجموعة الكروت'
-                          : 'اسم المحطة (مثلاً: أورشليم)',
-                      prefixIcon: Icon(
-                        selectedType == StationType.card
-                            ? Icons.style
-                            : Icons.location_city,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
-                  DropdownButtonFormField<StationType>(
-                    initialValue: selectedType,
-                    decoration: InputDecoration(
-                      labelText: 'نوع المحطة',
-                      prefixIcon: const Icon(Icons.category),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    items: StationType.values.map((t) {
-                      return DropdownMenuItem<StationType>(
-                        value: t,
-                        child: Row(
-                          children: [
-                            Icon(
-                              t == StationType.question
-                                  ? Icons.help
-                                  : (t == StationType.card
-                                        ? Icons.style
-                                        : (t == StationType.none
-                                              ? Icons.star_outline
-                                              : Icons.location_city)),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(_getTypeLabel(t)),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (val) => setState(() => selectedType = val!),
-                  ),
-
-                  if (requiresQuestion && selectedType != StationType.card) ...[
-                    SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
-                    const Text(
-                      'تحديد فئات الأسئلة:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 8),
-                    _buildCategoryDropdown(
-                      context: context,
-                      label: 'سؤال المالك (عند الشراء)',
-                      icon: Icons.shopping_bag,
-                      value: selectedOwnerCategoryId,
-                      onChanged: (val) =>
-                          setState(() => selectedOwnerCategoryId = val),
-                    ),
-                    SizedBox(height: AppDesign.isSmallScreen(context) ? 6 : 12),
-                    _buildCategoryDropdown(
-                      context: context,
-                      label: 'سؤال المار (عند العبور)',
-                      icon: Icons.directions_walk,
-                      value: selectedPasserCategoryId,
-                      onChanged: (val) =>
-                          setState(() => selectedPasserCategoryId = val),
-                    ),
-                  ],
-
-                  if (selectedType == StationType.card) ...[
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedCardType,
-                      decoration: InputDecoration(
-                        labelText: 'نوع الكارت',
-                        prefixIcon: const Icon(Icons.style),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'chance',
-                          child: Text('كارت حظ (Chance)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'chest',
-                          child: Text('كارت محكمة (Community Chest)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'start',
-                          child: Text('بداية / مرور (Go)'),
-                        ),
-                      ],
-                      onChanged: (val) =>
-                          setState(() => selectedCardType = val),
-                    ),
-                  ],
-
-                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
-                  // Image Picker Section
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Column(
-                      children: [
-                        if (pickedImageData != null) ...[
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.memory(
-                              pickedImageData!,
-                              height: 100,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                            ),
+          content: Consumer(
+            builder: (context, ref, child) {
+              final cats = ref.watch(categoriesProvider).value ?? [];
+              
+              if (selectedType != StationType.card && nameController.text.isNotEmpty) {
+                 final normalizedName = ArabicUtils.normalize(nameController.text);
+                 if (selectedOwnerCategoryId == null || !cats.any((c) => c.id == selectedOwnerCategoryId)) {
+                    final ownerCat = cats.cast<dynamic>().where((c) {
+                        final normalizedCat = ArabicUtils.normalize(c.name);
+                        return normalizedCat == "$normalizedName - مالك" || normalizedCat == "مالك - $normalizedName";
+                    }).firstOrNull;
+                    if (ownerCat != null) selectedOwnerCategoryId = ownerCat.id;
+                 }
+                 if (selectedPasserCategoryId == null || !cats.any((c) => c.id == selectedPasserCategoryId)) {
+                    final passerCat = cats.cast<dynamic>().where((c) {
+                        final normalizedCat = ArabicUtils.normalize(c.name);
+                        return normalizedCat == "$normalizedName - عابر" || normalizedCat == "عابر - $normalizedName";
+                    }).firstOrNull;
+                    if (passerCat != null) selectedPasserCategoryId = passerCat.id;
+                 }
+              }
+              
+              return SizedBox(
+                width: 500,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (selectedType != StationType.card)
+                        SwitchListTile(
+                          title: const Text(
+                            'مرتبطة بأسئلة؟',
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 8),
-                        ],
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final result = await FilePicker.platform.pickFiles(
-                              type: FileType.image,
-                            );
-                            if (result != null) {
-                              Uint8List? bytes = result.files.single.bytes;
-                              if (bytes == null &&
-                                  result.files.single.path != null) {
-                                bytes = await File(
-                                  result.files.single.path!,
-                                ).readAsBytes();
-                              }
-                              if (bytes != null) {
-                                setState(() => pickedImageData = bytes);
+                          subtitle: const Text(
+                            'إذا تم الإلغاء ستعمل كاللعبة الأصلية',
+                          ),
+                          value: requiresQuestion,
+                          onChanged: (val) =>
+                              setState(() => requiresQuestion = val),
+                        ),
+                      SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 12),
+                      TextField(
+                        controller: nameController,
+                        onChanged: (val) {
+                          if (selectedType != StationType.card) {
+                            final cats = ref.read(categoriesProvider).value ?? [];
+                            final normalizedVal = ArabicUtils.normalize(val);
+                            final cleanVal = normalizedVal.replaceAll(' ', '').replaceAll('-', '');
+
+                            for (var cat in cats) {
+                              final normalizedCatName = ArabicUtils.normalize(cat.name);
+                              final cleanCatName = normalizedCatName.replaceAll(' ', '').replaceAll('-', '');
+
+                              if (cleanCatName == "${cleanVal}مالك" || cleanCatName == "مالك${cleanVal}") {
+                                setState(() {
+                                   selectedOwnerCategoryId = cat.id;
+                                   requiresQuestion = true;
+                                });
+                              } else if (cleanCatName == "${cleanVal}عابر" || cleanCatName == "عابر${cleanVal}") {
+                                setState(() {
+                                   selectedPasserCategoryId = cat.id;
+                                   requiresQuestion = true;
+                                });
                               }
                             }
-                          },
-                          icon: const Icon(Icons.image),
-                          label: const Text('اختر صورة للمدينة'),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: buyPriceController,
-                          decoration: InputDecoration(
-                            labelText: 'ثمن الشراء',
-                            prefixIcon: const Icon(Icons.shopping_cart),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: selectedType == StationType.card
+                              ? 'اسم مجموعة الكروت'
+                              : 'اسم المحطة (مثلاً: أورشليم)',
+                          prefixIcon: Icon(
+                            selectedType == StationType.card
+                                ? Icons.style
+                                : Icons.location_city,
                           ),
-                          keyboardType: TextInputType.number,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: rentController,
+                      SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
+                      DropdownButtonFormField<StationType>(
+                        value: selectedType,
+                        decoration: InputDecoration(
+                          labelText: 'نوع المحطة',
+                          prefixIcon: const Icon(Icons.category),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        items: StationType.values.map((t) {
+                          return DropdownMenuItem<StationType>(
+                            value: t,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  t == StationType.question
+                                      ? Icons.help
+                                      : (t == StationType.card
+                                            ? Icons.style
+                                            : (t == StationType.none
+                                                  ? Icons.star_outline
+                                                  : Icons.location_city)),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(_getTypeLabel(t)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) => setState(() => selectedType = val!),
+                      ),
+    
+                      if (requiresQuestion && selectedType != StationType.card) ...[
+                        SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
+                        const Text(
+                          'تحديد فئات الأسئلة:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 8),
+                        _buildCategoryDropdown(
+                          context: context,
+                          label: 'سؤال المالك (عند الشراء)',
+                          icon: Icons.shopping_bag,
+                          value: selectedOwnerCategoryId,
+                          onChanged: (val) =>
+                              setState(() => selectedOwnerCategoryId = val),
+                        ),
+                        SizedBox(height: AppDesign.isSmallScreen(context) ? 6 : 12),
+                        _buildCategoryDropdown(
+                          context: context,
+                          label: 'سؤال المار (عند العبور)',
+                          icon: Icons.directions_walk,
+                          value: selectedPasserCategoryId,
+                          onChanged: (val) =>
+                              setState(() => selectedPasserCategoryId = val),
+                        ),
+                      ],
+    
+                      if (selectedType == StationType.card) ...[
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCardType,
                           decoration: InputDecoration(
-                            labelText: 'إيجار المكان',
-                            prefixIcon: const Icon(Icons.payments),
+                            labelText: 'نوع الكارت',
+                            prefixIcon: const Icon(Icons.style),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          keyboardType: TextInputType.number,
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'chance',
+                              child: Text('كارت حظ (Chance)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'chest',
+                              child: Text('كارت محكمة (Community Chest)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'start',
+                              child: Text('بداية / مرور (Go)'),
+                            ),
+                          ],
+                          onChanged: (val) =>
+                              setState(() => selectedCardType = val),
+                        ),
+                      ],
+    
+                      SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
+                      // Image Picker Section
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Column(
+                          children: [
+                            if (pickedImageData != null) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(
+                                  pickedImageData!,
+                                  height: 100,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final result = await FilePicker.platform.pickFiles(
+                                  type: FileType.image,
+                                );
+                                if (result != null) {
+                                  Uint8List? bytes = result.files.single.bytes;
+                                  if (bytes == null &&
+                                      result.files.single.path != null) {
+                                    bytes = await File(
+                                      result.files.single.path!,
+                                    ).readAsBytes();
+                                  }
+                                  if (bytes != null) {
+                                    setState(() => pickedImageData = bytes);
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.image),
+                              label: const Text('اختر صورة للمدينة'),
+                            ),
+                          ],
+                        ),
+                      ),
+    
+                      SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: buyPriceController,
+                              decoration: InputDecoration(
+                                labelText: 'ثمن الشراء',
+                                prefixIcon: const Icon(Icons.shopping_cart),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: rentController,
+                              decoration: InputDecoration(
+                                labelText: 'إيجار المكان',
+                                prefixIcon: const Icon(Icons.payments),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                        ],
+                      ),
+    
+                      if ((selectedType == StationType.question || selectedType == StationType.property) && !isUnbuyable) ...[
+                        const SizedBox(height: 16),
+                        SwitchListTile(
+                          title: const Text(
+                            'تفعيل نظام الضرائب لـ هذه المحطة؟',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: const Text(
+                            'إذا تم الإلغاء، لن يظهر خيار الضريبة لصاحب المكان أثناء اللعبة',
+                          ),
+                          value: allowsTax,
+                          onChanged: (val) => setState(() => allowsTax = val),
+                          secondary: const Icon(Icons.money_off, color: Colors.redAccent),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.business),
+                          label: const Text('إدارة مباني هذه المحطة'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueGrey.withOpacity(0.1),
+                            foregroundColor: Colors.blueAccent,
+                          ),
+                          onPressed: () {
+                             _showBuildingListDialog(context, ref, station?.id, currentBuildings, (newList) {
+                               setState(() {
+                                 currentBuildings = newList;
+                               });
+                             });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<Era>(
+                          value: era,
+                          decoration: const InputDecoration(
+                            labelText: 'العهد',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.history_edu),
+                          ),
+                          items: Era.values.map((e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(e == Era.oldTestament ? 'عهد قديم' : (e == Era.newTestament ? 'عهد جديد' : 'لا يوجد')),
+                          )).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                era = val;
+                                // Add default buildings if empty
+                                if (currentBuildings.isEmpty) {
+                                  if (val == Era.newTestament) {
+                                    currentBuildings = [
+                                      const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
+                                      const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
+                                      const Building(name: "دير", buyPrice: 200, additionalRent: 100),
+                                    ];
+                                  } else if (val == Era.oldTestament && nameController.text.contains("أورشليم")) {
+                                    currentBuildings = [
+                                      const Building(name: "الهيكل", buyPrice: 300, additionalRent: 150),
+                                      const Building(name: "خيمة الاجتماع", buyPrice: 200, additionalRent: 100),
+                                    ];
+                                  }
+                                }
+                              });
+                            }
+                          },
+                        ),
+                      ],
+    
+                      SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 12),
+                      SwitchListTile(
+                        title: const Text(
+                          'غير قابلة للشراء (شخصية)',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: const Text(
+                          'الصح يربح ثمنها، الخطأ يدفع إيجارها. لا يمكن امتلاكها.',
+                        ),
+                        value: isUnbuyable,
+                        onChanged: (val) => setState(() => isUnbuyable = val),
+                        secondary: const Icon(
+                          Icons.person_pin_circle,
+                          color: Colors.deepPurple,
                         ),
                       ),
                     ],
                   ),
-
-                  if ((selectedType == StationType.question || selectedType == StationType.property) && !isUnbuyable) ...[
-                    const SizedBox(height: 16),
-                    SwitchListTile(
-                      title: const Text(
-                        'تفعيل نظام الضرائب لـ هذه المحطة؟',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: const Text(
-                        'إذا تم الإلغاء، لن يظهر خيار الضريبة لصاحب المكان أثناء اللعبة',
-                      ),
-                      value: allowsTax,
-                      onChanged: (val) => setState(() => allowsTax = val),
-                      secondary: const Icon(Icons.money_off, color: Colors.redAccent),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.business),
-                      label: const Text('إدارة مباني هذه المحطة'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey.withOpacity(0.1),
-                        foregroundColor: Colors.blueAccent,
-                      ),
-                      onPressed: () {
-                         _showBuildingListDialog(context, ref, station?.id, currentBuildings, (newList) {
-                           setState(() {
-                             currentBuildings = newList;
-                           });
-                         });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<Era>(
-                      value: era,
-                      decoration: const InputDecoration(
-                        labelText: 'العهد',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.history_edu),
-                      ),
-                      items: Era.values.map((e) => DropdownMenuItem(
-                        value: e,
-                        child: Text(e == Era.oldTestament ? 'عهد قديم' : (e == Era.newTestament ? 'عهد جديد' : 'لا يوجد')),
-                      )).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() {
-                            era = val;
-                            // Add default buildings if empty
-                            if (currentBuildings.isEmpty) {
-                              if (val == Era.newTestament) {
-                                currentBuildings = [
-                                  const Building(name: "كنيسة", buyPrice: 100, additionalRent: 50),
-                                  const Building(name: "كاتدرائية", buyPrice: 150, additionalRent: 75),
-                                  const Building(name: "دير", buyPrice: 200, additionalRent: 100),
-                                ];
-                              } else if (val == Era.oldTestament && nameController.text.contains("أورشليم")) {
-                                currentBuildings = [
-                                  const Building(name: "الهيكل", buyPrice: 300, additionalRent: 150),
-                                  const Building(name: "خيمة الاجتماع", buyPrice: 200, additionalRent: 100),
-                                ];
-                              }
-                            }
-                          });
-                        }
-                      },
-                    ),
-                  ],
-
-                  SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 12),
-                  SwitchListTile(
-                    title: const Text(
-                      'غير قابلة للشراء (شخصية)',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: const Text(
-                      'الصح يربح ثمنها، الخطأ يدفع إيجارها. لا يمكن امتلاكها.',
-                    ),
-                    value: isUnbuyable,
-                    onChanged: (val) => setState(() => isUnbuyable = val),
-                    secondary: const Icon(
-                      Icons.person_pin_circle,
-                      color: Colors.deepPurple,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
           actions: [
             TextButton(
@@ -564,7 +645,16 @@ class StationManagementPage extends ConsumerWidget {
         final catsAsync = ref.watch(categoriesProvider);
         return catsAsync.when(
           data: (cats) {
-            String currentName = value == null ? 'جميع الفئات' : (cats.any((c) => c.id == value) ? cats.firstWhere((c) => c.id == value).name : 'فئة غير معروفة');
+            String currentName = 'جميع الفئات';
+            if (value != null) {
+              final cat = cats.cast<dynamic>().where((c) => c.id == value).firstOrNull;
+              if (cat != null) {
+                currentName = cat.name;
+              } else {
+                // If not found in current list, try to find by name if we just auto-linked
+                currentName = 'فئة غير معروفة (ID: $value)';
+              }
+            }
 
             return InkWell(
               onTap: () => _showSearchableCategoryPicker(context, cats, value, onChanged),
@@ -805,6 +895,73 @@ class StationManagementPage extends ConsumerWidget {
       ),
     );
   }
+
+  void _showSaveAsTemplateDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('حفظ كمجموعة (قالب) جديد', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'اسم القالب الجديد',
+            labelStyle: TextStyle(color: Colors.white60),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                final repo = ref.read(bankAlHazRepositoryProvider);
+                final settings = await ref.read(gameSettingsProvider.future);
+                final currentId = settings.activeTemplateId ?? 1;
+                
+                final newId = await repo.duplicateTemplate(currentId, controller.text);
+                ref.invalidate(templatesProvider);
+                
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  _showSwitchPrompt(context, ref, controller.text, newId);
+                }
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSwitchPrompt(BuildContext context, WidgetRef ref, String name, int id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('تم الحفظ بنجاح', style: TextStyle(color: Colors.white)),
+        content: Text('تم حفظ القالب "$name". هل تريد تفعيله الآن ليكون هو القالب النشط في اللعبة؟', style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('لاحقاً')),
+          ElevatedButton(
+            onPressed: () async {
+              final repo = ref.read(bankAlHazRepositoryProvider);
+              final settings = await repo.getSettings();
+              await repo.saveSettings(settings.copyWith(activeTemplateId: id));
+              ref.invalidate(gameSettingsProvider);
+              ref.invalidate(stationsProvider);
+              ref.invalidate(cardsProvider);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('تفعيل الآن'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SearchableCategoryDialog extends StatefulWidget {
@@ -863,7 +1020,7 @@ class _SearchableCategoryDialogState extends State<_SearchableCategoryDialog> {
                   final cat = filtered[index];
                   final bool isAll = cat == null;
                   return ListTile(
-                    title: Text(isAll ? 'جميع الفئات' : cat.name),
+                    title: Text(isAll ? 'جميع الفئات' : "${cat.name} (${cat.questionsCount} سؤال)"),
                     selected: isAll ? widget.initialValue == null : widget.initialValue == cat.id,
                     onTap: () {
                       widget.onSelected(isAll ? null : cat.id);

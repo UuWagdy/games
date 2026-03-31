@@ -15,6 +15,7 @@ abstract class QuizArenaSettings with _$QuizArenaSettings {
     @Default(30) int timeLimitSeconds,
     @Default(0) int negativePoints,
     @Default(10) int rounds,
+    @Default(50) int winPoints,
   }) = _QuizArenaSettings;
 
   factory QuizArenaSettings.fromJson(Map<String, dynamic> json) => _$QuizArenaSettingsFromJson(json);

@@ -38,6 +38,11 @@ class PenaltyShootoutState {
   final String teamBKey;
   final PenaltyTurn? buzzedTurn; // Which team's turn it is currently due to buzzer
   final List<PenaltyTurn> failedTurnsInCurrentQuestion;
+  final int maxPenalties;
+  final List<Question>? templateQuestions;
+  final String? templateName;
+  final bool isTie;
+  final int currentQuestionIndex;
 
   PenaltyShootoutState({
     required this.teamAAttempts,
@@ -61,6 +66,11 @@ class PenaltyShootoutState {
     this.teamBKey = 'l',
     this.buzzedTurn,
     this.failedTurnsInCurrentQuestion = const [],
+    this.maxPenalties = 20,
+    this.templateQuestions,
+    this.templateName,
+    this.isTie = false,
+    this.currentQuestionIndex = 0,
   });
 
   PenaltyShootoutState copyWith({
@@ -85,6 +95,11 @@ class PenaltyShootoutState {
     String? teamBKey,
     PenaltyTurn? buzzedTurn,
     List<PenaltyTurn>? failedTurnsInCurrentQuestion,
+    int? maxPenalties,
+    List<Question>? templateQuestions,
+    String? templateName,
+    bool? isTie,
+    int? currentQuestionIndex,
     bool clearLastResult = false,
     bool clearBuzzedTurn = false,
   }) {
@@ -110,6 +125,11 @@ class PenaltyShootoutState {
       teamBKey: teamBKey ?? this.teamBKey,
       buzzedTurn: clearBuzzedTurn ? null : (buzzedTurn ?? this.buzzedTurn),
       failedTurnsInCurrentQuestion: failedTurnsInCurrentQuestion ?? this.failedTurnsInCurrentQuestion,
+      maxPenalties: maxPenalties ?? this.maxPenalties,
+      templateQuestions: templateQuestions ?? this.templateQuestions,
+      templateName: templateName ?? this.templateName,
+      isTie: isTie ?? this.isTie,
+      currentQuestionIndex: currentQuestionIndex ?? this.currentQuestionIndex,
     );
   }
 }

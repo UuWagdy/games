@@ -35,7 +35,7 @@ final class UnderPressureSettingsProvider
 }
 
 String _$underPressureSettingsHash() =>
-    r'671bedf3430e8174be5ffcfc13d706058abf1080';
+    r'f2a770f9af7f0512ebfd57c6568086f812eec16a';
 
 abstract class _$UnderPressureSettings
     extends $AsyncNotifier<Map<String, dynamic>> {

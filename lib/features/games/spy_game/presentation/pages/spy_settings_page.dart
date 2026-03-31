@@ -5,7 +5,8 @@ import '../widgets/glass_container.dart';
 import '../../domain/repositories/word_repository.dart';
 
 class SpySettingsPage extends ConsumerStatefulWidget {
-  const SpySettingsPage({super.key});
+  final bool isView;
+  const SpySettingsPage({super.key, this.isView = false});
 
   @override
   ConsumerState<SpySettingsPage> createState() => _SpySettingsPageState();
@@ -120,18 +121,7 @@ class _SpySettingsPageState extends ConsumerState<SpySettingsPage> {
     final notifier = ref.read(spyGameProvider.notifier);
     final allCategories = SpyWordRepository.getAllCategories();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: const Text("إعدادات الجلسة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
+    final content = SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
@@ -150,6 +140,8 @@ class _SpySettingsPageState extends ConsumerState<SpySettingsPage> {
               title: "خيارات الجولة",
               child: Column(
                 children: [
+                   _buildSliderConfig("عدد الجواسيس", settings.numberOfSpies, 1, 5, 4, Colors.redAccent, (v) => notifier.updateSettings(settings.copyWith(numberOfSpies: v))),
+                   const SizedBox(height: 16),
                    _buildSwitchConfig("تفعيل الموقت", settings.timerEnabled, Colors.blueAccent, (v) => notifier.updateSettings(settings.copyWith(timerEnabled: v))),
                    if (settings.timerEnabled) ...[
                      const SizedBox(height: 16),
@@ -269,7 +261,22 @@ class _SpySettingsPageState extends ConsumerState<SpySettingsPage> {
             ),
           ],
         ),
+      );
+
+    if (widget.isView) return content;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        title: const Text("إعدادات الجلسة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
+      body: content,
     );
   }
 

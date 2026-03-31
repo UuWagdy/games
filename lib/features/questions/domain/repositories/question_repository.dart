@@ -13,4 +13,8 @@ abstract class QuestionRepository {
   Future<void> deleteQuestion(int id);
   Future<void> setQuestionUsed(int id, bool used, {int? categoryId});
   Future<void> resetAllQuestionsUsed();
+  Future<int> removeDuplicateQuestions();
+  Future<int> removeDuplicateCategories();
+  Future<Category?> getCategoryByName(String name);
+  Future<void> deleteAllCategories();
 }

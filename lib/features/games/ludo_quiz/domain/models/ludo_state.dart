@@ -28,6 +28,7 @@ class LudoState {
   final List<int> exitNumbers;
   final bool isDoubleMoveEnabled;
   final bool hasUsedDoubleMoveInTurn;
+  final bool vsComputer;
 
   const LudoState({
     required this.players,
@@ -57,6 +58,7 @@ class LudoState {
     this.exitNumbers = const [1, 3, 5],
     this.isDoubleMoveEnabled = false,
     this.hasUsedDoubleMoveInTurn = false,
+    this.vsComputer = false,
   });
 
   LudoPlayer get currentPlayer => players.isNotEmpty ? players[currentTurn] : LudoPlayer(color: LudoColor.red, tokens: []);
@@ -83,6 +85,7 @@ class LudoState {
     List<int>? exitNumbers,
     bool? isDoubleMoveEnabled,
     bool? hasUsedDoubleMoveInTurn,
+    bool? vsComputer,
   }) {
     return LudoState(
       players: players ?? this.players,
@@ -106,6 +109,7 @@ class LudoState {
       exitNumbers: exitNumbers ?? this.exitNumbers,
       isDoubleMoveEnabled: isDoubleMoveEnabled ?? this.isDoubleMoveEnabled,
       hasUsedDoubleMoveInTurn: hasUsedDoubleMoveInTurn ?? this.hasUsedDoubleMoveInTurn,
+      vsComputer: vsComputer ?? this.vsComputer,
     );
   }
 }

@@ -33,7 +33,7 @@ final class PenaltySettingsProvider
   PenaltySettings create() => PenaltySettings();
 }
 
-String _$penaltySettingsHash() => r'12497044bb2bb027fa14c7e76e047ca14d273b46';
+String _$penaltySettingsHash() => r'ae0193ae85e0021df05542a506320e8ff15a66b4';
 
 abstract class _$PenaltySettings extends $AsyncNotifier<Map<String, dynamic>> {
   FutureOr<Map<String, dynamic>> build();

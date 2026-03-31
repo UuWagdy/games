@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:games/core/utils/arabic_utils.dart';
+import 'package:games/features/games/bank_al_haz/domain/repositories/bank_al_haz_repository.dart';
+import 'package:games/features/questions/domain/repositories/question_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:ui';
 import 'package:games/features/games/bank_al_haz/domain/entities/bank_al_haz_entities.dart';
 import 'package:games/features/games/bank_al_haz/presentation/providers/game_engine_provider.dart';
 import 'package:games/features/games/bank_al_haz/presentation/providers/bank_al_haz_providers.dart';
-import 'package:games/features/games/bank_al_haz/data/sources/bank_al_haz_default_data.dart';
-import 'package:games/core/database/database_service.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
 import 'package:games/features/games/bank_al_haz/presentation/widgets/three_d_dice.dart';
 import 'package:games/features/games/bank_al_haz/presentation/widgets/player_piece.dart';
 import 'package:games/features/questions/domain/entities/question.dart';
+import 'package:games/features/games/bank_al_haz/presentation/pages/templates_management_page.dart';
 import 'package:games/features/teams/presentation/pages/teams_management_page.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import '../../../../settings/presentation/pages/settings_page.dart';
+
 import 'dart:math' as math;
 import 'dart:async';
 
-enum _StationAction { buy, passerQuestion, pass }
+enum _StationAction { buy, passerQuestion, manage, pass }
 
 class BankAlHazBoardPage extends ConsumerStatefulWidget {
   const BankAlHazBoardPage({super.key});
@@ -44,6 +48,16 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       duration: const Duration(seconds: 1),
     )..forward();
     _startGameTimer();
+    
+    // Auto-load saved game if it exists and current state is empty
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+       if (mounted) {
+         final gameState = ref.read(gameEngineProvider);
+         if (gameState.board.isEmpty) {
+            await ref.read(gameEngineProvider.notifier).loadSavedGame();
+         }
+       }
+    });
   }
 
   void _startGameTimer() {
@@ -133,8 +147,12 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       },
     );
 
-    final bool isLock = gameState.isMovingPlayer || gameState.pendingLandingStation != null;
+    final theme = ref.watch(currentThemeProvider).value;
+
+    final bool isActionLocked = gameState.isMovingPlayer || gameState.isRollingDice || gameState.pendingLandingStation != null;
+    final bool isLock = isActionLocked || gameState.isEndingTurn;
     final bool hasPending = gameState.pendingLandingStation != null;
+    final bool canEndTurn = gameState.isEndingTurn;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -143,11 +161,16 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         child: _buildMobileDrawer(gameState),
       ) : null,
       body: AppDesign.backgroundWrapper(
+        theme: theme,
         child: Focus(
           autofocus: true,
           onKey: (node, event) {
             if (event is RawKeyDownEvent && 
                 (event.logicalKey == LogicalKeyboardKey.space || event.logicalKey == LogicalKeyboardKey.enter)) {
+              if (canEndTurn) {
+                engine.forceNextTurn();
+                return KeyEventResult.handled;
+              }
               if (!isLock && !hasPending) {
                 engine.rollDice();
                 return KeyEventResult.handled;
@@ -160,7 +183,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
               children: [
                 Column(
                   children: [
-                    _buildFloatingHeader(gameState, context),
+                    _buildFloatingHeader(gameState, engine, context),
                     Expanded(
                       child: FadeTransition(
                         opacity: _boardRevealController,
@@ -317,10 +340,18 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         ),
         ListTile(
           leading: const Icon(Icons.auto_awesome, color: Colors.amberAccent),
-          title: const Text('تطبيق القالب الديني', style: TextStyle(color: Colors.white)),
+          title: const Text('إدارة القوالب', style: TextStyle(color: Colors.white)),
           onTap: () {
             Navigator.pop(context);
-            _restartGamePrompt(context, ref);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const TemplatesManagementPage()));
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.save_as, color: Colors.blueAccent),
+          title: const Text('حفظ كقالب جديد', style: TextStyle(color: Colors.white)),
+          onTap: () {
+            Navigator.pop(context);
+            _showSaveAsTemplateDialog(context);
           },
         ),
         const Divider(color: Colors.white10),
@@ -333,6 +364,205 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           },
         ),
       ],
+    );
+  }
+
+  void _showSaveAsTemplateDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('حفظ كقالب جديد', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'اسم القالب',
+            labelStyle: TextStyle(color: Colors.white60),
+            hintText: 'مثال: قالب المسابقات العائلية',
+            hintStyle: TextStyle(color: Colors.white24),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                await this.ref.read(gameEngineProvider.notifier).saveCurrentSetupAsTemplate(controller.text);
+                if (context.mounted) {
+                   Navigator.pop(context);
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     SnackBar(content: Text('تم حفظ القالب بنجاح: ${controller.text}'), backgroundColor: Colors.green),
+                   );
+                }
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showLendDialog(BuildContext context, GameState state, GameEngine engine) async {
+    final currentPlayer = state.players[state.currentPlayerIndex];
+    int? selectedTargetIndex;
+    final amountController = TextEditingController();
+    
+    // Filter other players
+    final List<int> otherPlayersIndices = [];
+    for (int i = 0; i < state.players.length; i++) {
+       if (i != state.currentPlayerIndex) otherPlayersIndices.add(i);
+    }
+    
+    if (otherPlayersIndices.isEmpty) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يوجد لاعبين آخرين للتحويل إليهم')));
+       return;
+    }
+    
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "Lend",
+      barrierColor: Colors.black.withOpacity(0.85),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (dialogCtx, _, __) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final interestRate = state.currentCheckInterest;
+            final amount = double.tryParse(amountController.text) ?? 0;
+            final totalToDeduct = amount * (1 + interestRate);
+            
+            return Center(
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  margin: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(24),
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  decoration: AppDesign.dialogDecoration,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('نظام الشيكات (تسليف لاعب)', style: AppDesign.titleStyle),
+                      const SizedBox(height: 20),
+                      Text(
+                        'الفائدة الحالية للبنك: ${(interestRate * 100).toStringAsFixed(1)}%',
+                        style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('اختر اللاعب المستلم:', style: TextStyle(color: Colors.white70)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: otherPlayersIndices.map((idx) {
+                          final p = state.players[idx];
+                          final isSelected = selectedTargetIndex == idx;
+                          return ChoiceChip(
+                            label: Text(p.name, style: TextStyle(color: isSelected ? Colors.black : Colors.white)),
+                            selected: isSelected,
+                            onSelected: (val) => setDialogState(() => selectedTargetIndex = val ? idx : null),
+                            selectedColor: Colors.greenAccent,
+                            backgroundColor: Colors.white10,
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: amountController,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setDialogState(() {}),
+                        decoration: InputDecoration(
+                          labelText: 'المبلغ المراد تحويله',
+                          labelStyle: const TextStyle(color: Colors.white60),
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.05),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (amount > 0)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            'سيتم خصم ${totalToDeduct.toInt()} P من رصيدك\nسيستلم ${state.players[selectedTargetIndex ?? 0].name} مبلغ ${amount.toInt()} P صافي',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                          ),
+                        ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(dialogCtx),
+                              child: const Text('إلغاء'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: (selectedTargetIndex != null && amount > 0 && currentPlayer.money >= totalToDeduct)
+                                  ? () {
+                                      engine.lendToPlayer(state.currentPlayerIndex, selectedTargetIndex!, amount);
+                                      Navigator.pop(dialogCtx);
+                                    }
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.greenAccent,
+                                foregroundColor: Colors.black,
+                              ),
+                              child: const Text('تحويل الآن', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+        );
+      },
+    );
+  }
+
+  void _confirmResetGame() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('تصفير اللعبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text('هل أنت متأكد من تصفير كافة الأموال والعمليات والبدء من جديد؟', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              Navigator.pop(context);
+              final currentState = ref.read(gameEngineProvider);
+              final settings = currentState.settings;
+              final players = currentState.players;
+              
+              await ref.read(gameEngineProvider.notifier).clearSavedGame();
+              await ref.read(gameEngineProvider.notifier).initGame(
+                players.map((p) => p.name).toList(), 
+                settings
+              );
+            },
+            child: const Text('تصفير اللعبة'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -360,24 +590,32 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   }
 
   // ==================== LANDING FLOW ====================
-
   void _startLandingFlow(Station station) async {
     final engine = ref.read(gameEngineProvider.notifier);
     try {
       if (station.type == StationType.card) {
         await _handleCardLanding(station, engine);
+      } else if (station.type == StationType.tax) {
+        final settings = ref.read(gameEngineProvider).settings;
+        if (settings.taxMode != BankAlHazTaxMode.none) {
+           await _showTaxLandingDialog(station, engine);
+        } else {
+           engine.resolveLanding();
+        }
       } else if (station.type == StationType.none) {
         // Auto-resolve non-action stations
         engine.resolveLanding();
       } else {
         await _handleStationLanding(station, engine);
       }
+
     } catch (e) {
       print("Landing flow error: $e");
       if (mounted) engine.resolveLanding();
     }
     _isHandlingLanding = false;
   }
+
 
   Future<void> _handleCardLanding(Station station, GameEngine engine) async {
     final card = await engine.drawCard(station.cardType);
@@ -401,11 +639,24 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       case _StationAction.buy:
         bool bought = false;
         if (station.requiresQuestion) {
-          final q = await engine.getRandomQuestion(station.ownerCategoryId);
+          final q = await engine.getRandomQuestion(station.ownerCategoryId, fallbackStationName: station.name);
           if (q != null && mounted) {
             bought = await _showQuestionDialog(q);
             await Future.delayed(const Duration(milliseconds: 150));
           } else {
+            // Detailed log for debugging
+            engine.addGameLog(
+              "⚠️ لم يتم العثور على أسئلة لـ ${station.name} (فئة: ${station.ownerCategoryId})",
+              type: LogType.warning
+            );
+            if (mounted) {
+               ScaffoldMessenger.of(context).showSnackBar(
+                 SnackBar(
+                   content: Text('⚠️ لم يتم العثور على أسئلة لـ "${station.name}"! تأكد من ربطها بفئة تحتوي على أسئلة.'),
+                   duration: const Duration(seconds: 4),
+                 ),
+               );
+            }
             bought = true;
           }
         } else {
@@ -415,14 +666,18 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         if (mounted) {
            engine.resolveLanding(bought: bought, skipAutoNextTurn: bought);
            if (bought) {
-             await _handlePostPurchaseFlow(station, engine);
-             engine.forceNextTurn();
+             await _manageProperty(station);
            }
         }
         break;
       case _StationAction.passerQuestion:
         if (station.requiresQuestion) {
-          final q = await engine.getRandomQuestion(station.passerCategoryId);
+          // Try passerby category first, fallback to owner category to guarantee questions show up
+          var q = await engine.getRandomQuestion(station.passerCategoryId, fallbackStationName: station.name);
+          if (q == null && station.ownerCategoryId != null) {
+            q = await engine.getRandomQuestion(station.ownerCategoryId, fallbackStationName: station.name);
+          }
+          
           if (q != null && mounted) {
             final correct = await _showQuestionDialog(q);
             await Future.delayed(const Duration(milliseconds: 150));
@@ -439,27 +694,112 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           engine.resolveLanding();
         }
         break;
+      case _StationAction.manage:
+        await _manageProperty(station);
+        engine.resolveLanding();
+        break;
       case _StationAction.pass:
         engine.resolveLanding();
         break;
     }
   }
 
+  Future<void> _manageProperty(Station station) async {
+    final engine = ref.read(gameEngineProvider.notifier);
+    
+    // We use a single, comprehensive dialog that handles all property management
+    // without the need for a persistent loop, by using the Consumer in the dialog
+    // to keep it refreshed as state changes.
+    await _showPropertyManagementDialog(context, station, ref.read(gameEngineProvider), engine);
+    
+    // Auto-resolve landing after management is complete
+    engine.resolveLanding();
+  }
+
   // ==================== DIALOGS (via Navigator) ====================
+
+  Future<void> _showTaxLandingDialog(Station station, GameEngine engine) async {
+    final taxAmount = station.taxAmount > 0 ? station.taxAmount : 100.0;
+    
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppDesign.slate800,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            const Icon(Icons.money_off, color: Colors.redAccent),
+            const SizedBox(width: 12),
+            Text("نافذة الضرائب", style: AppDesign.titleStyle),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "لقد وصلت إلى ${station.name}",
+              style: const TextStyle(color: Colors.white, fontSize: 18),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "عليك دفع ضرائب بقيمة:",
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "${taxAmount.toInt()} P",
+              style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              engine.resolveLanding();
+            },
+            child: const Text("دفع الآن", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<_StationAction> _showStationDialog(Station station) async {
     final gameState = ref.read(gameEngineProvider);
     final currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    String? ownerName;
-    for (var p in gameState.players) {
-      if (p.ownedStationIds.contains(station.id)) {
-        ownerName = p.name;
+
+    
+    // Find owner
+    int? ownerIndex;
+    for (int i = 0; i < gameState.players.length; i++) {
+      if (gameState.players[i].ownedStationIds.contains(station.id)) {
+        ownerIndex = i;
         break;
       }
     }
-    final bool isOwned = ownerName != null;
-    final bool isOwner = ownerName == currentPlayer.name;
-    final bool canBuy = !isOwned && currentPlayer.money >= station.buyPrice;
+    
+    final bool isOwned = ownerIndex != null;
+    final bool isOwner = ownerIndex == gameState.currentPlayerIndex;
+    final String? ownerName = isOwned ? gameState.players[ownerIndex].name : null;
+    final bool canAfford = currentPlayer.money >= station.buyPrice;
+    
+    // Calculate current rent
+    double currentRent = station.baseRent;
+    if (isOwned) {
+      for (var b in station.buildings) {
+        if (b.isPurchased) currentRent += b.additionalRent;
+      }
+    }
 
     final result = await showGeneralDialog<_StationAction>(
       context: context,
@@ -475,387 +815,221 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           ),
         );
       },
-      pageBuilder: (dialogCtx, _, _) {
-        bool isSmall = AppDesign.isSmallScreen(dialogCtx);
+      pageBuilder: (dialogCtx, _, __) {
+        final double screenHeight = MediaQuery.of(dialogCtx).size.height;
+        
         return Center(
           child: Material(
             color: Colors.transparent,
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              constraints: const BoxConstraints(maxWidth: 500),
+              constraints: BoxConstraints(
+                maxWidth: 480,
+                maxHeight: screenHeight * 0.9,
+              ),
               decoration: AppDesign.dialogDecoration,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    height: 120,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.blue.shade900, Colors.blue.shade600],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          station.name,
-                          style: AppDesign.titleStyle,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              isOwned ? Colors.blue.shade900 : Colors.indigo.shade900,
+                              isOwned ? Colors.blue.shade600 : Colors.indigo.shade600,
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                         ),
-                        if (isOwned)
-                          Text(
-                            "مالك المدينة: $ownerName",
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 16,
+                        child: Column(
+                          children: [
+                            Text(
+                              station.name,
+                              style: AppDesign.titleStyle.copyWith(fontSize: 28),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        if (station.imageData != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(15),
-                            child: Image.memory(
-                              station.imageData!,
-                              height: 120,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        else
-                          const Icon(
-                            Icons.location_city,
-                            size: 80,
-                            color: Colors.white24,
-                          ),
-                        const SizedBox(height: 32),
-                        _statRow(
-                          Icons.payments,
-                          "ثمن الشراء",
-                          "${station.buyPrice} P",
-                          Colors.greenAccent,
-                        ),
-                        const Divider(height: 32, color: Colors.white10),
-                        _statRow(
-                          Icons.home,
-                          station.isUnbuyable ? "غرامة التحدي" : "الإيجار الأساسي",
-                          "${station.baseRent} P",
-                          Colors.amberAccent,
-                        ),
-                        const SizedBox(height: 40),
-                        if (station.isUnbuyable) ...[
-                          const Text(
-                            "هذه الشخصية غير قابلة للشراء، يمكنك تحديها للفوز أو دفع غرامة",
-                            style: TextStyle(
-                              color: Colors.amberAccent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () => Navigator.pop(dialogCtx, _StationAction.buy),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.amberAccent,
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(vertical: 20),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                              ),
-                              icon: const Icon(Icons.psychology),
-                              label: const Text(
-                                'تحدي الشخصية (سؤال)',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogCtx, _StationAction.pass),
-                            child: const Text("مرور بسلام", style: TextStyle(color: Colors.white70)),
-                          ),
-                        ] else if (isOwner) ...[
-                          const Text(
-                            "أنت تمتلك هذه المدينة بالفعل!",
-                            style: TextStyle(
-                              color: Colors.greenAccent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          if (station.buildings.isNotEmpty) ...[
-                            const Text(
-                              "المباني المتاحة:",
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 12),
-                            ...station.buildings.asMap().entries.map((entry) {
-                              final idx = entry.key;
-                              final building = entry.value;
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      building.isPurchased ? Icons.check_circle : Icons.home_work,
-                                      color: building.isPurchased ? Colors.greenAccent : Colors.white24,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(building.name, style: const TextStyle(color: Colors.white)),
-                                          Text(
-                                            "الثمن: ${building.buyPrice} | إيجار إضافي: +${building.additionalRent}",
-                                            style: const TextStyle(color: Colors.white60, fontSize: 12),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (!building.isPurchased)
-                                      ElevatedButton(
-                                        onPressed: currentPlayer.money >= building.buyPrice
-                                            ? () async {
-                                                await ref.read(gameEngineProvider.notifier).buyBuilding(station.id!, idx);
-                                                Navigator.pop(dialogCtx, _StationAction.pass);
-                                              }
-                                            : null,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.greenAccent.shade700,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                                        ),
-                                        child: const Text("بناء", style: TextStyle(fontSize: 12)),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            }),
-                            const SizedBox(height: 16),
-                          ],
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.redAccent.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(15),
-                              border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text("تفعيل الضرائب", style: TextStyle(color: Colors.white)),
-                                    Switch(
-                                      value: station.hasTax,
-                                      onChanged: (val) {
-                                        ref.read(gameEngineProvider.notifier).toggleTax(station.id!, val);
-                                        Navigator.pop(dialogCtx, _StationAction.pass);
-                                      },
-                                      activeColor: Colors.redAccent,
-                                    ),
-                                  ],
-                                ),
-                                if (station.hasTax) ...[
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    keyboardType: TextInputType.number,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: InputDecoration(
-                                      hintText: "قيمة الضرائب",
-                                      hintStyle: const TextStyle(color: Colors.white24),
-                                      prefixIcon: const Icon(Icons.money_off, color: Colors.redAccent),
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                    onSubmitted: (val) {
-                                      final amt = double.tryParse(val) ?? 0;
-                                      ref.read(gameEngineProvider.notifier).setTaxAmount(station.id!, amt);
-                                      Navigator.pop(dialogCtx, _StationAction.pass);
-                                    },
-                                    controller: TextEditingController(
-                                      text: station.taxAmount > 0 ? station.taxAmount.toInt().toString() : "",
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    "أي لاعب يمر بهذه المحطة سيدفع هذه القيمة",
-                                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                            if (isOwned) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.person, color: Colors.white70, size: 16),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    isOwner ? "ممتلكاتك" : "مالك المدينة: $ownerName",
+                                    style: const TextStyle(color: Colors.white70, fontSize: 16),
                                   ),
                                 ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(dialogCtx);
-                                _showSellDialog(
-                                  context,
-                                  station,
-                                  gameState,
-                                  ref.read(gameEngineProvider.notifier),
-                                );
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.redAccent,
-                                side: const BorderSide(color: Colors.redAccent),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
-                              icon: const Icon(Icons.sell),
-                              label: const Text("بيع العقار (للبنك أو للاعب)"),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogCtx, _StationAction.pass),
-                            child: const Text("إغلاق", style: TextStyle(color: Colors.white70)),
-                          ),
-                        ] else if (isOwned) ...[
-                          const Text(
-                            "ستدخل تحدي المار لتقليل الإيجار",
-                            style: TextStyle(color: Colors.white60, fontSize: 16),
-                          ),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: () => Navigator.pop(dialogCtx, _StationAction.passerQuestion),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orangeAccent,
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(vertical: 20),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                              ),
-                              child: const Text(
-                                'بدء تحدي المار (سؤال)',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ] else ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.amberAccent.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(15),
-                              border: Border.all(color: Colors.amberAccent.withOpacity(0.3)),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.account_balance_wallet, color: Colors.amberAccent, size: 20),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "رصيدك: ${currentPlayer.money.toInt()} P",
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          _buildBalanceDiff(currentPlayer, station.buyPrice, canBuy),
-                          const SizedBox(height: 24),
-                          if (isSmall)
-                            Column(
-                              children: [
-                                SizedBox(
+                            ],
+                          ],
+                        ),
+                      ),
+                      
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            // Property Image or Icon
+                            if (station.imageData != null)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Image.memory(
+                                  station.imageData!,
+                                  height: 140,
                                   width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: canBuy ? () => Navigator.pop(dialogCtx, _StationAction.buy) : null,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.greenAccent.shade700,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                                    ),
-                                    child: const Text('شراء (سؤال مالك)', style: TextStyle(fontWeight: FontWeight.bold)),
-                                  ),
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  station.isUnbuyable ? Icons.security : Icons.location_city,
+                                  size: 64,
+                                  color: Colors.white24,
+                                ),
+                              ),
+                            
+                            const SizedBox(height: 32),
+                            
+                            // Stats Section
+                            if (!station.isUnbuyable) ...[
+                              _statRow(
+                                Icons.payments,
+                                "ثمن الشراء",
+                                "${station.buyPrice.toInt()} P",
+                                Colors.greenAccent,
+                              ),
+                              const Divider(height: 32, color: Colors.white10),
+                              _statRow(
+                                Icons.home,
+                                "الإيجار الحالي",
+                                "${currentRent.toInt()} P",
+                                Colors.amberAccent,
+                              ),
+                            ] else ...[
+                              _statRow(
+                                Icons.warning_amber_rounded,
+                                "غرامة التحدي",
+                                "${station.baseRent.toInt()} P",
+                                Colors.redAccent,
+                              ),
+                            ],
+                            
+                            const SizedBox(height: 40),
+                            
+                            // Actions Section
+                            if (station.isUnbuyable) ...[
+                              _buildStationButton(
+                                label: "تحدي الشخصية (سؤال)",
+                                icon: Icons.psychology,
+                                color: Colors.amberAccent,
+                                onTap: () => Navigator.pop(dialogCtx, _StationAction.buy),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildStationButton(
+                                label: "مرور بسلام",
+                                icon: Icons.verified_user,
+                                color: Colors.white12,
+                                isPrimary: false,
+                                onTap: () => Navigator.pop(dialogCtx, _StationAction.pass),
+                              ),
+                            ] else if (isOwner) ...[
+                              const Text(
+                                "أنت تمتلك هذه المدينة بالفعل!",
+                                style: TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 24),
+                              _buildStationButton(
+                                label: "إدارة المباني والضرائب",
+                                icon: Icons.settings,
+                                color: Colors.blueAccent,
+                                onTap: () => Navigator.pop(dialogCtx, _StationAction.manage),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildStationButton(
+                                label: "إغلاق",
+                                icon: Icons.close,
+                                color: Colors.white12,
+                                isPrimary: false,
+                                onTap: () => Navigator.pop(dialogCtx, _StationAction.pass),
+                              ),
+                            ] else if (isOwned) ...[
+                              // Someone else owns it
+                              const Text(
+                                "تحتاج لدفع إيجار أو تحدي المالك!",
+                                style: TextStyle(
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 24),
+                              if (station.requiresQuestion) ...[
+                                _buildStationButton(
+                                  label: "سؤال المارة (تحدي)",
+                                  icon: Icons.question_answer,
+                                  color: Colors.orangeAccent,
+                                  onTap: () => Navigator.pop(dialogCtx, _StationAction.passerQuestion),
                                 ),
                                 const SizedBox(height: 12),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton(
-                                    onPressed: () => Navigator.pop(dialogCtx, _StationAction.pass),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white70,
-                                      side: const BorderSide(color: Colors.white24),
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                                    ),
-                                    child: const Text('مرور (بدون سؤال)', style: TextStyle(fontWeight: FontWeight.bold)),
-                                  ),
-                                ),
                               ],
-                            )
-                          else
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: canBuy ? () => Navigator.pop(dialogCtx, _StationAction.buy) : null,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.greenAccent.shade700,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 20),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                                    ),
-                                    child: const Text(
-                                      'شراء (سؤال مالك)',
-                                      style: TextStyle(fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: () => Navigator.pop(dialogCtx, _StationAction.pass),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white70,
-                                      side: const BorderSide(color: Colors.white24),
-                                      padding: const EdgeInsets.symmetric(vertical: 20),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                                    ),
-                                    child: const Text(
-                                      'مرور (بدون سؤال)',
-                                      style: TextStyle(fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          if (!canBuy)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 12.0),
-                              child: Text(
-                                "نقاطك لا تكفي للشراء",
-                                style: TextStyle(color: Colors.redAccent, fontSize: 14),
+                              _buildStationButton(
+                                label: "دفع الإيجار (${currentRent.toInt()} P)",
+                                icon: Icons.payment,
+                                color: Colors.redAccent,
+                                onTap: () => Navigator.pop(dialogCtx, _StationAction.pass),
                               ),
-                            ),
-                        ],
-                      ],
-                    ),
+                            ] else ...[
+                              // Unowned
+                              _buildStationButton(
+                                label: "شراء المدينة",
+                                icon: Icons.shopping_cart,
+                                color: Colors.greenAccent,
+                                active: canAfford,
+                                onTap: () => Navigator.pop(dialogCtx, _StationAction.buy),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildStationButton(
+                                label: "مرور",
+                                icon: Icons.arrow_forward,
+                                color: Colors.white12,
+                                isPrimary: false,
+                                onTap: () => Navigator.pop(dialogCtx, _StationAction.pass),
+                              ),
+                              if (!canAfford) ...[
+                                const SizedBox(height: 12),
+                                const Text(
+                                  "ليس لديك رصيد كافٍ للشراء",
+                                  style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                                ),
+                              ],
+                            ],
+                            const SizedBox(height: 12),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -864,6 +1038,36 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     );
     return result ?? _StationAction.pass;
   }
+
+  Widget _buildStationButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+    bool active = true,
+    bool isPrimary = true,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: active ? onTap : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isPrimary ? color : Colors.white.withOpacity(0.05),
+          foregroundColor: isPrimary ? Colors.black : Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: isPrimary ? 4 : 0,
+          disabledBackgroundColor: Colors.white10,
+        ),
+        icon: Icon(icon, size: 24),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+        ),
+      ),
+    );
+  }
+
 
   Future<bool> _showQuestionDialog(Question question) async {
     final result = await showGeneralDialog<bool>(
@@ -1017,7 +1221,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
 
   // ==================== HEADER ====================
 
-  Widget _buildFloatingHeader(GameState state, BuildContext context) {
+  Widget _buildFloatingHeader(GameState state, GameEngine engine, BuildContext context) {
     bool isSmall = AppDesign.isSmallScreen(context);
     return Container(
       margin: EdgeInsets.symmetric(horizontal: isSmall ? 6 : 20, vertical: isSmall ? 4 : 12),
@@ -1050,13 +1254,40 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                     isSmall: true,
                   ),
                 const SizedBox(width: 4),
-                _buildDynamicStat(
-                  Icons.history,
-                  "${state.totalTurns}",
-                  Colors.blueAccent,
-                  isSmall: true,
-                ),
-              ],
+                  _buildDynamicStat(
+                    Icons.history,
+                    "${state.totalTurns}",
+                    Colors.blueAccent,
+                    isSmall: true,
+                  ),
+                  if (state.settings.loansEnabled) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.account_balance, color: Colors.cyanAccent, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _showBankDialog(context, state, engine),
+                    ),
+                  ],
+                  if (state.settings.certificatesEnabled) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.card_membership, color: Colors.amberAccent, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _showBankDialog(context, state, engine),
+                    ),
+                  ],
+                  if (state.settings.checksEnabled) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.request_quote_rounded, color: Colors.greenAccent, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _showLendDialog(context, state, engine),
+                    ),
+                  ],
+                ],
               if (!isSmall) ...[
                 const SizedBox(width: 8),
                 IconButton(
@@ -1067,6 +1298,30 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                     MaterialPageRoute(builder: (_) => const TeamsManagementPage()),
                   ),
                 ),
+                if (state.settings.loansEnabled) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.account_balance, color: Colors.cyanAccent, size: 26),
+                    tooltip: 'البنك المركزي والقروض',
+                    onPressed: () => _showBankDialog(context, state, engine),
+                  ),
+                ],
+                if (state.settings.certificatesEnabled) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.card_membership, color: Colors.amberAccent, size: 26),
+                    tooltip: 'شراء شهادات بنكية',
+                    onPressed: () => _showBankDialog(context, state, engine),
+                  ),
+                ],
+                if (state.settings.checksEnabled) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.request_quote_rounded, color: Colors.greenAccent, size: 26),
+                    tooltip: 'نظام الشيكات والتسليف',
+                    onPressed: () => _showLendDialog(context, state, engine),
+                  ),
+                ],
               ],
             ],
           ),
@@ -1149,9 +1404,18 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                 const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.auto_awesome, color: Colors.amberAccent, size: 18),
+                  tooltip: 'تطبيق قالب ديني',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _restartGamePrompt(context, ref),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent, size: 18),
+                  tooltip: 'تصفير اللعبة',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _confirmResetGame(),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
@@ -1357,10 +1621,11 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     final bool isSmall = AppDesign.isSmallScreen(context);
     bool isLock =
         gameState.isMovingPlayer ||
-        gameState.isRollingDice ||
-        gameState.isEndingTurn;
+        gameState.isRollingDice;
     bool hasPending =
         gameState.pendingLandingStation != null || _isHandlingLanding;
+    bool canEndTurn = gameState.isEndingTurn && !isLock && !hasPending;
+    bool buttonsActive = !isLock && !hasPending && !gameState.isEndingTurn;
     final currentPlayerColor = [
       Colors.red,
       Colors.green,
@@ -1369,9 +1634,6 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       Colors.purple,
     ][gameState.currentPlayerIndex % 5];
     
-    final winnerColor = gameState.winnerIndex != null 
-        ? [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple][gameState.winnerIndex! % 5]
-        : currentPlayerColor;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1422,8 +1684,8 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w900,
-                            fontSize: (math.min(boardWidth, boardHeight) * 0.06)
-                                .clamp(20, 40)
+                            fontSize: (math.min(boardWidth, boardHeight) * 0.07)
+                                .clamp(24, 45)
                                 .toDouble(),
                             shadows: const [
                               Shadow(
@@ -1446,17 +1708,39 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (gameState.settings.loansEnabled) ...[
+                   _buildActionButton(
+                      label: "البنك",
+                      icon: Icons.account_balance,
+                      active: buttonsActive,
+                      onTap: () => _showBankDialog(context, gameState, engine),
+                      color: Colors.cyanAccent,
+                      size: (math.min(boardWidth, boardHeight) * 0.06).clamp(24, 42).toDouble(),
+                   ),
+                   const SizedBox(width: 10),
+                ],
+                if (gameState.settings.checksEnabled) ...[
+                   _buildActionButton(
+                      label: "شيك",
+                      icon: Icons.request_quote_rounded,
+                      active: buttonsActive,
+                      onTap: () => _showLendDialog(context, gameState, engine),
+                      color: Colors.greenAccent,
+                      size: (math.min(boardWidth, boardHeight) * 0.06).clamp(24, 42).toDouble(),
+                   ),
+                   const SizedBox(width: 10),
+                ],
                 _buildActionButton(
                   label: "نرد",
                   icon: Icons.casino,
-                  active: !isLock && !hasPending,
+                  active: buttonsActive,
                   onTap: () => engine.rollDice(),
                   color: Colors.orangeAccent,
                   size: (math.min(boardWidth, boardHeight) * 0.06).clamp(28, 50).toDouble(),
                 ),
                 const SizedBox(width: 10),
                 GestureDetector(
-                  onTap: (!isLock && !hasPending) ? () => engine.rollDice() : null,
+                  onTap: buttonsActive ? () => engine.rollDice() : null,
                   child: ThreeDDice(
                     size: (math.min(boardWidth, boardHeight) * 0.1).clamp(35, 70).toDouble(),
                     value: gameState.currentDiceValue,
@@ -1468,7 +1752,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                 _buildActionButton(
                   label: "إنهاء",
                   icon: Icons.check_circle,
-                  active: !isLock && !hasPending,
+                  active: canEndTurn,
                   onTap: () {
                     print("DEBUG: Finish button clicked! Forcing next turn.");
                     engine.forceNextTurn();
@@ -1541,6 +1825,15 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                      if (p.activeLoans.isNotEmpty)
+                        Text(
+                          "ديون: ${p.activeLoans.fold<double>(0, (prev, e) => prev + e.amountToRepay).toInt()} P",
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: isCurrent ? 12 : 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(width: 4),
@@ -1592,18 +1885,22 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                 children: [
                   Icon(Icons.directions_car, color: color, size: 10),
                   const SizedBox(width: 4),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "${p.name}: ${p.money.toInt()}",
-                        style: TextStyle(
-                          color: isCurrent ? Colors.black87 : Colors.white70,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            "${p.name}: ${p.money.toInt()}",
+                            style: TextStyle(
+                              color: isCurrent ? Colors.black87 : Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ),
-                      ),
                        if (state.settings.winCriteria != WinCriteria.moneyOnly)
                         Text(
                           "الثروة: ${_calculatePlayerWealth(p, state).toInt()}",
@@ -1613,7 +1910,17 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                    ],
+                      if (p.activeLoans.isNotEmpty)
+                        Text(
+                          "ديون: ${p.activeLoans.fold<double>(0, (prev, e) => prev + e.amountToRepay).toInt()} P",
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 3),
                   Icon(Icons.monetization_on_rounded, color: Colors.amberAccent, size: 10),
@@ -1658,7 +1965,6 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       );
     }
 
-    final bool isSmall = AppDesign.isSmallScreen(context);
     final bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     bool isCorner = index == 0 ||
@@ -1677,11 +1983,11 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
+          onTap: () async {
             if (station.id != null) {
               final ownerIndex = gameState.players.indexWhere((p) => p.ownedStationIds.contains(station.id));
               if (ownerIndex != -1 && ownerIndex == gameState.currentPlayerIndex) {
-                 _showMyPropertyActionDialog(context, station, gameState, ref.read(gameEngineProvider.notifier));
+                 await _manageProperty(station);
               }
             }
           },
@@ -1704,7 +2010,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Stack(
-                children: [
+              children: [
                 Column(
                   children: [
                     Container(
@@ -1724,24 +2030,27 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                     ),
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+                        padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Flexible(
-                              child: Text(
-                                station.name,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: (isLandscape ? ch * 0.16 : cw * 0.18).clamp(10, 45).toDouble(),
-                                  height: 1.1,
-                                  fontWeight: FontWeight.bold, // Bold font as requested
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  station.name,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: (isLandscape ? ch * 0.18 : cw * 0.22).clamp(11, 50).toDouble(),
+                                    height: 1.1,
+                                    fontWeight: FontWeight.bold, // Bold font as requested
+                                  ),
                                 ),
                               ),
                             ),
                             const SizedBox(height: 4),
-                            if (!isCorner && station.buyPrice > 0)
+                            if (station.buyPrice > 0)
                               Builder(builder: (context) {
                                 final ownerIdx = gameState.players.indexWhere((p) => p.ownedStationIds.contains(station.id));
                                 if (ownerIdx != -1) {
@@ -1772,6 +2081,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                     ),
                   ],
                 ),
+                _buildPurchasedBuildings(cw, ch, station),
                 _buildOwnerIndicator(station, cw, ch, gameState),
               ],
             ),
@@ -1883,7 +2193,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       left: pos.dx + (cw / 2) - 30 + (r * 10 - 5),
       top: pos.dy + (ch / 2) - 27.5 + (c * 10 - 5),
       child: PlayerPiece(
-        scale: isSmall ? 0.38 : 0.85,
+        scale: isSmall ? 0.55 : 0.85,
         color: [
           Colors.red,
           Colors.green,
@@ -2036,11 +2346,14 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                     final sortedIndices = List<int>.generate(state.players.length, (i) => i);
                     sortedIndices.sort((a, b) => _calculatePlayerWealth(state.players[b], state).compareTo(_calculatePlayerWealth(state.players[a], state)));
 
+                    final wealths = state.players.map((px) => _calculatePlayerWealth(px, state)).toList();
+                    final maxWealth = wealths.isNotEmpty ? wealths.reduce(math.max) : 0.0;
+
                     return sortedIndices.map((idx) {
                       final p = state.players[idx];
                       final color = [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple][idx % 5];
                       final wealth = _calculatePlayerWealth(p, state);
-                      final isWinner = idx == state.winnerIndex;
+                      final isWinner = wealth == maxWealth && maxWealth > 0;
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
@@ -2133,6 +2446,16 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
   Widget _buildPreparationScreen(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70),
+          onPressed: () => Navigator.pop(context),
+          tooltip: 'رجوع',
+        ),
+      ),
       body: AppDesign.backgroundWrapper(
         child: Center(
           child: Container(
@@ -2154,13 +2477,13 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                 ),
                 const SizedBox(height: 32),
                 Text(
-                  "بنك الحظ: القالب الديني",
+                  "بنك الحظ: القالب الحالي",
                   style: AppDesign.titleStyle.copyWith(fontSize: 26),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  "ابدأ اللعب فوراً باستخدام خريطة أورشليم والمدن المقدسة، أو قم بإنشاء مدنك الخاصة من الإعدادات.",
+                  "ابدأ اللعب الآن باستخدام القالب المختار، أو قم بتخصيص مدنك وكروتك من الإدارة.",
                   style: TextStyle(color: Colors.white60, fontSize: 16, height: 1.5),
                   textAlign: TextAlign.center,
                 ),
@@ -2170,7 +2493,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.play_circle_fill, size: 28),
                     label: const Text(
-                      'بدء اللعبة (القالب الديني)',
+                      'اللعب باستخدام القالب الحالي',
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 0.5),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -2180,17 +2503,48 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                       elevation: 10,
                     ),
-                    onPressed: () => _restartGamePrompt(context, ref),
+                    onPressed: () => _startGameImmediately(context, ref),
                   ),
+                ),
+                const SizedBox(height: 16),
+                // Resume Game Button
+                ref.watch(savedGameExistsProvider).when(
+                  data: (exists) => exists ? SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.history_rounded, size: 28),
+                      label: const Text(
+                        'استكمال اللعبة السابقة',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 22),
+                        backgroundColor: Colors.greenAccent.shade700,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        elevation: 10,
+                      ),
+                      onPressed: () async {
+                         final success = await ref.read(gameEngineProvider.notifier).loadSavedGame();
+                         if (!success) {
+                           if (context.mounted) {
+                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("فشل في تحميل اللعبة السابقة")));
+                           }
+                         }
+                      },
+                    ),
+                  ) : const SizedBox.shrink(),
+                  loading: () => const CircularProgressIndicator(),
+                  error: (_, __) => const SizedBox.shrink(),
                 ),
                 const SizedBox(height: 20),
                 TextButton.icon(
                   icon: const Icon(Icons.settings_outlined, color: Colors.white38),
                   label: const Text(
-                    'إدارة المحطات والكروت',
+                    'اللعب بمدن مخصصة (إدارة القوالب)',
                     style: TextStyle(color: Colors.white38, fontSize: 16),
                   ),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TemplatesManagementPage())),
                 ),
               ],
             ),
@@ -2198,6 +2552,42 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         ),
       ),
     );
+  }
+
+  Future<void> _startGameImmediately(BuildContext context, WidgetRef ref) async {
+    try {
+      // 1. Clear any saved game before starting new one
+      await ref.read(gameEngineProvider.notifier).clearSavedGame();
+      
+      // 2. We skip seeding now to NOT affect current data unless manually reset.
+      // We just use the currently active template ID (already set) and reload providers.
+      ref.invalidate(gameEngineProvider);
+      ref.invalidate(stationsProvider);
+      ref.invalidate(cardsProvider);
+      ref.invalidate(gameSettingsProvider);
+      
+      final teams = await ref.read(teamsListProvider.future);
+      final repo = ref.read(bankAlHazRepositoryProvider);
+      final settings = await repo.getSettings();
+      
+      if (teams.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("يرجى إضافة فرق أولاً من القائمة الرئيسية"),
+            ),
+          );
+        }
+        return;
+      }
+      
+      // 3. Start the game!
+      await ref
+          .read(gameEngineProvider.notifier)
+          .initGame(teams.map((t) => t.name).toList(), settings);
+    } catch (e) {
+      debugPrint("Error starting template: $e");
+    }
   }
 
   void _restartGamePrompt(BuildContext context, WidgetRef ref) {
@@ -2210,11 +2600,11 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           children: [
             Icon(Icons.auto_awesome, color: Colors.amber),
             SizedBox(width: 10),
-            Text("تطبيق القالب الديني؟", style: TextStyle(color: Colors.white)),
+            Text("تأكيد بدء اللعبة؟", style: TextStyle(color: Colors.white)),
           ],
         ),
         content: const Text(
-          "سيتم توزيع مدن العهد القديم والجديد (22 محطة) لتشكيل اللوحة الجديدة. سيتم تصفير اللعبة الحالية.",
+          "سيتم إعادة توزيع المحطات وتصفير اللعبة الحالية للبدء من جديد باستخدام القالب المختار.",
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -2225,48 +2615,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(dialogCtx);
-              try {
-                final db = await DatabaseService.instance.database;
-                // 1. Seed the religious data as Template ID 1
-                await BankAlHazDefaultData.seed(db, force: true, templateId: 1);
-                
-                // 2. Force settings to use Template ID 1 (Religious)
-                final repo = ref.read(bankAlHazRepositoryProvider);
-                var currentSettings = await repo.getSettings();
-                currentSettings = currentSettings.copyWith(activeTemplateId: 1);
-                await repo.saveSettings(currentSettings);
-
-                await Future.delayed(const Duration(milliseconds: 600));
-                
-                // 3. Invalidate and re-read providers
-                ref.invalidate(gameEngineProvider);
-                ref.invalidate(stationsProvider);
-                ref.invalidate(cardsProvider);
-                ref.invalidate(gameSettingsProvider);
-                
-                final teams = await ref.read(teamsListProvider.future);
-                final settings = await ref.read(gameSettingsProvider.future);
-                
-                if (teams.isEmpty) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          "يرجى إضافة فرق أولاً من القائمة الرئيسية",
-                        ),
-                      ),
-                    );
-                  }
-                  return;
-                }
-                
-                // 4. Start the game!
-                await ref
-                    .read(gameEngineProvider.notifier)
-                    .initGame(teams.map((t) => t.name).toList(), settings);
-              } catch (e) {
-                print("Error starting religious template: $e");
-              }
+              await _startGameImmediately(context, ref);
             },
             child: const Text("تأكيد"),
           ),
@@ -2275,157 +2624,9 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     );
   }
 
-  Future<void> _handlePostPurchaseFlow(Station station, GameEngine engine) async {
-    // 1. Building Flow
-    if (station.buildings.isNotEmpty) {
-      await _showBuildPromptDialog(station, engine);
-    }
-    
-    // Refresh station state from board (it might have been updated by buildings)
-    final updatedStation = ref.read(gameEngineProvider).board.firstWhere((s) => s.id == station.id);
 
-    // 2. Tax Flow
-    if (updatedStation.allowsTax) {
-      await _showTaxSettingDialog(updatedStation, engine);
-    }
-  }
 
-  Future<void> _showBuildPromptDialog(Station station, GameEngine engine) async {
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          final gameState = ref.watch(gameEngineProvider);
-          final currentStation = gameState.board.firstWhere((s) => s.id == station.id);
-          final currentPlayer = gameState.players[gameState.currentPlayerIndex];
-          
-          return AlertDialog(
-            backgroundColor: AppDesign.slate800,
-            title: Text('البناء في ${station.name}', style: AppDesign.titleStyle),
-            content: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                   const Text('هل تريد شراء مباني لهذه المدينة؟', style: AppDesign.subtitleStyle),
-                   const SizedBox(height: 16),
-                   // Show current balance
-                   Container(
-                     padding: const EdgeInsets.all(12),
-                     decoration: BoxDecoration(
-                       color: Colors.white.withOpacity(0.05),
-                       borderRadius: BorderRadius.circular(12),
-                     ),
-                     child: Row(
-                       mainAxisAlignment: MainAxisAlignment.center,
-                       children: [
-                         const Icon(Icons.account_balance_wallet, color: Colors.amberAccent, size: 20),
-                         const SizedBox(width: 8),
-                         Text(
-                           "رصيدك الحالي: ${currentPlayer.money.toInt()} P",
-                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                         ),
-                       ],
-                     ),
-                   ),
-                   const SizedBox(height: 16),
-                  ...currentStation.buildings.asMap().entries.map((entry) {
-                    final idx = entry.key;
-                    final b = entry.value;
-                    final canAfford = currentPlayer.money >= b.buyPrice;
-                    
-                    return ListTile(
-                      title: Text(b.name, style: const TextStyle(color: Colors.white)),
-                      subtitle: Text('ثمن: ${b.buyPrice} • إيجار إضافي: ${b.additionalRent}', style: const TextStyle(color: Colors.white70)),
-                      trailing: b.isPurchased 
-                        ? const Icon(Icons.check_circle, color: Colors.greenAccent)
-                        : ElevatedButton(
-                            onPressed: canAfford ? () async {
-                              await engine.buyBuilding(station.id!, idx);
-                              setState(() {});
-                            } : null,
-                            child: const Text('شراء'),
-                          ),
-                    );
-                  }).toList(),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('إنهاء البناء'),
-              ),
-            ],
-          );
-        }
-      ),
-    );
-  }
 
-  Future<void> _showTaxSettingDialog(Station station, GameEngine engine) async {
-    final controller = TextEditingController(text: station.taxAmount.toString());
-    bool taxEnabled = station.hasTax;
-    
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          backgroundColor: AppDesign.slate800,
-          title: Text('إعدادات الضرائب - ${station.name}', style: AppDesign.titleStyle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SwitchListTile(
-                title: const Text('تفعيل الضرائب', style: TextStyle(color: Colors.white)),
-                subtitle: const Text('سيقوم اللاعبون بدفع مبلغ عند المرور بهذه الخانة أو الوقوف عليها', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                value: taxEnabled,
-                onChanged: (val) {
-                  setState(() {
-                    taxEnabled = val;
-                    if (val && (double.tryParse(controller.text) ?? 0) == 0) {
-                      // Set default to maximum limit
-                      controller.text = (station.buyPrice * 0.25).toInt().toString();
-                    }
-                  });
-                },
-              ),
-              if (taxEnabled)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: TextField(
-                    controller: controller,
-                    decoration: InputDecoration(
-                      labelText: 'قيمة الضريبة (بحد أقصى ${station.buyPrice * 0.25})',
-                      labelStyle: const TextStyle(color: Colors.white70),
-                      enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
-                      focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.blueAccent)),
-                    ),
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                engine.toggleTax(station.id!, taxEnabled);
-                if (taxEnabled) {
-                  final amt = double.tryParse(controller.text) ?? 10.0;
-                  engine.setTaxAmount(station.id!, amt);
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Color _getCityColor(int index) {
     final colors = [
@@ -2526,6 +2727,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       case LogType.purchase: return Icons.shopping_cart;
       case LogType.movement: return Icons.directions_walk;
       case LogType.info: return Icons.info;
+      case LogType.warning: return Icons.warning_amber_rounded;
     }
   }
 
@@ -2536,43 +2738,66 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       case LogType.purchase: return Colors.blueAccent;
       case LogType.movement: return Colors.amberAccent;
       case LogType.info: return Colors.white54;
+      case LogType.warning: return Colors.orangeAccent;
     }
   }
 
-  Widget _buildBalanceDiff(BankAlHazPlayer player, double cost, bool active) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("رصيدك الحالي", style: TextStyle(color: Colors.white60, fontSize: 11)),
-              Text("${player.money.toInt()} P", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-            ],
-          ),
-          const Icon(Icons.arrow_forward_rounded, color: Colors.white24, size: 28),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text("الرصيد بعد الشراء", style: TextStyle(color: Colors.white60, fontSize: 11)),
-              Text(
-                "${(player.money - cost).toInt()} P", 
-                style: TextStyle(
-                  color: active ? Colors.greenAccent : Colors.redAccent, 
-                  fontWeight: FontWeight.w900,
-                  fontSize: 18,
-                )
-              ),
-            ],
-          ),
-        ],
+
+
+  // ==================== PROPERTY MANAGEMENT ====================
+
+  String _getBuildingIcon(String name) {
+    final n = name.trim();
+    if (n.contains("دير")) return "assets/images/monastery.png";
+    if (n.contains("كاتدرائية")) return "assets/images/cathedral.png";
+    if (n.contains("كنيسة")) return "assets/images/church.png";
+    if (n.contains("خيمة")) return "assets/images/khema.jpg";
+    if (n.contains("الهيكل")) return "assets/images/Solomon's_Temple.jpg";
+    if (n.contains("المجمع")) return "assets/images/synagogue-capernaum-israel.jpg";
+    return "";
+  }
+
+  Color _getBuildingGlow(String name) {
+    final n = name.trim();
+    if (n.contains("دير")) return Colors.brown.shade300;
+    if (n.contains("كاتدرائية")) return Colors.amber.shade300;
+    if (n.contains("كنيسة")) return Colors.blue.shade300;
+    if (n.contains("خيمة")) return Colors.white70;
+    if (n.contains("الهيكل")) return Colors.orangeAccent;
+    if (n.contains("المجمع")) return Colors.cyanAccent;
+    return Colors.white;
+  }
+
+  Widget _buildPurchasedBuildings(double cw, double ch, Station station) {
+    final purchased = station.buildings.where((b) => b.isPurchased).toList();
+    if (purchased.isEmpty) return const SizedBox.shrink();
+
+    return Positioned(
+      top: 5,
+      left: 0,
+      right: 0,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 2,
+        runSpacing: 2,
+        children: purchased.map((b) {
+          final iconPath = _getBuildingIcon(b.name);
+          if (iconPath.isEmpty) return const SizedBox.shrink();
+          final glowColor = _getBuildingGlow(b.name);
+          
+          return Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: glowColor, width: 1),
+              boxShadow: [
+                BoxShadow(color: glowColor.withOpacity(0.8), blurRadius: 10, spreadRadius: 1.5),
+              ],
+            ),
+            child: ClipOval(
+              child: Image.asset(iconPath, width: cw * 0.18, height: cw * 0.18, fit: BoxFit.cover),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -2594,7 +2819,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           ],
         ),
         content: SizedBox(
-          width: double.maxFinite,
+          width: 400,
           child: ownedStations.isEmpty
               ? const Column(
                   mainAxisSize: MainAxisSize.min,
@@ -2627,18 +2852,18 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(s.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                  Text("القيمة: ${s.buyPrice.toInt()} P", style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                                  Text("الثمن الأساسي: ${s.buyPrice.toInt()} P", style: const TextStyle(color: Colors.white60, fontSize: 12)),
                                 ],
                               ),
                             ),
                             TextButton.icon(
-                              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                              style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
                               onPressed: () {
                                 Navigator.pop(ctx);
-                                _showSellDialog(context, s, state, ref.read(gameEngineProvider.notifier));
+                                _manageProperty(s);
                               },
-                              icon: const Icon(Icons.sell, size: 16),
-                              label: const Text("بيع", style: TextStyle(fontSize: 12)),
+                              icon: const Icon(Icons.settings, size: 16),
+                              label: const Text("إدارة", style: TextStyle(fontSize: 12)),
                             ),
                           ],
                         ),
@@ -2658,162 +2883,193 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     );
   }
 
-  void _showMyPropertyActionDialog(BuildContext context, Station station, GameState state, GameEngine notifier) {
-    showDialog(
+  Future<void> _showPropertyManagementDialog(BuildContext context, Station station, GameState state, GameEngine engine) {
+    return showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: EdgeInsets.zero,
-        content: Container(
-          width: 350,
-          decoration: AppDesign.dialogDecoration,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                decoration: BoxDecoration(
-                  color: _getCityColor(state.board.indexOf(station)).withOpacity(0.8),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(Icons.location_city, color: Colors.white, size: 48),
-                    const SizedBox(height: 12),
-                    Text(station.name, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    _buildDialogAction(
-                      icon: Icons.add_business,
-                      title: "بناء في المدينة",
-                      subtitle: "تطوير وتحسين العائد",
-                      color: Colors.amberAccent,
-                      onTap: () {
-                         Navigator.pop(ctx);
-                         _showBuildingDialog(context, state, station, notifier);
-                      },
-                    ),
-                    _buildDialogAction(
-                      icon: station.hasTax ? Icons.gavel : Icons.gavel_outlined,
-                      title: station.hasTax ? "إلغاء تفعيل الضريبة" : "تفعيل الضريبة",
-                      subtitle: "تحصيل رسوم من المارين",
-                      color: Colors.blueAccent,
-                      onTap: () {
-                         Navigator.pop(ctx);
-                         notifier.toggleTax(station.id!, !station.hasTax);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDialogAction(
-                      icon: Icons.sell,
-                      title: "بيع العقار",
-                      subtitle: "للـبنـــك أو لـلاعب آخـــر",
-                      color: Colors.redAccent,
-                      onTap: () {
-                         Navigator.pop(ctx);
-                         _showSellDialog(context, station, state, notifier);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("إغلاق", style: TextStyle(color: Colors.white54))),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+      barrierColor: Colors.black54,
+      builder: (ctx) => Consumer(
+        builder: (context, ref, child) {
+          final liveState = ref.watch(gameEngineProvider);
+          final liveStation = liveState.board.firstWhere((s) => s.id == station.id, orElse: () => station);
+          final currentPlayer = liveState.players[liveState.currentPlayerIndex];
+          final cityColor = _getCityColor(liveState.board.indexOf(liveStation));
 
-  void _showBuildingDialog(BuildContext context, GameState state, Station station, GameEngine engine) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey.shade900,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text("بناء في ${station.name}", style: const TextStyle(color: Colors.white)),
-        content: SizedBox(
-          width: 300,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: station.buildings.asMap().entries.map((entry) {
-              final b = entry.value;
-              return ListTile(
-                title: Text(b.name, style: const TextStyle(color: Colors.white)),
-                subtitle: Text("عائد إضافي: ${b.additionalRent.toInt()} P", style: const TextStyle(color: Colors.white54)),
-                trailing: b.isPurchased 
-                  ? const Icon(Icons.check_circle, color: Colors.greenAccent)
-                  : ElevatedButton(
-                      onPressed: state.players[state.currentPlayerIndex].money >= b.buyPrice
-                          ? () {
-                              engine.addUpgradeToStation(station.id!, b.name);
-                              Navigator.pop(ctx);
-                            }
-                          : null,
-                      child: Text("${b.buyPrice.toInt()} P"),
-                    ),
-              );
-            }).toList(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDialogAction({required IconData icon, required String title, required String subtitle, required Color color, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
+          return AlertDialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            contentPadding: EdgeInsets.zero,
+            content: Container(
+              width: 500,
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+              decoration: AppDesign.dialogDecoration,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+                    decoration: BoxDecoration(
+                      color: cityColor.withOpacity(0.85),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.location_city, color: Colors.white, size: 32),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(liveStation.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                                Text("رصيدك: ${currentPlayer.money.toInt()} P", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(ctx)),
+                      ],
+                    ),
+                  ),
+
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (liveStation.buildings.isNotEmpty) ...[
+                             Row(
+                               children: [
+                                 Icon(Icons.business_outlined, color: cityColor, size: 20),
+                                 const SizedBox(width: 8),
+                                 const Text('تطوير المدينة والمباني', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                               ],
+                             ),
+                             const SizedBox(height: 12),
+                             ...liveStation.buildings.asMap().entries.map((entry) {
+                               final bIdx = entry.key;
+                               final b = entry.value;
+                               final iconPath = _getBuildingIcon(b.name);
+                               final canAfford = currentPlayer.money >= b.buyPrice;
+
+                               return Container(
+                                 margin: const EdgeInsets.only(bottom: 12),
+                                 decoration: BoxDecoration(
+                                   color: Colors.white.withOpacity(0.05),
+                                   borderRadius: BorderRadius.circular(15),
+                                   border: Border.all(color: b.isPurchased ? cityColor.withOpacity(0.5) : Colors.white10),
+                                 ),
+                                 child: ListTile(
+                                   leading: iconPath.isNotEmpty 
+                                     ? ClipOval(child: Image.asset(iconPath, width: 34, height: 34, fit: BoxFit.cover))
+                                     : Icon(Icons.business, color: cityColor.withOpacity(0.5)),
+                                   title: Text(b.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                                   subtitle: Text("+${b.additionalRent.toInt()} P إيجار", style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                   trailing: b.isPurchased 
+                                     ? const Icon(Icons.check_circle, color: Colors.greenAccent)
+                                     : ElevatedButton(
+                                         style: ElevatedButton.styleFrom(
+                                           backgroundColor: canAfford ? cityColor : Colors.grey,
+                                           foregroundColor: Colors.black,
+                                           padding: const EdgeInsets.symmetric(horizontal: 16),
+                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                         ),
+                                         onPressed: canAfford ? () => engine.buyBuilding(liveStation.id!, bIdx) : null,
+                                         child: Text("${b.buyPrice.toInt()} P"),
+                                       ),
+                                 ),
+                               );
+                             }).toList(),
+                             const SizedBox(height: 20),
+                          ],
+
+                          if (state.settings.taxMode != BankAlHazTaxMode.none && liveStation.allowsTax) ...[
+                             Row(
+                               children: [
+                                 const Icon(Icons.gavel, color: Colors.blueAccent, size: 20),
+                                 const SizedBox(width: 8),
+                                 const Text('تحصيل الضرائب', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                               ],
+                             ),
+                             const SizedBox(height: 12),
+                             Container(
+                               decoration: BoxDecoration(
+                                 color: Colors.white.withOpacity(0.05),
+                                 borderRadius: BorderRadius.circular(15),
+                                 border: Border.all(color: liveStation.hasTax ? Colors.blueAccent.withOpacity(0.5) : Colors.white10),
+                               ),
+                               child: SwitchListTile(
+                                 title: Text(liveStation.hasTax ? "الضريبة مفعلة" : "تفعيل الضريبة", style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                 subtitle: Text("القيمة: ${liveStation.hasTax ? liveStation.taxAmount.toInt() : (liveStation.buyPrice * 0.15).toInt()} P", style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                 value: liveStation.hasTax,
+                                 activeColor: Colors.blueAccent,
+                                 onChanged: (val) => engine.toggleStationTax(liveStation.id!),
+                               ),
+                             ),
+                             const SizedBox(height: 20),
+                          ],
+
+                          const Divider(color: Colors.white10),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                                side: const BorderSide(color: Colors.redAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                              ),
+                              icon: const Icon(Icons.sell_outlined),
+                              label: const Text("بيع العقار أو التنازل عنه", style: TextStyle(fontWeight: FontWeight.bold)),
+                              onPressed: () async {
+                                final confirm = await _showSellDialog(context, liveStation, liveState, engine);
+                                if (confirm == true && context.mounted) {
+                                  Navigator.pop(ctx);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text("إتمام الإدارة وإغلاق", style: TextStyle(color: Colors.white60)),
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.white24),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  void _showSellDialog(BuildContext context, Station station, GameState state, GameEngine engine) {
+
+
+
+
+  Future<bool?> _showSellDialog(BuildContext context, Station station, GameState state, GameEngine engine) {
     final otherPlayers = state.players.asMap().entries.where((e) => e.key != state.currentPlayerIndex).toList();
     
-    showDialog(
+    return showDialog(
       context: context,
       builder: (dialogCtx) {
         bool sellToBank = true;
         int? selectedBuyerIdx;
-        double price = (station.buyPrice * 0.5).floorToDouble(); // Default for bank
+        
+        // Calculate initial price correctly including buildings
+        double baseValue = station.buyPrice;
+        for (var b in station.buildings) if (b.isPurchased) baseValue += b.buyPrice;
+        double price = (baseValue * 0.5).floorToDouble(); // Default for bank
 
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
@@ -2859,7 +3115,9 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                                  selected: sellToBank,
                                  onTap: () => setDialogState(() {
                                    sellToBank = true;
-                                   price = (station.buyPrice * 0.5).floorToDouble();
+                                    double val = station.buyPrice;
+                                    for (var b in station.buildings) if (b.isPurchased) val += b.buyPrice;
+                                    price = (val * 0.5).floorToDouble();
                                  }),
                                ),
                              ),
@@ -2871,7 +3129,9 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                                  selected: !sellToBank,
                                  onTap: () => setDialogState(() {
                                    sellToBank = false;
-                                   price = station.buyPrice;
+                                    double val = station.buyPrice;
+                                    for (var b in station.buildings) if (b.isPurchased) val += b.buyPrice;
+                                    price = val;
                                  }),
                                ),
                              ),
@@ -2890,9 +3150,40 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                               ),
                               child: Column(
                                 children: [
-                                  const Text("سعر البيع للبنك (50%)", style: TextStyle(color: Colors.white60)),
+                                                                    // Price Breakdown
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text("ثمن المدينة (50%):", style: TextStyle(color: Colors.white60, fontSize: 13)),
+                                      Text("${(station.buyPrice * 0.5).toInt()} P", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
                                   const SizedBox(height: 8),
-                                  Text("${price.toInt()} P", style: const TextStyle(color: Colors.greenAccent, fontSize: 24, fontWeight: FontWeight.bold)),
+                                  if (station.buildings.any((b) => b.isPurchased)) ...[
+                                     Row(
+                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                       children: [
+                                         const Text("ثمن المشتريات (50%):", style: TextStyle(color: Colors.white60, fontSize: 13)),
+                                         Text("${(station.buildings.where((b) => b.isPurchased).fold(0.0, (sum, b) => sum + b.buyPrice * 0.5)).toInt()} P", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                       ],
+                                     ),
+                                     const Divider(color: Colors.white10, height: 16),
+                                  ],
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                     keyboardType: TextInputType.number,
+                                     decoration: InputDecoration(
+                                       labelText: "السعر النهائي للبنك",
+                                       labelStyle: const TextStyle(color: Colors.amberAccent, fontSize: 14),
+                                       suffixText: "P",
+                                       suffixStyle: const TextStyle(color: Colors.greenAccent),
+                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                       prefixIcon: const Icon(Icons.account_balance, color: Colors.blueAccent),
+                                     ),
+                                     controller: TextEditingController(text: price.toInt().toString()),
+                                     style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                     onChanged: (val) => price = double.tryParse(val) ?? price,
+                                  ),
                                 ],
                               ),
                             ),
@@ -2937,7 +3228,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                            children: [
                              Expanded(
                                child: TextButton(
-                                 onPressed: () => Navigator.pop(dialogCtx),
+                                 onPressed: () => Navigator.pop(dialogCtx, false),
                                  child: const Text("إلغاء", style: TextStyle(color: Colors.white54)),
                                ),
                              ),
@@ -2945,11 +3236,11 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                                child: ElevatedButton(
                                  onPressed: (sellToBank || selectedBuyerIdx != null) ? () {
                                    if (sellToBank) {
-                                      engine.sellStationToBank(station.id!);
+                                      engine.sellStationToBank(station.id!, price);
                                    } else {
                                       engine.sellStationToPlayer(station.id!, selectedBuyerIdx!, price);
                                    }
-                                   Navigator.pop(dialogCtx);
+                                   Navigator.pop(dialogCtx, true);
                                  } : null,
                                  style: ElevatedButton.styleFrom(
                                    backgroundColor: Colors.redAccent,
@@ -2993,6 +3284,22 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           ],
         ),
       ),
+    );
+  }
+
+  void _showBankDialog(BuildContext context, GameState state, GameEngine engine) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "Bank",
+      barrierColor: Colors.black87,
+      transitionDuration: const Duration(milliseconds: 300),
+      transitionBuilder: (ctx, a1, a2, child) {
+        return FadeTransition(opacity: a1, child: ScaleTransition(scale: a1, child: child));
+      },
+      pageBuilder: (context, _, __) {
+        return _BankDialog(state: state, engine: engine);
+      },
     );
   }
 }
@@ -3389,6 +3696,306 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
               const Icon(Icons.check_circle, color: Colors.greenAccent, size: 24),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BankDialog extends StatefulWidget {
+  final GameState state;
+  final GameEngine engine;
+  const _BankDialog({required this.state, required this.engine});
+
+  @override
+  State<_BankDialog> createState() => _BankDialogState();
+}
+
+class _BankDialogState extends State<_BankDialog> {
+  final _amountController = TextEditingController(text: '500');
+  late final TextEditingController _durationController;
+  final _certificateAmountController = TextEditingController(text: '500');
+
+  @override
+  void initState() {
+    super.initState();
+    _durationController = TextEditingController(text: widget.state.settings.maxLoanDurationTurns.toString());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final player = widget.state.players[widget.state.currentPlayerIndex];
+    final settings = widget.state.settings;
+    
+    // Calculate dynamic interest for the UI
+    final loanPenalty = player.loansTakenCount * settings.loanInterestPenalty;
+    final effectiveInterestRate = settings.loanInterestRate + loanPenalty;
+    final interestPercent = (effectiveInterestRate * 100).toInt();
+
+    final inputAmount = double.tryParse(_amountController.text) ?? 0;
+    final inputDuration = int.tryParse(_durationController.text) ?? 1;
+
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 500),
+          decoration: AppDesign.dialogDecoration,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.account_balance, color: Colors.cyanAccent, size: 32),
+                    const SizedBox(width: 16),
+                    const Expanded(child: Text('البنك المركزي والقروض', style: AppDesign.titleStyle)),
+                    IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
+                  ],
+                ),
+                const Divider(color: Colors.white10, height: 32),
+                
+                // ==================== CERTIFICATES ====================
+                if (settings.certificatesEnabled) ...[
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('نظام الشهايد الاستثمارية:', style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 12),
+                  // Active Certificates
+                  if (player.activeCertificates.isNotEmpty) ...[
+                    ...player.activeCertificates.map((cert) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.stars, color: Colors.amberAccent, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('قيمة الشهادة: ${cert.principal.toInt()} P', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                Text('الدورات المكتملة: ${cert.cyclesCompleted}/${cert.totalCycles}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            '+${(cert.principal * cert.interestRate).toInt()} P / دورة',
+                            style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    )),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  // Buy New Certificate
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.amber.withOpacity(0.2)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'بفائدة ${(settings.certificateInterestRate * 100).toInt()}% ولمدة ${settings.certificateCycles} دورات',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _certificateAmountController,
+                          style: const TextStyle(color: Colors.white),
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'مبلغ الشهادة (الحد الأدنى ${settings.minCertificateAmount.toInt()})',
+                            labelStyle: const TextStyle(color: Colors.white60),
+                            prefixIcon: const Icon(Icons.add_moderator, color: Colors.amberAccent),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final amount = double.tryParse(_certificateAmountController.text) ?? 0;
+                              if (amount >= settings.minCertificateAmount && player.money >= amount) {
+                                widget.engine.buyCertificate(amount);
+                                Navigator.pop(context);
+                              } else if (player.money < amount) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("رصيدك غير كافٍ!")));
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("الحد الأدنى هو ${settings.minCertificateAmount.toInt()}")));
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.amberAccent,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('شراء شهادة', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(color: Colors.white10, height: 40),
+                ],
+                
+                // ==================== LOANS ====================
+                if (settings.loansEnabled) ...[
+                  if (player.activeLoans.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text('لا يوجد لديك قروض نشطة حالياً', style: TextStyle(color: Colors.white60)),
+                    )
+                  else ...[
+                    const Align(
+                      alignment: Alignment.centerRight,
+                      child: Text('قروضك النشطة:', style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(height: 12),
+                    ...player.activeLoans.asMap().entries.map((entry) {
+                      final loan = entry.value;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('القيمة المطلوبة: ${loan.amountToRepay.toInt()} P', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text('متبقي: ${loan.remainingTurns} أدوار', style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: player.money >= loan.amountToRepay ? () {
+                                widget.engine.repayLoan(entry.key);
+                                Navigator.pop(context);
+                              } : null,
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, foregroundColor: Colors.black),
+                              child: const Text('سداد'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Take New Loan
+                  const Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('طلب قرض جديد:', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
+                    ),
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _amountController,
+                          style: const TextStyle(color: Colors.white),
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'المبلغ المراد اقتراضه (حد أقصى ${settings.maxLoanAmount.toInt()})',
+                            labelStyle: const TextStyle(color: Colors.white60),
+                            prefixIcon: const Icon(Icons.monetization_on, color: Colors.amberAccent),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _durationController,
+                          style: const TextStyle(color: Colors.white),
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'مدة السداد (حد أقصى ${settings.maxLoanDurationTurns} أدوار)',
+                            labelStyle: const TextStyle(color: Colors.white60),
+                            prefixIcon: const Icon(Icons.timer, color: Colors.blueAccent),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 16),
+                        Text('• نسبة الفائدة الحالية: $interestPercent%', style: const TextStyle(color: Colors.orangeAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                        if (player.loansTakenCount > 0)
+                          Text('• زيادة بسبب تكرار القروض: +${(player.loansTakenCount * settings.loanInterestPenalty * 100).toInt()}%', style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
+                        const SizedBox(height: 8),
+                        const Divider(color: Colors.white10),
+                        Text(
+                          'إجمالي المبلغ المطلوب سداده: ${(inputAmount * (1 + effectiveInterestRate)).toInt()} P',
+                          style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: (settings.allowLoanRefinancing || player.activeLoans.isEmpty) && 
+                                        inputAmount > 0 && inputAmount <= settings.maxLoanAmount &&
+                                        inputDuration > 0 && inputDuration <= settings.maxLoanDurationTurns
+                             ? () {
+                              widget.engine.takeLoan(inputAmount, inputDuration);
+                              Navigator.pop(context);
+                            } : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.cyanAccent,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('اقتراض الآن', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          ),
+                        ),
+                        if (!settings.allowLoanRefinancing && player.activeLoans.isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text('يجب سداد القرض الحالي أولاً!', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                          ),
+                         if (inputAmount > settings.maxLoanAmount)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text('المبلغ يتجاوز الحد الأقصى المسموح به!', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                          ),
+                         if (inputDuration > settings.maxLoanDurationTurns)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text('المدة تتجاوز الحد الأقصى المسموح به!', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -1,7 +1,9 @@
 import 'dart:typed_data';
+import 'package:sqflite/sqflite.dart';
 import 'package:games/core/database/database_service.dart';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import '../../domain/repositories/bank_al_haz_repository.dart';
+import 'package:games/core/utils/arabic_utils.dart';
 
 class BankAlHazRepositoryImpl implements BankAlHazRepository {
   final DatabaseService _dbService = DatabaseService.instance;
@@ -32,8 +34,36 @@ class BankAlHazRepositoryImpl implements BankAlHazRepository {
   Future<void> deleteTemplate(int id) async {
     final db = await _dbService.database;
     await db.delete('bah_templates', where: 'id = ?', whereArgs: [id]);
+    
+    // Cascading delete
+    final sids = await db.query('bah_stations', columns: ['id'], where: 'template_id = ?', whereArgs: [id]);
+    for (var sid in sids) {
+      await db.delete('bah_buildings', where: 'station_id = ?', whereArgs: [sid['id']]);
+    }
     await db.delete('bah_stations', where: 'template_id = ?', whereArgs: [id]);
     await db.delete('bah_cards', where: 'template_id = ?', whereArgs: [id]);
+  }
+
+  @override
+  Future<int> duplicateTemplate(int sourceId, String newName) async {
+    final db = await _dbService.database;
+    
+    // Create new template
+    final newId = await db.insert('bah_templates', {'name': newName});
+    
+    // Duplicate Stations
+    final stations = await getStations(templateId: sourceId);
+    for (var s in stations) {
+      await addStation(s, templateId: newId);
+    }
+    
+    // Duplicate Cards
+    final cards = await getCards(templateId: sourceId);
+    for (var c in cards) {
+      await saveCard(c, templateId: newId);
+    }
+    
+    return newId;
   }
 
   @override
@@ -76,7 +106,7 @@ class BankAlHazRepositoryImpl implements BankAlHazRepository {
             orElse: () => StationType.question
           ),
           ownerCategoryId: map['owner_category_id'] as int? ?? map['category_id'] as int?,
-          passerCategoryId: map['passer_category_id'] as int?,
+          passerCategoryId: map['passer_category_id'] as int? ?? map['category_id'] as int?,
           requiresQuestion: (map['requires_question'] as int? ?? 1) == 1,
           cardType: map['card_type'] as String?,
           buyPrice: (map['buy_price'] as num?)?.toDouble() ?? 0.0,
@@ -302,5 +332,99 @@ class BankAlHazRepositoryImpl implements BankAlHazRepository {
       'active_template_id': settings.activeTemplateId,
     };
     await db.update('bah_settings', row, where: 'id = 1');
+  }
+
+  @override
+  Future<void> saveGameState(String json) async {
+    final db = await _dbService.database;
+    await db.insert(
+      'bah_game_state', 
+      {'id': 1, 'state_json': json},
+      conflictAlgorithm: ConflictAlgorithm.replace
+    );
+  }
+
+  @override
+  Future<String?> getGameState() async {
+    try {
+      final db = await _dbService.database;
+      final maps = await db.query('bah_game_state', where: 'id = 1');
+      if (maps.isNotEmpty) {
+        return maps.first['state_json'] as String?;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  @override
+  Future<void> clearGameState() async {
+    final db = await _dbService.database;
+    await db.delete('bah_game_state', where: 'id = 1');
+  }
+
+  @override
+  Future<int> autoLinkStationsWithCategories({int? templateId}) async {
+    final db = await _dbService.database;
+    final stations = await getStations(templateId: templateId);
+    // Order by questions count so if there are duplicates, we pick the one with actual data
+    final categories = await db.rawQuery('''
+      SELECT c.*, COUNT(qc.question_id) as q_count 
+      FROM categories c 
+      JOIN question_categories qc ON c.id = qc.category_id 
+      GROUP BY c.id 
+      HAVING q_count > 0
+      ORDER BY q_count DESC
+    ''');
+    
+    int linkedCount = 0;
+    
+    await db.transaction((txn) async {
+      for (var station in stations) {
+        // Only link properties or existing question stations
+        if (station.type != StationType.property && station.type != StationType.question) continue;
+        
+        final normalizedName = ArabicUtils.normalize(station.name);
+        // Remove all spaces, hyphens, and parentheses for more lenient matching
+        final cleanName = normalizedName.replaceAll(' ', '').replaceAll('-', '').replaceAll(RegExp(r'\(.*\)'), '').replaceAll('(', '').replaceAll(')', '');
+        
+        int? ownerCatId;
+        int? passerCatId;
+        
+        for (var cat in categories) {
+          final catName = cat['name'] as String;
+          final normalizedCat = ArabicUtils.normalize(catName);
+          final cleanCat = normalizedCat.replaceAll(' ', '').replaceAll('-', '').replaceAll(RegExp(r'\(.*\)'), '').replaceAll('(', '').replaceAll(')', '');
+            
+          // Priority 1: Match with "Owner" or "Passer" suffix
+          if (cleanCat == "${cleanName}مالك" || cleanCat == "مالك${cleanName}") {
+            ownerCatId = cat['id'] as int;
+          } else if (cleanCat == "${cleanName}عابر" || cleanCat == "عابر${cleanName}") {
+            passerCatId = cat['id'] as int;
+          } 
+          // Priority 2: Direct match (if ownerCatId is still null)
+          else if (cleanCat == cleanName) {
+            if (ownerCatId == null) ownerCatId = cat['id'] as int;
+            if (passerCatId == null) passerCatId = cat['id'] as int;
+          }
+        }
+        
+        if (ownerCatId != null || passerCatId != null) {
+          await txn.update(
+            'bah_stations',
+            {
+              if (ownerCatId != null) 'owner_category_id': ownerCatId,
+              if (passerCatId != null) 'passer_category_id': passerCatId,
+              'requires_question': 1,
+              'type': StationType.question.name,
+            },
+            where: 'id = ?',
+            whereArgs: [station.id],
+          );
+          linkedCount++;
+        }
+      }
+    });
+    
+    return linkedCount;
   }
 }

@@ -174,12 +174,15 @@ class _PlayerPieceState extends State<PlayerPiece> with SingleTickerProviderStat
                            BoxShadow(color: Colors.black45, blurRadius: 10, spreadRadius: 2),
                         ],
                       ),
-                      child: Text(
-                        widget.label,
-                        style: TextStyle(
-                          color: Colors.white, 
-                          fontSize: (widget.scale < 0.5) ? 14 : ((widget.scale < 1.0) ? (12 / widget.scale) : 18), 
-                          fontWeight: FontWeight.w900,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          widget.label,
+                          style: TextStyle(
+                            color: Colors.white, 
+                            fontSize: (widget.scale < 0.5) ? 14 : ((widget.scale < 1.0) ? (12 / widget.scale) : 18), 
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
                     ),

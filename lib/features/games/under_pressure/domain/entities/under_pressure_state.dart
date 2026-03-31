@@ -23,6 +23,8 @@ class UnderPressureState {
   final List<int>? categoryIds;
   final int team1PointsAdded;
   final int team2PointsAdded;
+  final List<Question>? templateQuestions;
+  final String? templateName;
 
   UnderPressureState({
     required this.teams,
@@ -42,6 +44,8 @@ class UnderPressureState {
     this.categoryIds,
     this.team1PointsAdded = 0,
     this.team2PointsAdded = 0,
+    this.templateQuestions,
+    this.templateName,
   });
 
   Question? get currentQuestion => 
@@ -66,6 +70,8 @@ class UnderPressureState {
     List<int>? categoryIds,
     int? team1PointsAdded,
     int? team2PointsAdded,
+    List<Question>? templateQuestions,
+    String? templateName,
   }) {
     return UnderPressureState(
       teams: teams ?? this.teams,
@@ -85,6 +91,8 @@ class UnderPressureState {
       categoryIds: categoryIds ?? this.categoryIds,
       team1PointsAdded: team1PointsAdded ?? this.team1PointsAdded,
       team2PointsAdded: team2PointsAdded ?? this.team2PointsAdded,
+      templateQuestions: templateQuestions ?? this.templateQuestions,
+      templateName: templateName ?? this.templateName,
     );
   }
 }

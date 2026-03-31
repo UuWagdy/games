@@ -107,6 +107,26 @@ class SpyRevealPage extends ConsumerWidget {
                             style: TextStyle(color: Colors.redAccent, fontSize: 28, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
+                          if (state.players.where((p) => p.isSpy).length > 1) ...[
+                             const Text(
+                               "الجواسيس الآخرون هم:",
+                               style: TextStyle(color: Colors.white60, fontSize: 13),
+                             ),
+                             const SizedBox(height: 4),
+                             Wrap(
+                               spacing: 8,
+                               children: state.players
+                                 .where((p) => p.isSpy && p.id != player.id)
+                                 .map((p) => Chip(
+                                   label: Text(p.name, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                   backgroundColor: Colors.redAccent.withOpacity(0.2),
+                                   padding: EdgeInsets.zero,
+                                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                 ))
+                                 .toList(),
+                             ),
+                             const SizedBox(height: 12),
+                          ],
                           const Text(
                             "حاول أن لا يتم كشفك وتعرف على الكلمة السرية",
                             style: TextStyle(color: Colors.white38, fontSize: 13),

@@ -9,6 +9,7 @@ import 'package:games/features/games/wheel/presentation/providers/wheel_provider
 import 'package:games/features/games/wheel/domain/entities/wheel_segment.dart';
 import 'dart:math';
 import 'dart:ui';
+import 'dart:async';
 
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'package:games/features/teams/presentation/pages/teams_management_page.dart';
@@ -437,8 +438,12 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
                 MaterialPageRoute(builder: (_) => const SettingsPage(initialIndex: 3)),
               ),
             ),
-            IconButton(icon: const Icon(Icons.restart_alt, color: Colors.redAccent), onPressed: _confirmResetScores),
           ],
+          IconButton(
+            icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent),
+            tooltip: 'تصفير النقاط',
+            onPressed: _confirmResetScores,
+          ),
           if (AppDesign.isSmallScreen(context))
             Builder(
               builder: (context) => IconButton(
@@ -464,6 +469,7 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
                   SafeArea(
                     child: Column(
                       children: [
+                        _buildTopLeaderboard(teams),
                         _buildCurrentTeamCard(currentTeam),
                         Expanded(child: _buildWheel(segmentsAsync)),
                         const SizedBox(height: 20),
@@ -480,6 +486,7 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
                         child: SafeArea(
                           child: Column(
                             children: [
+                              _buildTopLeaderboard(teams),
                               _buildCurrentTeamCard(currentTeam),
                               Expanded(child: _buildWheel(segmentsAsync)),
                               const SizedBox(height: 20),
@@ -534,7 +541,7 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
                 _wheelKey.currentState?.spin();
               },
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 backgroundColor: Colors.white.withOpacity(0.05),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
@@ -551,7 +558,7 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
                   Text(
                     'لف العجلة',
                     style: TextStyle(
-                      fontSize: AppDesign.isSmallScreen(context) ? 20 : 24,
+                      fontSize: AppDesign.isSmallScreen(context) ? 18 : 20,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -566,24 +573,93 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
 
   Widget _buildCurrentTeamCard(dynamic currentTeam) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 20),
-      padding: EdgeInsets.symmetric(horizontal: AppDesign.isSmallScreen(context) ? 20 : 40, vertical: 16),
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: AppDesign.isSmallScreen(context) ? 16 : 32, vertical: 10),
       decoration: AppDesign.glassDecoration,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('الدور على فريق:', style: AppDesign.subtitleStyle),
-          const SizedBox(height: 8),
+          const Text('الدور على فريق:', style: TextStyle(fontSize: 12, color: Colors.white60)),
+          const SizedBox(height: 4),
           Text(
             currentTeam.name,
             style: TextStyle(
-              fontSize: AppDesign.isSmallScreen(context) ? 32 : 42, 
+              fontSize: AppDesign.isSmallScreen(context) ? 24 : 32, 
               fontWeight: FontWeight.w900, 
               color: Colors.amberAccent, 
-              shadows: const [Shadow(color: Colors.amberAccent, blurRadius: 15)]
+              shadows: const [Shadow(color: Colors.amberAccent, blurRadius: 10)]
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Color _getTeamColor(int index) {
+    final colors = [Colors.redAccent, Colors.greenAccent, Colors.blueAccent, Colors.orangeAccent, Colors.purpleAccent];
+    return colors[index % colors.length];
+  }
+
+  Widget _buildTopLeaderboard(List<dynamic> teams) {
+    if (teams.isEmpty) return const SizedBox.shrink();
+    final isSmall = AppDesign.isSmallScreen(context);
+    return Container(
+      height: isSmall ? 40 : 50,
+      margin: const EdgeInsets.only(top: 8),
+      child: Center(
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          shrinkWrap: true,
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: teams.length,
+          itemBuilder: (context, index) {
+            final team = teams[index];
+            return Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: isSmall ? 6 : 8,
+                    height: isSmall ? 6 : 8,
+                    decoration: BoxDecoration(
+                      color: _getTeamColor(index),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: _getTeamColor(index).withOpacity(0.4), blurRadius: 4),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    team.name,
+                    style: TextStyle(
+                      color: Colors.white70, 
+                      fontSize: isSmall ? 10 : 12, 
+                      fontWeight: FontWeight.bold
+                    )
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "${team.score}",
+                    style: TextStyle(
+                      color: Colors.white, 
+                      fontSize: isSmall ? 16 : 18, 
+                      fontWeight: FontWeight.w900
+                    )
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -715,6 +791,44 @@ class _QuestionDialog extends ConsumerStatefulWidget {
 
 class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
   bool _showAnswer = false;
+  Timer? _timer;
+  int _remainingTime = 0;
+  bool _timerEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSettings();
+  }
+
+  void _checkSettings() {
+    final settings = ref.read(generalSettingsProvider).value;
+    _timerEnabled = settings?['enable_question_timer'] ?? false;
+    if (_timerEnabled) {
+      _remainingTime = settings?['question_timer_duration'] ?? 30;
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingTime > 0) {
+        if (mounted) setState(() => _remainingTime--);
+      } else {
+        _timer?.cancel();
+        final settings = ref.read(generalSettingsProvider).value;
+        if (settings?['auto_show_answer'] ?? false) {
+          if (mounted) setState(() => _showAnswer = true);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -737,11 +851,41 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                    child: Text('سؤال لفريق ${widget.teamName}', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 18)),
-                  ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                      child: Text('سؤال لفريق ${widget.teamName}', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 18)),
+                    ),
+                    if (_timerEnabled) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _remainingTime <= 5 ? Colors.red.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _remainingTime <= 5 ? Colors.redAccent.withOpacity(0.5) : Colors.blueAccent.withOpacity(0.5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.timer_outlined, 
+                              color: _remainingTime <= 5 ? Colors.redAccent : Colors.blueAccent,
+                              size: 20
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '$_remainingTime ثانية',
+                              style: TextStyle(
+                                color: _remainingTime <= 5 ? Colors.redAccent : Colors.blueAccent,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   const SizedBox(height: 30),
                   if (widget.question.imageData != null) ...[
                     ClipRRect(

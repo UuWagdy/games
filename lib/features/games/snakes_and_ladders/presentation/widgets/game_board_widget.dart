@@ -18,53 +18,78 @@ class GameBoardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final int sideSize = math.sqrt(boardSize).ceil();
+    int columnsCount;
+    int rowsCount;
+    
+    if (boardSize == 50) {
+      columnsCount = 5;
+      rowsCount = 10;
+    } else if (boardSize == 64) {
+      columnsCount = 8;
+      rowsCount = 8;
+    } else if (boardSize == 100) {
+      columnsCount = 10;
+      rowsCount = 10;
+    } else {
+      columnsCount = math.sqrt(boardSize).ceil();
+      rowsCount = (boardSize / columnsCount).ceil();
+    }
     
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double cellSize = constraints.maxWidth / sideSize;
+        final double cellSizeWidth = constraints.maxWidth / columnsCount;
+        final double cellSizeHeight = constraints.maxHeight / rowsCount;
+        final double cellSize = math.min(cellSizeWidth, cellSizeHeight);
+        
+        final double boardWidth = cellSize * columnsCount;
+        final double boardHeight = cellSize * rowsCount;
         
         return Directionality(
           textDirection: TextDirection.ltr,
           child: Stack(
             children: [
             // Grid Cells
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: sideSize,
-              ),
-              itemCount: boardSize,
-              itemBuilder: (context, index) {
-                final int cellNum = _getCellNumber(index, sideSize, boardSize);
-                return Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.03),
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$cellNum',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.2),
-                        fontSize: cellSize * 0.3,
-                        fontWeight: FontWeight.bold,
+            SizedBox(
+              width: boardWidth,
+              height: boardHeight,
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columnsCount,
+                ),
+                itemCount: boardSize,
+                itemBuilder: (context, index) {
+                  final int cellNum = _getCellNumber(index, columnsCount, rowsCount, boardSize);
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.03),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$cellNum',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.2),
+                          fontSize: cellSize * 0.3,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
 
             // Snakes and Ladders
             IgnorePointer(
               child: CustomPaint(
-                size: Size(constraints.maxWidth, constraints.maxWidth),
+                size: Size(boardWidth, boardHeight),
                 painter: SnakeLadderPainter(
                   boardSize: boardSize,
                   elements: elements,
-                  sideSize: sideSize,
+                  columnsCount: columnsCount,
+                  rowsCount: rowsCount,
                   cellSize: cellSize,
                 ),
               ),
@@ -77,7 +102,7 @@ class GameBoardWidget extends StatelessWidget {
               final teamIndex = teams.indexWhere((t) => t.id == teamId);
               if (teamIndex == -1) return [];
 
-              final offset = _getCellCenter(pos, sideSize, cellSize, boardSize);
+              final offset = _getCellCenter(pos, columnsCount, rowsCount, cellSize, boardSize);
               
               // Count how many players are on this SAME position
               final playersOnSamePos = playerPositions.values.where((p) => p == pos).length;
@@ -135,34 +160,26 @@ class GameBoardWidget extends StatelessWidget {
     );
   }
 
-  int _getCellNumber(int gridIndex, int sideSize, int total) {
-    // GridView (0 to 99) in LTR:
-    // 0  1  2  3  4  5  6  7  8  9  (Top Row)
-    // ...
-    // 90 91 92 93 94 95 96 97 98 99 (Bottom Row)
+  int _getCellNumber(int gridIndex, int cols, int rows, int total) {
+    int row = gridIndex ~/ cols; // 0 is top row of GridView
+    int col = gridIndex % cols; // 0 is left
     
-    int row = gridIndex ~/ sideSize; // 0 is top
-    int col = gridIndex % sideSize; // 0 is left
+    int actualRow = (rows - 1) - row; // 0 is bottom
     
-    int actualRow = (sideSize - 1) - row; // 0 is bottom
-    
-    // Zigzag logic
-    // If row 0 (bottom) is LTR: 1..10
-    // If row 1 (next) is RTL: 20..11
     bool isReversed = actualRow % 2 != 0;
-    int actualCol = isReversed ? (sideSize - 1 - col) : col;
+    int actualCol = isReversed ? (cols - 1 - col) : col;
     
-    return (actualRow * sideSize) + actualCol + 1;
+    return (actualRow * cols) + actualCol + 1;
   }
 
-  Offset _getCellCenter(int cellNum, int sideSize, double cellSize, int total) {
+  Offset _getCellCenter(int cellNum, int cols, int rows, double cellSize, int total) {
     int n = cellNum - 1;
-    int row = n ~/ sideSize; // 0 is bottom
-    int col = n % sideSize; // 0 is left (relative to row start)
+    int row = n ~/ cols; // 0 is bottom
+    int col = n % cols; // 0 is left (relative to row start)
     
     bool isReversed = row % 2 != 0;
-    int actualCol = isReversed ? (sideSize - 1 - col) : col;
-    int screenRow = (sideSize - 1) - row; // screen 0 is top
+    int actualCol = isReversed ? (cols - 1 - col) : col;
+    int screenRow = (rows - 1) - row; // screen 0 is top
     
     return Offset(
       (actualCol * cellSize) + (cellSize / 2),
@@ -179,13 +196,15 @@ class GameBoardWidget extends StatelessWidget {
 class SnakeLadderPainter extends CustomPainter {
   final int boardSize;
   final List<BoardElement> elements;
-  final int sideSize;
+  final int columnsCount;
+  final int rowsCount;
   final double cellSize;
 
   SnakeLadderPainter({
     required this.boardSize,
     required this.elements,
-    required this.sideSize,
+    required this.columnsCount,
+    required this.rowsCount,
     required this.cellSize,
   });
 
@@ -193,12 +212,12 @@ class SnakeLadderPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final railPaint = Paint()
       ..color = Colors.amber.withOpacity(0.4)
-      ..strokeWidth = 6.0
+      ..strokeWidth = cellSize * 0.1
       ..strokeCap = StrokeCap.square;
 
     final rungPaint = Paint()
       ..color = Colors.amberAccent.withOpacity(0.6)
-      ..strokeWidth = 3.0;
+      ..strokeWidth = cellSize * 0.05;
 
     final snakePaint = Paint()
       ..strokeWidth = cellSize * 0.25
@@ -300,12 +319,17 @@ class SnakeLadderPainter extends CustomPainter {
 
   Offset _getCellCenter(int cellNum) {
     int n = cellNum - 1;
-    int row = n ~/ sideSize;
-    int col = n % sideSize;
+    int row = n ~/ columnsCount; // 0 is bottom
+    int col = n % columnsCount; // 0 is left (relative to row start)
+    
     bool isReversed = row % 2 != 0;
-    int actualCol = isReversed ? (sideSize - 1 - col) : col;
-    int screenRow = (sideSize - 1) - row;
-    return Offset((actualCol * cellSize) + (cellSize / 2), (screenRow * cellSize) + (cellSize / 2));
+    int actualCol = isReversed ? (columnsCount - 1 - col) : col;
+    int screenRow = (rowsCount - 1) - row; // screen 0 is top
+    
+    return Offset(
+      (actualCol * cellSize) + (cellSize / 2),
+      (screenRow * cellSize) + (cellSize / 2),
+    );
   }
 
   @override

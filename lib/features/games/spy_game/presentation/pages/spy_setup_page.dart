@@ -36,6 +36,31 @@ class _SpySetupPageState extends ConsumerState<SpySetupPage> {
     }
   }
 
+  void _confirmResetScores(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('تصفير النقاط وحذف السجل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text('هل أنت متأكد من تصفير نقاط كل الفرق وحذف سجل النقاط بالكامل؟', 
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              await ref.read(teamsListProvider.notifier).resetScoresAndClearLogs();
+              ref.read(spyGameProvider.notifier).resetGame();
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('تصفير الكل'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(spyGameProvider);
@@ -65,6 +90,11 @@ class _SpySetupPageState extends ConsumerState<SpySetupPage> {
               context,
               MaterialPageRoute(builder: (_) => const SpySettingsPage()),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+            tooltip: 'تصفير النقاط',
+            onPressed: () => _confirmResetScores(context, ref),
           ),
           IconButton(
             icon: const Icon(Icons.arrow_forward, color: Colors.white),

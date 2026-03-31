@@ -4,6 +4,7 @@ import '../../domain/entities/category.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/repositories/question_repository.dart';
 import '../../../../core/database/database_service.dart';
+import 'package:games/core/utils/arabic_utils.dart';
 
 class QuestionRepositoryImpl implements QuestionRepository {
   final DatabaseService _dbService = DatabaseService.instance;
@@ -49,7 +50,16 @@ class QuestionRepositoryImpl implements QuestionRepository {
   @override
   Future<void> deleteCategory(int id) async {
     final db = await _dbService.database;
-    await db.delete('categories', where: 'id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      // 1. Delete the links for this category
+      await txn.delete('question_categories', where: 'category_id = ?', whereArgs: [id]);
+      
+      // 2. Delete the category itself
+      await txn.delete('categories', where: 'id = ?', whereArgs: [id]);
+      
+      // Note: We no longer delete questions that were in this category. 
+      // They will now appear as "Without Category" unless they belong to other categories.
+    });
   }
 
   @override
@@ -238,5 +248,116 @@ class QuestionRepositoryImpl implements QuestionRepository {
   Future<void> resetAllQuestionsUsed() async {
     final db = await _dbService.database;
     await db.update('question_categories', {'is_used': 0});
+  }
+
+  @override
+  Future<int> removeDuplicateQuestions() async {
+    final db = await _dbService.database;
+    
+    // 1. Find duplicate questions by text
+    final List<Map<String, dynamic>> duplicates = await db.rawQuery('''
+      SELECT text, MIN(id) as keep_id, COUNT(*) as count
+      FROM questions
+      GROUP BY text
+      HAVING count > 1
+    ''');
+
+    int deletedCount = 0;
+    
+    await db.transaction((txn) async {
+      for (var row in duplicates) {
+        final String text = row['text'] as String;
+        final int keepId = row['keep_id'] as int;
+        
+        // Delete all BUT the one we want to keep
+        final deleted = await txn.delete(
+          'questions',
+          where: 'text = ? AND id != ?',
+          whereArgs: [text, keepId],
+        );
+        deletedCount += deleted;
+      }
+    });
+    
+    return deletedCount;
+  }
+
+  @override
+  Future<int> removeDuplicateCategories() async {
+    final db = await _dbService.database;
+    
+    // 1. Find duplicate categories by name
+    final List<Map<String, dynamic>> duplicates = await db.rawQuery('''
+      SELECT name, MIN(id) as keep_id, COUNT(*) as count
+      FROM categories
+      GROUP BY name
+      HAVING count > 1
+    ''');
+
+    int deletedCount = 0;
+    
+    await db.transaction((txn) async {
+      for (var row in duplicates) {
+        final String name = row['name'] as String;
+        final int keepId = row['keep_id'] as int;
+        
+        // Find IDs to delete
+        final List<Map<String, dynamic>> toDelete = await txn.query(
+          'categories',
+          columns: ['id'],
+          where: 'name = ? AND id != ?',
+          whereArgs: [name, keepId],
+        );
+        
+        for (var d in toDelete) {
+          final int deleteId = d['id'] as int;
+          
+          // Re-link questions to Category keepId if they were linked to deleteId
+          // BUT delete links if question already exists in keepId
+          await txn.rawDelete('''
+            DELETE FROM question_categories
+            WHERE category_id = ? 
+            AND question_id IN (SELECT question_id FROM question_categories WHERE category_id = ?)
+          ''', [deleteId, keepId]);
+
+          await txn.rawUpdate('''
+            UPDATE question_categories
+            SET category_id = ?
+            WHERE category_id = ?
+          ''', [keepId, deleteId]);
+          
+          final deleted = await txn.delete(
+            'categories',
+            where: 'id = ?',
+            whereArgs: [deleteId],
+          );
+          deletedCount += deleted;
+        }
+      }
+    });
+    
+    return deletedCount;
+  }
+
+  @override
+  Future<Category?> getCategoryByName(String name) async {
+    final categories = await getCategories();
+    final normalizedSearch = ArabicUtils.normalize(name);
+    for (var cat in categories) {
+      if (ArabicUtils.normalize(cat.name) == normalizedSearch) {
+        return cat;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<void> deleteAllCategories() async {
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      await txn.delete('question_categories');
+      await txn.delete('categories');
+      await txn.delete('questions');
+    });
   }
 }

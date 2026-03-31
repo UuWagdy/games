@@ -116,6 +116,39 @@ class PenaltySettingsPage extends ConsumerWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+              _buildCard(
+                context,
+                title: 'الحد الأقصى لضربات الجزاء',
+                subtitle: 'عدد الضربات قبل أن تنتهي المباراة بالتعادل إذا استمر التعادل.',
+                child: Row(
+                  children: [
+                    const Icon(Icons.sports_soccer, color: Colors.amber, size: 30),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Slider(
+                        value: (settings['max_penalties'] ?? 20).toDouble(),
+                        min: 5,
+                        max: 50,
+                        divisions: 45,
+                        activeColor: Colors.amber,
+                        onChanged: (val) => ref
+                            .read(penaltySettingsProvider.notifier)
+                            .setMaxPenalties(val.round()),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      '${settings['max_penalties'] ?? 20} ضربة',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 40),
             ],
           ),

@@ -5,12 +5,11 @@ import '../../../../teams/presentation/providers/team_providers.dart';
 import '../../../../teams/domain/entities/team.dart';
 import 'package:games/features/games/under_pressure/domain/entities/under_pressure_state.dart';
 import './under_pressure_settings_provider.dart';
-import '../../../../questions/domain/repositories/question_repository.dart';
-import '../../../../questions/presentation/providers/question_providers.dart';
+import '../../../../questions/domain/entities/question.dart';
 
 part 'under_pressure_provider.g.dart';
 
-@riverpod
+@Riverpod(keepAlive: true)
 class UnderPressure extends _$UnderPressure {
   Timer? _timer;
 
@@ -30,10 +29,9 @@ class UnderPressure extends _$UnderPressure {
     return UnderPressureState(teams: teams);
   }
 
-  Future<void> startGame(Team t1, Team t2, List<int>? categoryIds) async {
+  Future<void> generateTemplate(List<int>? categoryIds, String name) async {
     final settingsAsync = await ref.read(underPressureSettingsProvider.future);
     final countLimit = settingsAsync['question_count'] ?? 15;
-    final timeLimit = settingsAsync['timer_duration'] ?? 60;
 
     final repo = ref.read(questionRepositoryProvider);
     final allQuestions = await repo.getQuestions(null);
@@ -46,13 +44,25 @@ class UnderPressure extends _$UnderPressure {
     if (filtered.length > countLimit) {
       filtered = filtered.sublist(0, countLimit);
     }
+    
+    state = state.copyWith(templateQuestions: filtered, templateName: name);
+  }
 
-    final List<QuestionResult> initialResults = List.filled(filtered.length, QuestionResult.pending);
+  Future<void> startGame(Team t1, Team t2, List<int>? categoryIds) async {
+    final settingsAsync = await ref.read(underPressureSettingsProvider.future);
+    final timeLimit = settingsAsync['timer_duration'] ?? 60;
+
+    if (state.templateQuestions == null || state.templateQuestions!.isEmpty) {
+        await generateTemplate(categoryIds, 'قالب مقترح');
+    }
+
+    final questionsToPlay = List<Question>.from(state.templateQuestions!);
+    final List<QuestionResult> initialResults = List.filled(questionsToPlay.length, QuestionResult.pending);
 
     state = state.copyWith(
       team1: t1,
       team2: t2,
-      questions: filtered,
+      questions: questionsToPlay,
       currentQuestionIndex: 0,
       team1Score: 0,
       team2Score: 0,

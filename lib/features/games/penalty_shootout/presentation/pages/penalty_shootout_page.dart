@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:games/features/teams/presentation/pages/teams_management_page.dart';
 import 'dart:math';
 import 'dart:ui';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../providers/penalty_shootout_provider.dart';
 import '../widgets/penalty_scoreboard.dart';
 import '../../domain/entities/penalty_shootout_state.dart';
@@ -115,6 +118,11 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
           centerTitle: true,
           actions: [
             IconButton(
+              icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent, size: 28),
+              tooltip: 'تصفير النقاط',
+              onPressed: () => _confirmResetScores(context, ref),
+            ),
+            IconButton(
               icon: const Icon(Icons.close, color: Colors.white70, size: 28),
               onPressed: () => _showExitDialog(),
             ),
@@ -176,7 +184,7 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
           padding: const EdgeInsets.symmetric(vertical: 20),
           child: Column(
             children: [
-              _buildIdleStart(teams),
+              _buildIdleStart(teams, state),
               const SizedBox(height: 20),
               _buildCategorySelection(),
             ],
@@ -196,6 +204,172 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
     }
 
     return const SizedBox();
+  }
+
+  Future<void> _downloadCurrentTemplatePdf(BuildContext context, PenaltyShootoutState state) async {
+    if (state.templateQuestions == null || state.templateQuestions!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يوجد قالب حالي لتنزيله')));
+      return;
+    }
+    
+    final name = state.templateName ?? 'قالب جزاء ${DateTime.now().toString().substring(0, 16).replaceAll(':', '-')}';
+    
+    try {
+      final pdf = pw.Document();
+      final fontData = await rootBundle.load('assets/fonts/Amiri-Regular.ttf');
+      final ttf = pw.Font.ttf(fontData);
+
+      final boldFontData = await rootBundle.load('assets/fonts/Amiri-Bold.ttf');
+      final ttfBold = pw.Font.ttf(boldFontData);
+
+      final myTheme = pw.ThemeData.withFont(base: ttf, bold: ttfBold);
+
+      final questions = state.templateQuestions!;
+
+      pdf.addPage(
+        pw.MultiPage(
+          theme: myTheme,
+          textDirection: pw.TextDirection.rtl,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) {
+             return pw.Container(
+               alignment: pw.Alignment.center,
+               margin: const pw.EdgeInsets.only(bottom: 20),
+               child: pw.Text('قالب لعبة ضربات الجزاء: $name', style: pw.TextStyle(font: ttfBold, fontSize: 24, color: PdfColors.blue)),
+             );
+          },
+          build: (pw.Context context) {
+            return [
+              pw.Text('عدد الأسئلة في الجولة: ${questions.length}', style: pw.TextStyle(font: ttfBold, fontSize: 16)),
+              pw.SizedBox(height: 20),
+              ...questions.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final q = entry.value;
+                return pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 15),
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('${idx + 1}- ${q.text}', textDirection: pw.TextDirection.rtl, style: pw.TextStyle(font: ttfBold, fontSize: 14)),
+                      pw.SizedBox(height: 5),
+                      pw.Text('الإجابة: ${q.answer}', textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(color: PdfColors.green), textAlign: pw.TextAlign.right),
+                    ]
+                  )
+                );
+              }),
+            ];
+          },
+        ),
+      );
+
+      final bytes = await pdf.save();
+      await Printing.sharePdf(bytes: bytes, filename: '$name.pdf');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ PDF: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _generateNewTemplatePdf(BuildContext context, PenaltyShootoutState state) async {
+    final nameController = TextEditingController(text: 'قالب جزاء ${DateTime.now().toString().substring(0, 16).replaceAll(':', '-')}');
+    final name = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('اسم القالب', style: TextStyle(color: Colors.white)),
+      backgroundColor: const Color(0xFF1E293B),
+      content: TextField(
+        controller: nameController,
+        style: const TextStyle(color: Colors.white),
+        decoration: AppDesign.searchInputDecoration('أدخل اسماً للقالب'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+        ElevatedButton(onPressed: () => Navigator.pop(ctx, nameController.text), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent), child: const Text('مصادقة')),
+      ],
+    ));
+
+    if (name == null || name.isEmpty) return;
+
+    await ref.read(penaltyShootoutProvider.notifier).generateTemplate(
+      _selectedCategoryIds.isEmpty ? null : _selectedCategoryIds.toList(),
+      name,
+    );
+    final newState = ref.read(penaltyShootoutProvider);
+
+    if (newState.templateQuestions == null || newState.templateQuestions!.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد أسئلة كافية')));
+      }
+      return;
+    }
+
+    try {
+      final pdf = pw.Document();
+      final fontData = await rootBundle.load('assets/fonts/Amiri-Regular.ttf');
+      final ttf = pw.Font.ttf(fontData);
+
+      final boldFontData = await rootBundle.load('assets/fonts/Amiri-Bold.ttf');
+      final ttfBold = pw.Font.ttf(boldFontData);
+
+      final myTheme = pw.ThemeData.withFont(
+        base: ttf,
+        bold: ttfBold,
+      );
+
+      final questions = newState.templateQuestions!;
+
+      pdf.addPage(
+        pw.MultiPage(
+          theme: myTheme,
+          textDirection: pw.TextDirection.rtl,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) {
+             return pw.Container(
+               alignment: pw.Alignment.center,
+               margin: const pw.EdgeInsets.only(bottom: 20),
+               child: pw.Text('قالب لعبة ضربات الجزاء: $name', style: pw.TextStyle(font: ttfBold, fontSize: 24, color: PdfColors.blue)),
+             );
+          },
+          build: (pw.Context context) {
+            return [
+              pw.Text('عدد الأسئلة في الجولة: ${questions.length}', style: pw.TextStyle(font: ttfBold, fontSize: 16)),
+              pw.SizedBox(height: 20),
+              ...questions.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final q = entry.value;
+                return pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 15),
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('${idx + 1}- ${q.text}', textDirection: pw.TextDirection.rtl, style: pw.TextStyle(font: ttfBold, fontSize: 14)),
+                      pw.SizedBox(height: 5),
+                      pw.Text('الإجابة: ${q.answer}', textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(color: PdfColors.green), textAlign: pw.TextAlign.right),
+                    ]
+                  )
+                );
+              }),
+            ];
+          },
+        ),
+      );
+
+      final bytes = await pdf.save();
+      await Printing.sharePdf(bytes: bytes, filename: '$name.pdf');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ PDF: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 
   // Score bar removed to save space
@@ -222,7 +396,7 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
   }
 
 
-  Widget _buildIdleStart(List<Team> teams) {
+  Widget _buildIdleStart(List<Team> teams, PenaltyShootoutState state) {
     if (teams.length < 2) {
       return Center(
         child: Column(
@@ -288,7 +462,40 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
                   ),
                 ],
               ),
-            SizedBox(height: AppDesign.isSmallScreen(context) ? 24 : 32),
+            SizedBox(height: AppDesign.isSmallScreen(context) ? 16 : 24),
+            if (state.templateName != null && state.templateQuestions != null && state.templateQuestions!.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.description, color: Colors.amberAccent),
+                    const SizedBox(width: 8),
+                    Flexible(child: Text('القالب الحالي: ${state.templateName}', style: const TextStyle(color: Colors.white, fontSize: 14), overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: 16),
+                    TextButton.icon(
+                      icon: const Icon(Icons.download, size: 16, color: Colors.amberAccent),
+                      label: const Text('تنزيل', style: TextStyle(color: Colors.amberAccent)),
+                      onPressed: () => _downloadCurrentTemplatePdf(context, state),
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.refresh, size: 16, color: Colors.blueAccent),
+                      label: const Text('قالب جديد', style: TextStyle(color: Colors.blueAccent)),
+                      onPressed: () => _generateNewTemplatePdf(context, state),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: AppDesign.isSmallScreen(context) ? 16 : 24),
+            ] else ...[
+              TextButton.icon(
+                icon: const Icon(Icons.add_box, color: Colors.blueAccent),
+                label: const Text('إنشاء قالب أسئلة جديد', style: TextStyle(color: Colors.blueAccent)),
+                onPressed: () => _generateNewTemplatePdf(context, state),
+              ),
+              SizedBox(height: AppDesign.isSmallScreen(context) ? 16 : 24),
+            ],
             ElevatedButton(
               onPressed: (_selectedTeamA != null && _selectedTeamB != null && _selectedTeamA != _selectedTeamB)
                   ? () {
@@ -494,10 +701,6 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
         Icon(correct ? Icons.check_circle_rounded : Icons.cancel_rounded, color: correct ? Colors.greenAccent : Colors.redAccent, size: 50),
         const SizedBox(height: 8),
         Text(correct ? 'هـدف ممـتاز!' : 'للأسف ضاعت!', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: correct ? Colors.greenAccent : Colors.redAccent)),
-        const SizedBox(height: 12),
-        const Text('الإجابة النموذجية كانت:', style: TextStyle(fontSize: 13, color: Colors.white38)),
-        const SizedBox(height: 4),
-        Text(state.currentQuestion?.answer ?? '-', style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -505,46 +708,46 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
   Widget _buildWinnerArea(PenaltyShootoutState state) {
     bool isSmall = AppDesign.isSmallScreen(context);
     return Container(
-      padding: EdgeInsets.all(isSmall ? 30 : 80),
+      padding: EdgeInsets.all(isSmall ? 20 : 40),
       decoration: BoxDecoration(
         color: Colors.amber.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(isSmall ? 30 : 50),
-        border: Border.all(color: Colors.amber.withOpacity(0.3), width: 3),
-        boxShadow: [BoxShadow(color: Colors.amber.withOpacity(0.1), blurRadius: 60)],
+        borderRadius: BorderRadius.circular(isSmall ? 20 : 40),
+        border: Border.all(color: Colors.amber.withOpacity(0.3), width: 2),
+        boxShadow: [BoxShadow(color: Colors.amber.withOpacity(0.1), blurRadius: 40)],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.emoji_events_rounded, color: Colors.amberAccent, size: isSmall ? 100 : 180),
-          SizedBox(height: isSmall ? 24 : 48),
-          Text('الفائز بضربات الجزاء هو:', style: TextStyle(color: Colors.white70, fontSize: isSmall ? 18 : 24)),
-          SizedBox(height: isSmall ? 12 : 20),
+          Icon(Icons.emoji_events_rounded, color: Colors.amberAccent, size: isSmall ? 80 : 120),
+          SizedBox(height: isSmall ? 12 : 24),
+          Text('الفائز بضربات الجزاء هو:', style: TextStyle(color: Colors.white70, fontSize: isSmall ? 16 : 20)),
+          SizedBox(height: isSmall ? 8 : 16),
           Text(
             state.winner ?? 'تعادل حاسم!', 
             style: TextStyle(
-              fontSize: isSmall ? 36 : 72, 
+              fontSize: isSmall ? 32 : 50, 
               fontWeight: FontWeight.w900, 
               color: Colors.amberAccent, 
-              letterSpacing: isSmall ? 2 : 4, 
-              shadows: const [Shadow(color: Colors.amberAccent, blurRadius: 30)]
+              letterSpacing: isSmall ? 1 : 2, 
+              shadows: const [Shadow(color: Colors.amberAccent, blurRadius: 20)]
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: isSmall ? 30 : 60),
+          SizedBox(height: isSmall ? 20 : 40),
           ElevatedButton(
             onPressed: () => ref.read(penaltyShootoutProvider.notifier).reset(), 
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.amberAccent, 
               foregroundColor: Colors.black, 
-              padding: EdgeInsets.symmetric(horizontal: isSmall ? 40 : 80, vertical: isSmall ? 16 : 28), 
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)), 
-              elevation: 20, 
+              padding: EdgeInsets.symmetric(horizontal: isSmall ? 30 : 60, vertical: isSmall ? 12 : 20), 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), 
+              elevation: 10, 
               shadowColor: Colors.amberAccent.withOpacity(0.4)
             ),
-            child: Text('لعب مرة أخرى', style: TextStyle(fontSize: isSmall ? 20 : 32, fontWeight: FontWeight.w900)),
+            child: Text('لعب مرة أخرى', style: TextStyle(fontSize: isSmall ? 18 : 24, fontWeight: FontWeight.w900)),
           ),
-          const SizedBox(height: 16),
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('الخروج من اللعبة', style: TextStyle(color: Colors.white24, fontSize: isSmall ? 16 : 20))),
+          const SizedBox(height: 12),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('الخروج من اللعبة', style: TextStyle(color: Colors.white24, fontSize: isSmall ? 14 : 18))),
         ],
       ),
     );
@@ -553,6 +756,31 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
   Widget _buildResultOverlay(String text, Color textColor, Color strokeColor, BuildContext context) {
     bool isSmall = AppDesign.isSmallScreen(context);
     return Text(text, style: TextStyle(fontSize: isSmall ? 60 : 120, fontWeight: FontWeight.w900, color: textColor, shadows: [Shadow(color: strokeColor.withOpacity(0.8), blurRadius: 50)]));
+  }
+
+  void _confirmResetScores(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('تصفير النقاط وحذف السجل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text('هل أنت متأكد من تصفير نقاط كل الفرق وحذف سجل النقاط بالكامل؟ سيتم إعادة تشغيل اللعبة أيضاً.', 
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              await ref.read(teamsListProvider.notifier).resetScoresAndClearLogs();
+              ref.read(penaltyShootoutProvider.notifier).reset();
+              Navigator.pop(context);
+            },
+            child: const Text('تصفير الكل'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildKeyIndicator(String key, Color color, String label) {

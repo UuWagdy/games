@@ -8,6 +8,10 @@ import 'package:games/features/teams/domain/entities/team.dart';
 import 'package:games/features/questions/presentation/providers/question_providers.dart';
 import 'package:games/features/games/under_pressure/presentation/pages/under_pressure_settings_page.dart';
 import 'dart:ui';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:games/features/teams/presentation/providers/team_providers.dart';
 import 'package:games/core/design/app_design.dart';
 
 class UnderPressurePage extends ConsumerStatefulWidget {
@@ -52,6 +56,11 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+            IconButton(
+              icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent),
+              tooltip: 'تصفير النقاط',
+              onPressed: () => _confirmResetScores(),
+            ),
           if (state.status == UnderPressureStatus.idle)
             IconButton(
               icon: const Icon(Icons.settings_outlined, color: Colors.white),
@@ -285,6 +294,43 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                     padding: const EdgeInsets.only(top: 16),
                     child: Text('لا يمكن اختيار نفس الفريق للمواجهة!', style: TextStyle(color: Colors.redAccent.withOpacity(0.8), fontWeight: FontWeight.bold)),
                   ),
+                const SizedBox(height: 16),
+                if (state.templateName != null && state.templateQuestions != null && state.templateQuestions!.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.description, color: Colors.purpleAccent),
+                        const SizedBox(width: 8),
+                        Flexible(child: Text('القالب الحالي: ${state.templateName}', style: const TextStyle(color: Colors.white, fontSize: 14), overflow: TextOverflow.ellipsis)),
+                        const SizedBox(width: 16),
+                        TextButton.icon(
+                          icon: const Icon(Icons.download, size: 16, color: Colors.purpleAccent),
+                          label: const Text('تنزيل', style: TextStyle(color: Colors.purpleAccent)),
+                          onPressed: () => _downloadCurrentTemplatePdf(context, ref, state),
+                        ),
+                        TextButton.icon(
+                          icon: const Icon(Icons.refresh, size: 16, color: Colors.white70),
+                          label: const Text('قالب جديد', style: TextStyle(color: Colors.white70)),
+                          onPressed: () => _generateNewTemplatePdf(context, ref, state),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  OutlinedButton.icon(
+                    onPressed: () => _generateNewTemplatePdf(context, ref, state),
+                    icon: const Icon(Icons.picture_as_pdf, color: Colors.purpleAccent),
+                    label: const Text('تصدير القالب وتوليد الأسئلة PDF', style: TextStyle(color: Colors.white)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      side: const BorderSide(color: Colors.purpleAccent),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -296,6 +342,172 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     ),
   );
 }
+
+  Future<void> _downloadCurrentTemplatePdf(BuildContext context, WidgetRef ref, UnderPressureState state) async {
+    if (state.templateQuestions == null || state.templateQuestions!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يوجد قالب حالي لتنزيله')));
+      return;
+    }
+    
+    final name = state.templateName ?? 'قالب ${DateTime.now().toString().substring(0, 16).replaceAll(':', '-')}';
+    
+    try {
+      final pdf = pw.Document();
+      final fontData = await rootBundle.load('assets/fonts/Amiri-Regular.ttf');
+      final ttf = pw.Font.ttf(fontData);
+
+      final boldFontData = await rootBundle.load('assets/fonts/Amiri-Bold.ttf');
+      final ttfBold = pw.Font.ttf(boldFontData);
+
+      final myTheme = pw.ThemeData.withFont(base: ttf, bold: ttfBold);
+
+      final questions = state.templateQuestions!;
+
+      pdf.addPage(
+        pw.MultiPage(
+          theme: myTheme,
+          textDirection: pw.TextDirection.rtl,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) {
+             return pw.Container(
+               alignment: pw.Alignment.center,
+               margin: const pw.EdgeInsets.only(bottom: 20),
+               child: pw.Text('قالب لعبة تحت الضغط: $name', style: pw.TextStyle(font: ttfBold, fontSize: 24, color: PdfColors.deepPurple)),
+             );
+          },
+          build: (pw.Context context) {
+            return [
+              pw.Text('عدد الأسئلة في الجولة: ${questions.length}', style: pw.TextStyle(font: ttfBold, fontSize: 16)),
+              pw.SizedBox(height: 20),
+              ...questions.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final q = entry.value;
+                return pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 15),
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('${idx + 1}- ${q.text}', textDirection: pw.TextDirection.rtl, style: pw.TextStyle(font: ttfBold, fontSize: 14)),
+                      pw.SizedBox(height: 5),
+                      pw.Text('الإجابة: ${q.answer}', textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(color: PdfColors.green), textAlign: pw.TextAlign.right),
+                    ]
+                  )
+                );
+              }),
+            ];
+          },
+        ),
+      );
+
+      final bytes = await pdf.save();
+      await Printing.sharePdf(bytes: bytes, filename: '$name.pdf');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ PDF: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _generateNewTemplatePdf(BuildContext context, WidgetRef ref, UnderPressureState state) async {
+    final nameController = TextEditingController(text: 'قالب ${DateTime.now().toString().substring(0, 16).replaceAll(':', '-')}');
+    final name = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('اسم القالب', style: TextStyle(color: Colors.white)),
+      backgroundColor: const Color(0xFF1E293B),
+      content: TextField(
+        controller: nameController,
+        style: const TextStyle(color: Colors.white),
+        decoration: AppDesign.searchInputDecoration('أدخل اسماً للقالب'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+        ElevatedButton(onPressed: () => Navigator.pop(ctx, nameController.text), style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent), child: const Text('مصادقة')),
+      ],
+    ));
+
+    if (name == null || name.isEmpty) return;
+
+    await ref.read(underPressureProvider.notifier).generateTemplate(
+      _selectedCategoryIds.isEmpty ? null : _selectedCategoryIds.toList(),
+      name,
+    );
+    final newState = ref.read(underPressureProvider);
+
+    if (newState.templateQuestions == null || newState.templateQuestions!.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد أسئلة كافية')));
+      }
+      return;
+    }
+
+    try {
+      final pdf = pw.Document();
+      final fontData = await rootBundle.load('assets/fonts/Amiri-Regular.ttf');
+      final ttf = pw.Font.ttf(fontData);
+
+      final boldFontData = await rootBundle.load('assets/fonts/Amiri-Bold.ttf');
+      final ttfBold = pw.Font.ttf(boldFontData);
+
+      final myTheme = pw.ThemeData.withFont(
+        base: ttf,
+        bold: ttfBold,
+      );
+
+      final questions = newState.templateQuestions!;
+
+      pdf.addPage(
+        pw.MultiPage(
+          theme: myTheme,
+          textDirection: pw.TextDirection.rtl,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) {
+             return pw.Container(
+               alignment: pw.Alignment.center,
+               margin: const pw.EdgeInsets.only(bottom: 20),
+               child: pw.Text('قالب لعبة تحت الضغط: $name', style: pw.TextStyle(font: ttfBold, fontSize: 24, color: PdfColors.deepPurple)),
+             );
+          },
+          build: (pw.Context context) {
+            return [
+              pw.Text('عدد الأسئلة في الجولة: ${questions.length}', style: pw.TextStyle(font: ttfBold, fontSize: 16)),
+              pw.SizedBox(height: 20),
+              ...questions.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final q = entry.value;
+                return pw.Container(
+                  margin: const pw.EdgeInsets.only(bottom: 15),
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('${idx + 1}- ${q.text}', textDirection: pw.TextDirection.rtl, style: pw.TextStyle(font: ttfBold, fontSize: 14)),
+                      pw.SizedBox(height: 5),
+                      pw.Text('الإجابة: ${q.answer}', textDirection: pw.TextDirection.rtl, style: const pw.TextStyle(color: PdfColors.green), textAlign: pw.TextAlign.right),
+                    ]
+                  )
+                );
+              }),
+            ];
+          },
+        ),
+      );
+
+      final bytes = await pdf.save();
+      await Printing.sharePdf(bytes: bytes, filename: '$name.pdf');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ PDF: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
 
   Widget _buildTeamPicker(String label, Team? selected, List<Team> allTeams, Function(Team) onSelected, Color color) {
     return Column(
@@ -626,29 +838,6 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
             style: TextStyle(fontSize: isSmall ? 16 : 24, fontWeight: FontWeight.w900, color: Colors.white, height: 1.1),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: isSmall ? 6 : 16),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 20, vertical: isSmall ? 6 : 8),
-            decoration: BoxDecoration(
-              color: Colors.greenAccent.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.greenAccent.withOpacity(0.3), width: 1.5),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.lightbulb_outline, color: Colors.greenAccent, size: isSmall ? 18 : 22),
-                const SizedBox(width: 12),
-                Flexible(
-                  child: Text(
-                    'الإجابة: ${question.answer}',
-                    style: TextStyle(fontSize: isSmall ? 12 : 18, color: Colors.greenAccent, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -676,6 +865,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
           label: 'تخطي',
           icon: Icons.skip_next_rounded,
           color: Colors.orangeAccent,
+          isProminent: true,
           onPressed: () => ref.read(underPressureProvider.notifier).skipQuestion(),
         ),
       ],
@@ -714,8 +904,8 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
-            padding: EdgeInsets.all(AppDesign.isSmallScreen(context) ? 4 : 32),
-            margin: EdgeInsets.symmetric(horizontal: AppDesign.isSmallScreen(context) ? 4 : 24, vertical: AppDesign.isSmallScreen(context) ? 2 : 24),
+            padding: EdgeInsets.all(AppDesign.isSmallScreen(context) ? 4 : 16),
+            margin: EdgeInsets.symmetric(horizontal: AppDesign.isSmallScreen(context) ? 4 : 16, vertical: 4),
             constraints: const BoxConstraints(maxWidth: 600),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.05),
@@ -723,14 +913,14 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
               border: Border.all(color: Colors.white.withOpacity(0.1)),
             ),
             child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(vertical: AppDesign.isSmallScreen(context) ? 12 : 24),
+              padding: EdgeInsets.symmetric(vertical: AppDesign.isSmallScreen(context) ? 8 : 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                   Icon(Icons.emoji_events_rounded, size: AppDesign.isSmallScreen(context) ? 54 : 100, color: Colors.amberAccent),
-                   SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 24),
-                   Text('انتهت المواجهة!', style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 22 : 32, fontWeight: FontWeight.w900, color: Colors.white)),
-                   SizedBox(height: AppDesign.isSmallScreen(context) ? 12 : 32),
+                   Icon(Icons.emoji_events_rounded, size: AppDesign.isSmallScreen(context) ? 40 : 80, color: Colors.amberAccent),
+                   SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 16),
+                   Text('انتهت المواجهة!', style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 18 : 26, fontWeight: FontWeight.w900, color: Colors.white)),
+                   SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 20),
                    
                    Row(
                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -747,7 +937,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                            state.team1Results.length
                          )
                        ),
-                       Container(width: 1, height: AppDesign.isSmallScreen(context) ? 100 : 120, color: Colors.white10),
+                       Container(width: 1, height: AppDesign.isSmallScreen(context) ? 80 : 100, color: Colors.white10),
                        Expanded(
                          child: _buildResultColumn(
                            state.team2?.name ?? 'فريق 2', 
@@ -762,16 +952,16 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                        ),
                      ],
                    ),
-                  SizedBox(height: AppDesign.isSmallScreen(context) ? 12 : 32),
+                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 20),
                   _buildProgressTrack(state),
-                  SizedBox(height: AppDesign.isSmallScreen(context) ? 4 : 24),
+                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
                   
                   if (state.isTie)
-                    Text('تعادل حاسم! حصل الفريقان على البونص', textAlign: TextAlign.center, style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 12 : 20, color: Colors.amberAccent, fontWeight: FontWeight.bold))
+                    Text('تعادل حاسم! حصل الفريقان على البونص', textAlign: TextAlign.center, style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 12 : 18, color: Colors.amberAccent, fontWeight: FontWeight.bold))
                   else if (winner != null)
-                    Text('الفائز فريق ${winner.name} وحصل على البونص!', textAlign: TextAlign.center, style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 12 : 20, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                    Text('الفائز فريق ${winner.name} وحصل على البونص!', textAlign: TextAlign.center, style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 12 : 18, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                   
-                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 32),
+                  SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -779,7 +969,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                         child: ElevatedButton(
                           onPressed: () => ref.read(underPressureProvider.notifier).restartGame(),
                           style: ElevatedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(vertical: AppDesign.isSmallScreen(context) ? 8 : 20),
+                            padding: EdgeInsets.symmetric(vertical: AppDesign.isSmallScreen(context) ? 6 : 14),
                             backgroundColor: Colors.tealAccent,
                             foregroundColor: Colors.black87,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -792,7 +982,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                         child: ElevatedButton(
                           onPressed: () => ref.read(underPressureProvider.notifier).reset(),
                           style: ElevatedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(vertical: AppDesign.isSmallScreen(context) ? 8 : 20),
+                            padding: EdgeInsets.symmetric(vertical: AppDesign.isSmallScreen(context) ? 6 : 14),
                             backgroundColor: Colors.blueAccent,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -815,23 +1005,23 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     bool isSmall = AppDesign.isSmallScreen(context);
     return Column(
       children: [
-        Text(name, style: TextStyle(fontSize: isSmall ? 18 : 22, fontWeight: FontWeight.bold, color: isWinner ? Colors.amberAccent : Colors.white70)),
-        SizedBox(height: isSmall ? 4 : 12),
-        Text('+$pointsAdded', style: TextStyle(fontSize: isSmall ? 32 : 42, fontWeight: FontWeight.w900, color: isWinner ? Colors.greenAccent : Colors.white54)),
+        Text(name, style: TextStyle(fontSize: isSmall ? 16 : 20, fontWeight: FontWeight.bold, color: isWinner ? Colors.amberAccent : Colors.white70)),
+        SizedBox(height: isSmall ? 4 : 8),
+        Text('+$pointsAdded', style: TextStyle(fontSize: isSmall ? 24 : 36, fontWeight: FontWeight.w900, color: isWinner ? Colors.greenAccent : Colors.white54)),
         if (isSmall) ...[
           Text('$correctCount صح من $totalQuestions', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
           Text('$correctCount × $pointsPerQuestion نقاط = ${correctCount * pointsPerQuestion}', style: const TextStyle(fontSize: 10, color: Colors.white38)),
           if (bonusGotten > 0) Text('بونص +$bonusGotten', style: const TextStyle(fontSize: 10, color: Colors.amberAccent, fontWeight: FontWeight.bold)),
         ] else
           const Text('نقطة مكتسبة', style: TextStyle(fontSize: 12, color: Colors.white38)),
-        SizedBox(height: isSmall ? 8 : 12),
+        SizedBox(height: isSmall ? 6 : 10),
         Container(
-          padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 16, vertical: 4),
+          padding: EdgeInsets.symmetric(horizontal: isSmall ? 10 : 16, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Text('الإجمالي: $totalScore', style: TextStyle(fontSize: isSmall ? 14 : 18, fontWeight: FontWeight.bold, color: Colors.white)),
+          child: Text('الإجمالي: $totalScore', style: TextStyle(fontSize: isSmall ? 12 : 16, fontWeight: FontWeight.bold, color: Colors.white)),
         ),
       ],
     );
@@ -907,6 +1097,35 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
       ],
     );
   }
+
+  void _confirmResetScores() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('تصفير النقاط وحذف السجل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+            'هل أنت متأكد من تصفير نقاط كل الفرق وحذف سجل النقاط بالكامل؟ سيتم إعادة تشغيل اللعبة أيضاً.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orangeAccent,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              await ref.read(teamsListProvider.notifier).resetScoresAndClearLogs();
+              ref.read(underPressureProvider.notifier).reset();
+              Navigator.pop(context);
+            },
+            child: const Text('تصفير الكل'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ControlButton extends StatelessWidget {
@@ -914,12 +1133,14 @@ class _ControlButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onPressed;
+  final bool isProminent;
 
   const _ControlButton({
     required this.label,
     required this.icon,
     required this.color,
     required this.onPressed,
+    this.isProminent = false,
   });
 
   @override
@@ -928,20 +1149,24 @@ class _ControlButton extends StatelessWidget {
     return InkWell(
       onTap: onPressed,
       borderRadius: BorderRadius.circular(20),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
         width: isSmall ? 80 : 100,
         padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: isProminent ? color.withOpacity(0.2) : color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: isProminent ? color : color.withOpacity(0.3), width: isProminent ? 2 : 1),
+          boxShadow: isProminent ? [
+            BoxShadow(color: color.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)
+          ] : [],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: isSmall ? 24 : 40, color: color),
+            Icon(icon, size: isSmall ? 24 : 40, color: isProminent ? color : color.withOpacity(0.8)),
             SizedBox(height: isSmall ? 4 : 8),
-            Text(label, style: TextStyle(fontSize: isSmall ? 14 : 20, fontWeight: FontWeight.w900, color: color)),
+            Text(label, style: TextStyle(fontSize: isSmall ? 14 : 20, fontWeight: FontWeight.w900, color: isProminent ? Colors.white : color)),
           ],
         ),
       ),

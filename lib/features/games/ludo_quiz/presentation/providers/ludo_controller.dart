@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import '../../domain/entities/ludo_entities.dart';
 import '../../domain/models/ludo_state.dart';
 
@@ -14,30 +15,58 @@ class LudoController extends Notifier<LudoState> {
 
   @override
   LudoState build() {
-    return const LudoState(
+    final settings = ref.watch(generalSettingsProvider).value;
+    final vsComputer = settings?['global_ai_enabled'] ?? settings?['ludo_vs_computer'] ?? false;
+    
+    return LudoState(
       players: [],
       currentTurn: 0,
-      activeColors: [LudoColor.red, LudoColor.green, LudoColor.yellow, LudoColor.blue],
+      activeColors: const [LudoColor.red, LudoColor.green, LudoColor.yellow, LudoColor.blue],
+      vsComputer: vsComputer,
     );
   }
 
-  List<LudoPlayer> _createPlayers(List<LudoColor> colors) {
-    return colors.map((LudoColor color) {
+  void toggleAiPlayer(bool enable) {
+    if (state.players.isEmpty) {
+       state = state.copyWith(vsComputer: enable);
+       return;
+    }
+    
+    // If game already started, we might need more complex logic to swap human/ai
+    // For now, just update the vsComputer flag and re-check turn
+    state = state.copyWith(vsComputer: enable);
+    
+    final List<LudoPlayer> updatedPlayers = state.players.asMap().entries.map((entry) {
+       final p = entry.value;
+       final String? name = state.colorTeamNames[p.color]?.toUpperCase().trim();
+       final bool isAiName = name == 'AI' || name == 'الآلي' || name == 'COMPUTER';
+       return p.copyWith(isComputer: enable && isAiName);
+    }).toList();
+    
+    state = state.copyWith(players: updatedPlayers);
+    _checkComputerTurn();
+  }
+
+  List<LudoPlayer> _createPlayers(List<LudoColor> colors, Map<LudoColor, String> selection, {bool vsComputer = false}) {
+    return colors.map((color) {
       int offset = 0;
       if (color == LudoColor.green) offset = 4;
       if (color == LudoColor.yellow) offset = 8;
       if (color == LudoColor.blue) offset = 12;
+      final String? name = selection[color]?.toUpperCase().trim();
+      final bool isAiName = name == 'AI' || name == 'الآلي' || name == 'COMPUTER';
       return LudoPlayer(
         color: color,
         tokens: List<LudoToken>.generate(4, (int i) => LudoToken(id: i + offset, color: color, position: -1)),
+        isComputer: vsComputer && isAiName,
       );
     }).toList();
   }
 
-  void initGame(Map<LudoColor, String> selection, {bool isTeamMode = false, Map<LudoColor, int> playerTeams = const {}}) {
+  void initGame(Map<LudoColor, String> selection, {bool isTeamMode = false, Map<LudoColor, int> playerTeams = const {}, bool vsComputer = false}) {
     if (selection.isEmpty) return;
     final List<LudoColor> selectedColors = selection.keys.toList();
-    final List<LudoPlayer> activePlayers = _createPlayers(selectedColors);
+    final List<LudoPlayer> activePlayers = _createPlayers(selectedColors, selection, vsComputer: vsComputer);
     
     state = LudoState(
       players: activePlayers,
@@ -52,6 +81,7 @@ class LudoController extends Notifier<LudoState> {
       isVisionModeEnabled: state.isVisionModeEnabled,
       visionModeScope: state.visionModeScope,
     );
+    _checkComputerTurn();
   }
 
   void rollDice() {
@@ -69,6 +99,7 @@ class LudoController extends Notifier<LudoState> {
         _handleDiceResult();
       });
     });
+    _checkComputerTurn();
   }
 
   void _handleDiceResult() {
@@ -97,6 +128,7 @@ class LudoController extends Notifier<LudoState> {
         phase: LudoGameState.choosingToken,
       );
     }
+    _checkComputerTurn();
   }
 
   void selectToken(LudoToken token) {
@@ -107,6 +139,7 @@ class LudoController extends Notifier<LudoState> {
     } else {
       _triggerQuestion(QuestionTriggerType.pass, token, () => _startMove(token, state.diceValue));
     }
+    _checkComputerTurn();
   }
 
   void _triggerQuestion(QuestionTriggerType trigger, LudoToken token, VoidCallback onSkip) {
@@ -121,6 +154,7 @@ class LudoController extends Notifier<LudoState> {
       state = state.copyWith(movingToken: token, currentQuestionTrigger: trigger);
       onSkip();
     }
+    _checkComputerTurn();
   }
 
   void onQuestionAnsweredCorrectly() {
@@ -154,6 +188,7 @@ class LudoController extends Notifier<LudoState> {
     }
     
     _addPointsToCurrentTeam(points, reason: reason);
+    _checkComputerTurn();
   }
 
   void _markVisionAsUsed() {
@@ -170,6 +205,7 @@ class LudoController extends Notifier<LudoState> {
 
   void onQuestionAnsweredWrong() {
     _nextTurn();
+    _checkComputerTurn();
   }
 
   void _moveTokenToBaseStart(LudoToken token) {
@@ -237,6 +273,7 @@ class LudoController extends Notifier<LudoState> {
       return p;
     }).toList();
     state = state.copyWith(players: updatedPlayers);
+    _checkComputerTurn();
   }
 
   void _onMoveEnd() {
@@ -375,8 +412,12 @@ class LudoController extends Notifier<LudoState> {
         
         for (var name in teamNamesToReward) {
           if (name != null) {
-            final t = teams.firstWhere((team) => team.name == name);
-            ref.read(teamsListProvider.notifier).updateScore(t.id!, points, gameName: 'لودو الأسئلة', reason: reason);
+            if (name == 'AI' || name == 'الآلي' || name == 'COMPUTER') {
+                 ref.read(teamsListProvider.notifier).updateScoreForName('AI', points, gameName: 'لودو الأسئلة', reason: reason);
+            } else {
+                 final t = teams.firstWhere((team) => team.name == name);
+                 ref.read(teamsListProvider.notifier).updateScore(t.id!, points, gameName: 'لودو الأسئلة', reason: reason);
+            }
           }
         }
         return;
@@ -386,8 +427,12 @@ class LudoController extends Notifier<LudoState> {
       final String? assignedTeamName = state.colorTeamNames[player.color];
 
       if (assignedTeamName != null) {
-        final team = teams.firstWhere((t) => t.name == assignedTeamName);
-        ref.read(teamsListProvider.notifier).updateScore(team.id!, points, gameName: 'لودو الأسئلة', reason: reason);
+        if (assignedTeamName == 'AI' || assignedTeamName == 'الآلي' || assignedTeamName == 'COMPUTER') {
+           ref.read(teamsListProvider.notifier).updateScoreForName('AI', points, gameName: 'لودو الأسئلة', reason: reason);
+        } else {
+           final team = teams.firstWhere((t) => t.name == assignedTeamName);
+           ref.read(teamsListProvider.notifier).updateScore(team.id!, points, gameName: 'لودو الأسئلة', reason: reason);
+        }
       } else if (teams.isNotEmpty) {
         final currentTeam = teams[state.currentTurn % teams.length];
         ref.read(teamsListProvider.notifier).updateScore(currentTeam.id!, points, gameName: 'لودو الأسئلة', reason: reason);
@@ -426,6 +471,7 @@ class LudoController extends Notifier<LudoState> {
       targetedTokens: null,
       hasUsedDoubleMoveInTurn: false,
     );
+    _checkComputerTurn();
   }
 
   void skipQuestion() {
@@ -473,5 +519,37 @@ class LudoController extends Notifier<LudoState> {
       exitNumbers: exitNumbers ?? state.exitNumbers,
       isDoubleMoveEnabled: isDoubleMoveEnabled ?? state.isDoubleMoveEnabled,
     );
+  }
+
+  void _checkComputerTurn() {
+    if (state.phase == LudoGameState.gameOver || state.players.isEmpty) return;
+    
+    final player = state.players[state.currentTurn];
+    if (!player.isComputer) return;
+
+    if (state.phase == LudoGameState.idle) {
+      Future.delayed(const Duration(milliseconds: 1000), () => rollDice());
+    } else if (state.phase == LudoGameState.choosingToken && state.selectableTokens.isNotEmpty) {
+      // Pick best token
+      LudoToken? bestToken;
+      // Preference: 1. Tokens already in play (highest position) 2. New tokens coming out
+      final inPlay = state.selectableTokens.where((t) => t.position != -1).toList()
+        ..sort((a,b) => b.position.compareTo(a.position));
+      
+      if (inPlay.isNotEmpty) {
+        bestToken = inPlay.first;
+      } else {
+        bestToken = state.selectableTokens.first;
+      }
+      
+      Future.delayed(const Duration(milliseconds: 1000), () => selectToken(bestToken!));
+    } else if (state.phase == LudoGameState.answeringQuestion) {
+      // AI answers
+      bool correct = _random.nextDouble() > 0.15; // 85% correct
+      Future.delayed(const Duration(seconds: 1), () {
+        if (correct) onQuestionAnsweredCorrectly();
+        else onQuestionAnsweredWrong();
+      });
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/wheel_providers.dart';
 import 'package:games/features/questions/presentation/providers/question_providers.dart';
 import '../../domain/entities/wheel_segment.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 
 class WheelSettingsPage extends ConsumerWidget {
   const WheelSettingsPage({super.key});
@@ -19,38 +20,43 @@ class WheelSettingsPage extends ConsumerWidget {
             scaffoldBackgroundColor: Colors.transparent,
             cardColor: Colors.white.withOpacity(0.05),
           ),
-          child: ListView.separated(
+          child: ListView(
             padding: const EdgeInsets.all(24),
-            itemCount: segments.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final segment = segments[index];
-              return Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  title: Text(segment.text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      segment.isSwitch ? 'سويتش (تبديل اختيار)' : 
-                      segment.isJoker ? 'جوكر (اختيار حر)' :
-                      'النقاط: ${segment.points} | ${segment.isQuestion ? "سؤال" : "بدون سؤال"}',
-                      style: const TextStyle(color: Colors.white70),
+            children: [
+              _buildGeneralWheelSettings(context, ref),
+              const SizedBox(height: 24),
+              const Text('إدارة أقسام العجلة', style: TextStyle(color: Colors.amber, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              ...segments.map((segment) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    title: Text(segment.text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        segment.isSwitch ? 'سويتش (تبديل اختيار)' : 
+                        segment.isJoker ? 'جوكر (اختيار حر)' :
+                        'النقاط: ${segment.points} | ${segment.isQuestion ? "سؤال" : "بدون سؤال"}',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
                     ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      onPressed: () => ref.read(wheelSegmentsProvider.notifier).deleteSegment(segment.id!),
+                    ),
+                    onTap: () => _showAddEditSegmentDialog(context, ref, segment: segment),
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                    onPressed: () => ref.read(wheelSegmentsProvider.notifier).deleteSegment(segment.id!),
-                  ),
-                  onTap: () => _showAddEditSegmentDialog(context, ref, segment: segment),
                 ),
-              );
-            },
+              )).toList(),
+              const SizedBox(height: 80), // Space for FAB
+            ],
           ),
         ),
         loading: () => const Center(child: CircularProgressIndicator(color: Colors.amber)),
@@ -61,6 +67,87 @@ class WheelSettingsPage extends ConsumerWidget {
         foregroundColor: Colors.black,
         onPressed: () => _showAddEditSegmentDialog(context, ref),
         child: const Icon(Icons.add, size: 30),
+      ),
+    );
+  }
+
+  Widget _buildGeneralWheelSettings(BuildContext context, WidgetRef ref) {
+    final settingsAsync = ref.watch(generalSettingsProvider);
+    return settingsAsync.maybeWhen(
+      data: (settings) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.amber.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.amber.withOpacity(0.1)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('إعدادات اللعبة العامة', style: TextStyle(color: Colors.amber, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              title: const Text('تفعيل عداد وقت السؤال', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              secondary: const Icon(Icons.av_timer_outlined, color: Colors.cyanAccent),
+              value: settings['enable_question_timer'] ?? false,
+              onChanged: (val) => ref.read(generalSettingsProvider.notifier).setEnableQuestionTimer(val),
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (settings['enable_question_timer'] == true) ...[
+              const Divider(color: Colors.white10),
+              ListTile(
+                title: const Text('مدة وقت السؤال', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                subtitle: Text('${settings['question_timer_duration']} ثانية', style: const TextStyle(color: Colors.white60)),
+                trailing: const Icon(Icons.edit_note_outlined, color: Colors.white70),
+                contentPadding: EdgeInsets.zero,
+                onTap: () => _showDurationPicker(context, ref, settings['question_timer_duration']),
+              ),
+              const Divider(color: Colors.white10),
+              SwitchListTile(
+                title: const Text('إظهار الإجابة والتحقق تلقائياً', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                secondary: const Icon(Icons.visibility_outlined, color: Colors.amberAccent, size: 20),
+                value: settings['auto_show_answer'] ?? false,
+                onChanged: (val) => ref.read(generalSettingsProvider.notifier).setAutoShowAnswer(val),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ],
+        ),
+      ),
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+
+  void _showDurationPicker(BuildContext context, WidgetRef ref, int current) {
+    int val = current;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('وقت الإجابة', style: TextStyle(color: Colors.white)),
+        content: StatefulBuilder(
+          builder: (context, setState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$val ثانية', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.white)),
+              Slider(
+                value: val.toDouble(),
+                min: 5, max: 300, divisions: 59,
+                onChanged: (newVal) => setState(() => val = newVal.toInt()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(generalSettingsProvider.notifier).setQuestionTimerDuration(val);
+              Navigator.pop(context);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
       ),
     );
   }

@@ -9,6 +9,8 @@ import '../widgets/dice_widget.dart';
 import '../widgets/ludo_question_dialog.dart';
 import 'ludo_settings_page.dart';
 
+
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'package:flutter/services.dart';
 
 class LudoGamePage extends ConsumerWidget {
@@ -62,10 +64,17 @@ class LudoGamePage extends ConsumerWidget {
       });
     }
 
+    ref.listen(generalSettingsProvider, (prev, next) {
+      final prevAi = prev?.value?['global_ai_enabled'] ?? false;
+      final nextAi = next.value?['global_ai_enabled'] ?? false;
+      if (prevAi != nextAi) {
+        notifier.toggleAiPlayer(nextAi);
+      }
+    });
+
     final LudoColor currentColor = state.currentPlayer.color;
-    final String teamName = teams.length > state.currentTurn
-        ? teams[state.currentTurn].name
-        : _nameMap[currentColor]!;
+    final String teamName = state.colorTeamNames[currentColor] ??
+        (teams.length > state.currentTurn ? teams[state.currentTurn].name : _nameMap[currentColor]!);
 
     return Scaffold(
       backgroundColor: const Color(0xFF1B1B2F),
@@ -80,6 +89,11 @@ class LudoGamePage extends ConsumerWidget {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent, size: 20),
+            tooltip: 'تصفير النقاط',
+            onPressed: () => _confirmResetScores(context, ref),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LudoSettingsPage())),
@@ -102,7 +116,7 @@ class LudoGamePage extends ConsumerWidget {
           child: Column(
             children: [
               // Compact Score chips
-              if (teams.isNotEmpty) _buildScoreChips(teams),
+              if (teams.isNotEmpty) _buildScoreChips(teams, state),
               
               // Slim Turn indicator
               Container(
@@ -156,18 +170,34 @@ class LudoGamePage extends ConsumerWidget {
     );
   }
 
-  Widget _buildScoreChips(List<dynamic> teams) {
+  Widget _buildScoreChips(List<dynamic> teams, LudoState state) {
+    // Show only the teams that are actually playing in the current game
+    final activeTeams = teams.where((t) => state.colorTeamNames.containsValue(t.name)).toList();
+    final displayTeams = activeTeams.isEmpty ? teams : activeTeams;
+    
     return Container(
       height: 30,
       margin: const EdgeInsets.only(top: 4),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: teams.length,
+        itemCount: displayTeams.length,
         itemBuilder: (BuildContext context, int index) {
-          final team = teams[index];
-          final colors = [Colors.red, Colors.green, Colors.amber, Colors.blue];
-          final Color c = colors[index % colors.length];
+          final team = displayTeams[index];
+          Color c = Colors.grey;
+          
+          if (activeTeams.isNotEmpty) {
+            // Find the chosen color for this team
+            final entry = state.colorTeamNames.entries.where((e) => e.value == team.name).firstOrNull;
+            if (entry != null) {
+              c = _colorMap[entry.key] ?? Colors.white;
+            }
+          } else {
+            // Fallback before any selection
+            final colors = [Colors.red, Colors.green, Colors.amber, Colors.blue];
+            c = colors[index % colors.length];
+          }
+
           return Container(
             margin: const EdgeInsets.only(right: 6),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -288,6 +318,40 @@ class LudoGamePage extends ConsumerWidget {
         const SizedBox(height: 2),
         Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
       ],
+    );
+  }
+
+  void _confirmResetScores(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('تصفير النقاط وحذف السجل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+            'هل أنت متأكد من تصفير نقاط كل الفرق وحذف سجل النقاط بالكامل؟ سيتم إعادة تشغيل اللعبة أيضاً.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orangeAccent,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              await ref.read(teamsListProvider.notifier).resetScoresAndClearLogs();
+              final state = ref.read(ludoControllerProvider);
+              ref.read(ludoControllerProvider.notifier).initGame(
+                    state.colorTeamNames,
+                    isTeamMode: state.isTeamMode,
+                    playerTeams: state.playerTeams,
+                  );
+              Navigator.pop(context);
+            },
+            child: const Text('تصفير الكل'),
+          ),
+        ],
+      ),
     );
   }
 }

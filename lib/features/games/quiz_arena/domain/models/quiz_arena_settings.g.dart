@@ -33,6 +33,7 @@ _QuizArenaSettings _$QuizArenaSettingsFromJson(Map<String, dynamic> json) =>
       timeLimitSeconds: (json['timeLimitSeconds'] as num?)?.toInt() ?? 30,
       negativePoints: (json['negativePoints'] as num?)?.toInt() ?? 0,
       rounds: (json['rounds'] as num?)?.toInt() ?? 10,
+      winPoints: (json['winPoints'] as num?)?.toInt() ?? 50,
     );
 
 Map<String, dynamic> _$QuizArenaSettingsToJson(_QuizArenaSettings instance) =>
@@ -48,4 +49,5 @@ Map<String, dynamic> _$QuizArenaSettingsToJson(_QuizArenaSettings instance) =>
       'timeLimitSeconds': instance.timeLimitSeconds,
       'negativePoints': instance.negativePoints,
       'rounds': instance.rounds,
+      'winPoints': instance.winPoints,
     };

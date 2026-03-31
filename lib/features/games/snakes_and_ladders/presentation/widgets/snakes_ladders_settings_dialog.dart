@@ -132,6 +132,7 @@ class _SnakesLaddersSettingsDialogContentState extends ConsumerState<SnakesLadde
                       const SizedBox(height: 12),
                       _buildCounterRow('السلالم:', _laddersCount, (val) => setState(() => _laddersCount = val)),
                       const SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       _buildCounterRow('الثعابين:', _snakesCount, (val) => setState(() => _snakesCount = val)),
                     ],
                   ),

@@ -9,6 +9,7 @@ class PenaltySettings extends _$PenaltySettings {
   static const _teamAKeyKey = 'penalty_team_a_key';
   static const _teamBKeyKey = 'penalty_team_b_key';
   static const _timerDurationKey = 'penalty_timer_duration';
+  static const _maxPenaltiesKey = 'penalty_max_penalties';
 
   @override
   Future<Map<String, dynamic>> build() async {
@@ -18,6 +19,7 @@ class PenaltySettings extends _$PenaltySettings {
       'team_a_key': prefs.getString(_teamAKeyKey) ?? 'a',
       'team_b_key': prefs.getString(_teamBKeyKey) ?? 'l',
       'timer_duration': prefs.getInt(_timerDurationKey) ?? 10,
+      'max_penalties': prefs.getInt(_maxPenaltiesKey) ?? 20,
     };
   }
 
@@ -42,6 +44,12 @@ class PenaltySettings extends _$PenaltySettings {
   Future<void> setTimerDuration(int seconds) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_timerDurationKey, seconds);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setMaxPenalties(int maxP) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_maxPenaltiesKey, maxP);
     ref.invalidateSelf();
   }
 }

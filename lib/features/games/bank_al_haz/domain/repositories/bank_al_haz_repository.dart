@@ -5,6 +5,7 @@ abstract class BankAlHazRepository {
   Future<List<BankAlHazTemplate>> getTemplates();
   Future<int> saveTemplate(BankAlHazTemplate template);
   Future<void> deleteTemplate(int id);
+  Future<int> duplicateTemplate(int sourceId, String newName);
 
   // Stations
   Future<List<Station>> getStations({int? templateId});
@@ -25,4 +26,10 @@ abstract class BankAlHazRepository {
   // Settings
   Future<BankAlHazSettings> getSettings();
   Future<void> saveSettings(BankAlHazSettings settings);
+
+  // Persistence
+  Future<void> saveGameState(String json);
+  Future<String?> getGameState();
+  Future<void> clearGameState();
+  Future<int> autoLinkStationsWithCategories({int? templateId});
 }

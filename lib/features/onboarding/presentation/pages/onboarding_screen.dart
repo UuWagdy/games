@@ -22,16 +22,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       image: 'assets/images/logo.png',
       color: Colors.blueAccent,
       namesTitle: 'بواسطة فريق العمل',
-      names: ['د. يوساب وجدي', 'م. بافلي باسم', 'فيلوباتير باسم', 'أ. چوليا چورچ'],
-    ),
-    OnboardingModel(
-      title: 'أفكار الألعاب',
-      subtitle: 'GAME CONCEPTS',
-      description: 'تم تصميم وتخطيط كل لعبة بعناية فائقة لتناسب جميع الأذواق والمناسبات، بإلهام من أرقى الأفكار الابتكارية.',
-      image: 'assets/images/logo.png',
-      color: Colors.amberAccent,
-      namesTitle: 'أفكار وإبداع',
-      names: ['م. بافلي باسم', 'فيلوباتير باسم'],
+      names: ['د. يوساب وجدي', 'م. باڤلي باسم', 'ف. فيلوباتير باسم', 'أ. چوليا چورچ', 'م. مريم منتصر', 'م. مارينا حسني'],
     ),
     OnboardingModel(
       title: 'تطوير البرنامج',
@@ -43,13 +34,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       names: ['د. يوساب وجدي'],
     ),
     OnboardingModel(
+      title: 'أفكار الألعاب',
+      subtitle: 'GAME CONCEPTS',
+      description: 'تم تصميم وتخطيط كل لعبة بعناية فائقة لتناسب جميع الأذواق والمناسبات، بإلهام من أرقى الأفكار الابتكارية.',
+      image: 'assets/images/logo.png',
+      color: Colors.amberAccent,
+      namesTitle: 'أفكار وإبداع',
+      names: ['م. باڤلي باسم', 'ف. فيلوباتير باسم'],
+    ),
+    OnboardingModel(
       title: 'تجميع الأسئلة',
       subtitle: 'QUESTIONS',
-      description: 'تم اختيار وتجميع مجموعة واسعة ومتنوعة من الأسئلة بدقة بالغة لتغطي مختلف المجالات وتزيد من حماس وتحدي اللعب.',
+      description: 'تم اختيار وتجميع وتدقيق مجموعة واسعة ومتنوعة من الأسئلة بدقة بالغة لضمان تنوعها وجودتها العالية، مما يضمن تجربة تعليمية وترفيهية متوازنة.',
       image: 'assets/images/logo.png',
       color: Colors.pinkAccent,
       namesTitle: 'تجميع وإعداد',
-      names: ['أ. چوليا چورچ'],
+      names: ['أ. چوليا چورچ', 'م. مريم منتصر'],
+    ),
+    OnboardingModel(
+      title: 'مختبر البرنامج',
+      subtitle: 'QUALITY ASSURANCE',
+      description: 'تم اختبار البرنامج وتجربته بدقة للتأكد من خلوه من الأخطاء ولضمان تجربة مستخدم مثالية وخالية من المشاكل.',
+      image: 'assets/images/logo.png',
+      color: Colors.orangeAccent,
+      namesTitle: 'اختبار الجودة',
+      names: ['م. مارينا حسني'],
     ),
   ];
 
@@ -273,7 +282,7 @@ class _OnboardingPageView extends StatelessWidget {
               return Transform.scale(
                 scale: 0.8 + (0.2 * value),
                 child: Opacity(
-                  opacity: value,
+                  opacity: value.clamp(0.0, 1.0),
                   child: Image.asset(model.image, fit: BoxFit.contain),
                 ),
               );
@@ -296,13 +305,13 @@ class _OnboardingPageView extends StatelessWidget {
             fontWeight: FontWeight.w900,
             color: Colors.white,
             letterSpacing: 2,
-            height: 1.1,
+            height: isDesktop ? 1.2 : 1.3,
             shadows: [
               Shadow(color: model.color.withOpacity(0.5), blurRadius: 20),
             ],
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: isDesktop ? 12 : 8),
         Text(
           model.subtitle,
           style: TextStyle(

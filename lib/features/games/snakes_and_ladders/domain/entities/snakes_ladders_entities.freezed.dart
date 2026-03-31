@@ -284,7 +284,7 @@ as bool,
 /// @nodoc
 mixin _$SnakesLaddersState {
 
- int get boardSize; List<BoardElement> get elements; Map<int, int> get playerPositions; int get currentPlayerIndex; int? get lastDiceValue; SnakesLaddersStatus get status; bool get questionsEnabled; List<int> get categoryIds; bool get isWaitingForQuestion; dynamic get currentQuestion; int get winPoints; WrongAnswerPenalty get wrongAnswerPenalty; int get snakesCount; int get laddersCount;
+ int get boardSize; List<BoardElement> get elements; Map<int, int> get playerPositions; int get currentPlayerIndex; int? get lastDiceValue; SnakesLaddersStatus get status; bool get questionsEnabled; List<int> get categoryIds; bool get isWaitingForQuestion; dynamic get currentQuestion; int get winPoints; WrongAnswerPenalty get wrongAnswerPenalty; int get snakesCount; int get laddersCount; bool get isVsComputer;
 /// Create a copy of SnakesLaddersState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -297,16 +297,16 @@ $SnakesLaddersStateCopyWith<SnakesLaddersState> get copyWith => _$SnakesLaddersS
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SnakesLaddersState&&(identical(other.boardSize, boardSize) || other.boardSize == boardSize)&&const DeepCollectionEquality().equals(other.elements, elements)&&const DeepCollectionEquality().equals(other.playerPositions, playerPositions)&&(identical(other.currentPlayerIndex, currentPlayerIndex) || other.currentPlayerIndex == currentPlayerIndex)&&(identical(other.lastDiceValue, lastDiceValue) || other.lastDiceValue == lastDiceValue)&&(identical(other.status, status) || other.status == status)&&(identical(other.questionsEnabled, questionsEnabled) || other.questionsEnabled == questionsEnabled)&&const DeepCollectionEquality().equals(other.categoryIds, categoryIds)&&(identical(other.isWaitingForQuestion, isWaitingForQuestion) || other.isWaitingForQuestion == isWaitingForQuestion)&&const DeepCollectionEquality().equals(other.currentQuestion, currentQuestion)&&(identical(other.winPoints, winPoints) || other.winPoints == winPoints)&&(identical(other.wrongAnswerPenalty, wrongAnswerPenalty) || other.wrongAnswerPenalty == wrongAnswerPenalty)&&(identical(other.snakesCount, snakesCount) || other.snakesCount == snakesCount)&&(identical(other.laddersCount, laddersCount) || other.laddersCount == laddersCount));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SnakesLaddersState&&(identical(other.boardSize, boardSize) || other.boardSize == boardSize)&&const DeepCollectionEquality().equals(other.elements, elements)&&const DeepCollectionEquality().equals(other.playerPositions, playerPositions)&&(identical(other.currentPlayerIndex, currentPlayerIndex) || other.currentPlayerIndex == currentPlayerIndex)&&(identical(other.lastDiceValue, lastDiceValue) || other.lastDiceValue == lastDiceValue)&&(identical(other.status, status) || other.status == status)&&(identical(other.questionsEnabled, questionsEnabled) || other.questionsEnabled == questionsEnabled)&&const DeepCollectionEquality().equals(other.categoryIds, categoryIds)&&(identical(other.isWaitingForQuestion, isWaitingForQuestion) || other.isWaitingForQuestion == isWaitingForQuestion)&&const DeepCollectionEquality().equals(other.currentQuestion, currentQuestion)&&(identical(other.winPoints, winPoints) || other.winPoints == winPoints)&&(identical(other.wrongAnswerPenalty, wrongAnswerPenalty) || other.wrongAnswerPenalty == wrongAnswerPenalty)&&(identical(other.snakesCount, snakesCount) || other.snakesCount == snakesCount)&&(identical(other.laddersCount, laddersCount) || other.laddersCount == laddersCount)&&(identical(other.isVsComputer, isVsComputer) || other.isVsComputer == isVsComputer));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,boardSize,const DeepCollectionEquality().hash(elements),const DeepCollectionEquality().hash(playerPositions),currentPlayerIndex,lastDiceValue,status,questionsEnabled,const DeepCollectionEquality().hash(categoryIds),isWaitingForQuestion,const DeepCollectionEquality().hash(currentQuestion),winPoints,wrongAnswerPenalty,snakesCount,laddersCount);
+int get hashCode => Object.hash(runtimeType,boardSize,const DeepCollectionEquality().hash(elements),const DeepCollectionEquality().hash(playerPositions),currentPlayerIndex,lastDiceValue,status,questionsEnabled,const DeepCollectionEquality().hash(categoryIds),isWaitingForQuestion,const DeepCollectionEquality().hash(currentQuestion),winPoints,wrongAnswerPenalty,snakesCount,laddersCount,isVsComputer);
 
 @override
 String toString() {
-  return 'SnakesLaddersState(boardSize: $boardSize, elements: $elements, playerPositions: $playerPositions, currentPlayerIndex: $currentPlayerIndex, lastDiceValue: $lastDiceValue, status: $status, questionsEnabled: $questionsEnabled, categoryIds: $categoryIds, isWaitingForQuestion: $isWaitingForQuestion, currentQuestion: $currentQuestion, winPoints: $winPoints, wrongAnswerPenalty: $wrongAnswerPenalty, snakesCount: $snakesCount, laddersCount: $laddersCount)';
+  return 'SnakesLaddersState(boardSize: $boardSize, elements: $elements, playerPositions: $playerPositions, currentPlayerIndex: $currentPlayerIndex, lastDiceValue: $lastDiceValue, status: $status, questionsEnabled: $questionsEnabled, categoryIds: $categoryIds, isWaitingForQuestion: $isWaitingForQuestion, currentQuestion: $currentQuestion, winPoints: $winPoints, wrongAnswerPenalty: $wrongAnswerPenalty, snakesCount: $snakesCount, laddersCount: $laddersCount, isVsComputer: $isVsComputer)';
 }
 
 
@@ -317,7 +317,7 @@ abstract mixin class $SnakesLaddersStateCopyWith<$Res>  {
   factory $SnakesLaddersStateCopyWith(SnakesLaddersState value, $Res Function(SnakesLaddersState) _then) = _$SnakesLaddersStateCopyWithImpl;
 @useResult
 $Res call({
- int boardSize, List<BoardElement> elements, Map<int, int> playerPositions, int currentPlayerIndex, int? lastDiceValue, SnakesLaddersStatus status, bool questionsEnabled, List<int> categoryIds, bool isWaitingForQuestion, dynamic currentQuestion, int winPoints, WrongAnswerPenalty wrongAnswerPenalty, int snakesCount, int laddersCount
+ int boardSize, List<BoardElement> elements, Map<int, int> playerPositions, int currentPlayerIndex, int? lastDiceValue, SnakesLaddersStatus status, bool questionsEnabled, List<int> categoryIds, bool isWaitingForQuestion, dynamic currentQuestion, int winPoints, WrongAnswerPenalty wrongAnswerPenalty, int snakesCount, int laddersCount, bool isVsComputer
 });
 
 
@@ -334,7 +334,7 @@ class _$SnakesLaddersStateCopyWithImpl<$Res>
 
 /// Create a copy of SnakesLaddersState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? boardSize = null,Object? elements = null,Object? playerPositions = null,Object? currentPlayerIndex = null,Object? lastDiceValue = freezed,Object? status = null,Object? questionsEnabled = null,Object? categoryIds = null,Object? isWaitingForQuestion = null,Object? currentQuestion = freezed,Object? winPoints = null,Object? wrongAnswerPenalty = null,Object? snakesCount = null,Object? laddersCount = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? boardSize = null,Object? elements = null,Object? playerPositions = null,Object? currentPlayerIndex = null,Object? lastDiceValue = freezed,Object? status = null,Object? questionsEnabled = null,Object? categoryIds = null,Object? isWaitingForQuestion = null,Object? currentQuestion = freezed,Object? winPoints = null,Object? wrongAnswerPenalty = null,Object? snakesCount = null,Object? laddersCount = null,Object? isVsComputer = null,}) {
   return _then(_self.copyWith(
 boardSize: null == boardSize ? _self.boardSize : boardSize // ignore: cast_nullable_to_non_nullable
 as int,elements: null == elements ? _self.elements : elements // ignore: cast_nullable_to_non_nullable
@@ -350,7 +350,8 @@ as dynamic,winPoints: null == winPoints ? _self.winPoints : winPoints // ignore:
 as int,wrongAnswerPenalty: null == wrongAnswerPenalty ? _self.wrongAnswerPenalty : wrongAnswerPenalty // ignore: cast_nullable_to_non_nullable
 as WrongAnswerPenalty,snakesCount: null == snakesCount ? _self.snakesCount : snakesCount // ignore: cast_nullable_to_non_nullable
 as int,laddersCount: null == laddersCount ? _self.laddersCount : laddersCount // ignore: cast_nullable_to_non_nullable
-as int,
+as int,isVsComputer: null == isVsComputer ? _self.isVsComputer : isVsComputer // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -435,10 +436,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int boardSize,  List<BoardElement> elements,  Map<int, int> playerPositions,  int currentPlayerIndex,  int? lastDiceValue,  SnakesLaddersStatus status,  bool questionsEnabled,  List<int> categoryIds,  bool isWaitingForQuestion,  dynamic currentQuestion,  int winPoints,  WrongAnswerPenalty wrongAnswerPenalty,  int snakesCount,  int laddersCount)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int boardSize,  List<BoardElement> elements,  Map<int, int> playerPositions,  int currentPlayerIndex,  int? lastDiceValue,  SnakesLaddersStatus status,  bool questionsEnabled,  List<int> categoryIds,  bool isWaitingForQuestion,  dynamic currentQuestion,  int winPoints,  WrongAnswerPenalty wrongAnswerPenalty,  int snakesCount,  int laddersCount,  bool isVsComputer)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SnakesLaddersState() when $default != null:
-return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.currentPlayerIndex,_that.lastDiceValue,_that.status,_that.questionsEnabled,_that.categoryIds,_that.isWaitingForQuestion,_that.currentQuestion,_that.winPoints,_that.wrongAnswerPenalty,_that.snakesCount,_that.laddersCount);case _:
+return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.currentPlayerIndex,_that.lastDiceValue,_that.status,_that.questionsEnabled,_that.categoryIds,_that.isWaitingForQuestion,_that.currentQuestion,_that.winPoints,_that.wrongAnswerPenalty,_that.snakesCount,_that.laddersCount,_that.isVsComputer);case _:
   return orElse();
 
 }
@@ -456,10 +457,10 @@ return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.curre
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int boardSize,  List<BoardElement> elements,  Map<int, int> playerPositions,  int currentPlayerIndex,  int? lastDiceValue,  SnakesLaddersStatus status,  bool questionsEnabled,  List<int> categoryIds,  bool isWaitingForQuestion,  dynamic currentQuestion,  int winPoints,  WrongAnswerPenalty wrongAnswerPenalty,  int snakesCount,  int laddersCount)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int boardSize,  List<BoardElement> elements,  Map<int, int> playerPositions,  int currentPlayerIndex,  int? lastDiceValue,  SnakesLaddersStatus status,  bool questionsEnabled,  List<int> categoryIds,  bool isWaitingForQuestion,  dynamic currentQuestion,  int winPoints,  WrongAnswerPenalty wrongAnswerPenalty,  int snakesCount,  int laddersCount,  bool isVsComputer)  $default,) {final _that = this;
 switch (_that) {
 case _SnakesLaddersState():
-return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.currentPlayerIndex,_that.lastDiceValue,_that.status,_that.questionsEnabled,_that.categoryIds,_that.isWaitingForQuestion,_that.currentQuestion,_that.winPoints,_that.wrongAnswerPenalty,_that.snakesCount,_that.laddersCount);case _:
+return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.currentPlayerIndex,_that.lastDiceValue,_that.status,_that.questionsEnabled,_that.categoryIds,_that.isWaitingForQuestion,_that.currentQuestion,_that.winPoints,_that.wrongAnswerPenalty,_that.snakesCount,_that.laddersCount,_that.isVsComputer);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -476,10 +477,10 @@ return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.curre
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int boardSize,  List<BoardElement> elements,  Map<int, int> playerPositions,  int currentPlayerIndex,  int? lastDiceValue,  SnakesLaddersStatus status,  bool questionsEnabled,  List<int> categoryIds,  bool isWaitingForQuestion,  dynamic currentQuestion,  int winPoints,  WrongAnswerPenalty wrongAnswerPenalty,  int snakesCount,  int laddersCount)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int boardSize,  List<BoardElement> elements,  Map<int, int> playerPositions,  int currentPlayerIndex,  int? lastDiceValue,  SnakesLaddersStatus status,  bool questionsEnabled,  List<int> categoryIds,  bool isWaitingForQuestion,  dynamic currentQuestion,  int winPoints,  WrongAnswerPenalty wrongAnswerPenalty,  int snakesCount,  int laddersCount,  bool isVsComputer)?  $default,) {final _that = this;
 switch (_that) {
 case _SnakesLaddersState() when $default != null:
-return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.currentPlayerIndex,_that.lastDiceValue,_that.status,_that.questionsEnabled,_that.categoryIds,_that.isWaitingForQuestion,_that.currentQuestion,_that.winPoints,_that.wrongAnswerPenalty,_that.snakesCount,_that.laddersCount);case _:
+return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.currentPlayerIndex,_that.lastDiceValue,_that.status,_that.questionsEnabled,_that.categoryIds,_that.isWaitingForQuestion,_that.currentQuestion,_that.winPoints,_that.wrongAnswerPenalty,_that.snakesCount,_that.laddersCount,_that.isVsComputer);case _:
   return null;
 
 }
@@ -491,7 +492,7 @@ return $default(_that.boardSize,_that.elements,_that.playerPositions,_that.curre
 @JsonSerializable()
 
 class _SnakesLaddersState implements SnakesLaddersState {
-  const _SnakesLaddersState({this.boardSize = 100, final  List<BoardElement> elements = const [], final  Map<int, int> playerPositions = const {}, this.currentPlayerIndex = 0, this.lastDiceValue, this.status = SnakesLaddersStatus.playing, this.questionsEnabled = false, final  List<int> categoryIds = const [], this.isWaitingForQuestion = false, this.currentQuestion, this.winPoints = 25, this.wrongAnswerPenalty = WrongAnswerPenalty.skip, this.snakesCount = 8, this.laddersCount = 8}): _elements = elements,_playerPositions = playerPositions,_categoryIds = categoryIds;
+  const _SnakesLaddersState({this.boardSize = 100, final  List<BoardElement> elements = const [], final  Map<int, int> playerPositions = const {}, this.currentPlayerIndex = 0, this.lastDiceValue, this.status = SnakesLaddersStatus.playing, this.questionsEnabled = false, final  List<int> categoryIds = const [], this.isWaitingForQuestion = false, this.currentQuestion, this.winPoints = 25, this.wrongAnswerPenalty = WrongAnswerPenalty.skip, this.snakesCount = 8, this.laddersCount = 8, this.isVsComputer = false}): _elements = elements,_playerPositions = playerPositions,_categoryIds = categoryIds;
   factory _SnakesLaddersState.fromJson(Map<String, dynamic> json) => _$SnakesLaddersStateFromJson(json);
 
 @override@JsonKey() final  int boardSize;
@@ -526,6 +527,7 @@ class _SnakesLaddersState implements SnakesLaddersState {
 @override@JsonKey() final  WrongAnswerPenalty wrongAnswerPenalty;
 @override@JsonKey() final  int snakesCount;
 @override@JsonKey() final  int laddersCount;
+@override@JsonKey() final  bool isVsComputer;
 
 /// Create a copy of SnakesLaddersState
 /// with the given fields replaced by the non-null parameter values.
@@ -540,16 +542,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SnakesLaddersState&&(identical(other.boardSize, boardSize) || other.boardSize == boardSize)&&const DeepCollectionEquality().equals(other._elements, _elements)&&const DeepCollectionEquality().equals(other._playerPositions, _playerPositions)&&(identical(other.currentPlayerIndex, currentPlayerIndex) || other.currentPlayerIndex == currentPlayerIndex)&&(identical(other.lastDiceValue, lastDiceValue) || other.lastDiceValue == lastDiceValue)&&(identical(other.status, status) || other.status == status)&&(identical(other.questionsEnabled, questionsEnabled) || other.questionsEnabled == questionsEnabled)&&const DeepCollectionEquality().equals(other._categoryIds, _categoryIds)&&(identical(other.isWaitingForQuestion, isWaitingForQuestion) || other.isWaitingForQuestion == isWaitingForQuestion)&&const DeepCollectionEquality().equals(other.currentQuestion, currentQuestion)&&(identical(other.winPoints, winPoints) || other.winPoints == winPoints)&&(identical(other.wrongAnswerPenalty, wrongAnswerPenalty) || other.wrongAnswerPenalty == wrongAnswerPenalty)&&(identical(other.snakesCount, snakesCount) || other.snakesCount == snakesCount)&&(identical(other.laddersCount, laddersCount) || other.laddersCount == laddersCount));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SnakesLaddersState&&(identical(other.boardSize, boardSize) || other.boardSize == boardSize)&&const DeepCollectionEquality().equals(other._elements, _elements)&&const DeepCollectionEquality().equals(other._playerPositions, _playerPositions)&&(identical(other.currentPlayerIndex, currentPlayerIndex) || other.currentPlayerIndex == currentPlayerIndex)&&(identical(other.lastDiceValue, lastDiceValue) || other.lastDiceValue == lastDiceValue)&&(identical(other.status, status) || other.status == status)&&(identical(other.questionsEnabled, questionsEnabled) || other.questionsEnabled == questionsEnabled)&&const DeepCollectionEquality().equals(other._categoryIds, _categoryIds)&&(identical(other.isWaitingForQuestion, isWaitingForQuestion) || other.isWaitingForQuestion == isWaitingForQuestion)&&const DeepCollectionEquality().equals(other.currentQuestion, currentQuestion)&&(identical(other.winPoints, winPoints) || other.winPoints == winPoints)&&(identical(other.wrongAnswerPenalty, wrongAnswerPenalty) || other.wrongAnswerPenalty == wrongAnswerPenalty)&&(identical(other.snakesCount, snakesCount) || other.snakesCount == snakesCount)&&(identical(other.laddersCount, laddersCount) || other.laddersCount == laddersCount)&&(identical(other.isVsComputer, isVsComputer) || other.isVsComputer == isVsComputer));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,boardSize,const DeepCollectionEquality().hash(_elements),const DeepCollectionEquality().hash(_playerPositions),currentPlayerIndex,lastDiceValue,status,questionsEnabled,const DeepCollectionEquality().hash(_categoryIds),isWaitingForQuestion,const DeepCollectionEquality().hash(currentQuestion),winPoints,wrongAnswerPenalty,snakesCount,laddersCount);
+int get hashCode => Object.hash(runtimeType,boardSize,const DeepCollectionEquality().hash(_elements),const DeepCollectionEquality().hash(_playerPositions),currentPlayerIndex,lastDiceValue,status,questionsEnabled,const DeepCollectionEquality().hash(_categoryIds),isWaitingForQuestion,const DeepCollectionEquality().hash(currentQuestion),winPoints,wrongAnswerPenalty,snakesCount,laddersCount,isVsComputer);
 
 @override
 String toString() {
-  return 'SnakesLaddersState(boardSize: $boardSize, elements: $elements, playerPositions: $playerPositions, currentPlayerIndex: $currentPlayerIndex, lastDiceValue: $lastDiceValue, status: $status, questionsEnabled: $questionsEnabled, categoryIds: $categoryIds, isWaitingForQuestion: $isWaitingForQuestion, currentQuestion: $currentQuestion, winPoints: $winPoints, wrongAnswerPenalty: $wrongAnswerPenalty, snakesCount: $snakesCount, laddersCount: $laddersCount)';
+  return 'SnakesLaddersState(boardSize: $boardSize, elements: $elements, playerPositions: $playerPositions, currentPlayerIndex: $currentPlayerIndex, lastDiceValue: $lastDiceValue, status: $status, questionsEnabled: $questionsEnabled, categoryIds: $categoryIds, isWaitingForQuestion: $isWaitingForQuestion, currentQuestion: $currentQuestion, winPoints: $winPoints, wrongAnswerPenalty: $wrongAnswerPenalty, snakesCount: $snakesCount, laddersCount: $laddersCount, isVsComputer: $isVsComputer)';
 }
 
 
@@ -560,7 +562,7 @@ abstract mixin class _$SnakesLaddersStateCopyWith<$Res> implements $SnakesLadder
   factory _$SnakesLaddersStateCopyWith(_SnakesLaddersState value, $Res Function(_SnakesLaddersState) _then) = __$SnakesLaddersStateCopyWithImpl;
 @override @useResult
 $Res call({
- int boardSize, List<BoardElement> elements, Map<int, int> playerPositions, int currentPlayerIndex, int? lastDiceValue, SnakesLaddersStatus status, bool questionsEnabled, List<int> categoryIds, bool isWaitingForQuestion, dynamic currentQuestion, int winPoints, WrongAnswerPenalty wrongAnswerPenalty, int snakesCount, int laddersCount
+ int boardSize, List<BoardElement> elements, Map<int, int> playerPositions, int currentPlayerIndex, int? lastDiceValue, SnakesLaddersStatus status, bool questionsEnabled, List<int> categoryIds, bool isWaitingForQuestion, dynamic currentQuestion, int winPoints, WrongAnswerPenalty wrongAnswerPenalty, int snakesCount, int laddersCount, bool isVsComputer
 });
 
 
@@ -577,7 +579,7 @@ class __$SnakesLaddersStateCopyWithImpl<$Res>
 
 /// Create a copy of SnakesLaddersState
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? boardSize = null,Object? elements = null,Object? playerPositions = null,Object? currentPlayerIndex = null,Object? lastDiceValue = freezed,Object? status = null,Object? questionsEnabled = null,Object? categoryIds = null,Object? isWaitingForQuestion = null,Object? currentQuestion = freezed,Object? winPoints = null,Object? wrongAnswerPenalty = null,Object? snakesCount = null,Object? laddersCount = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? boardSize = null,Object? elements = null,Object? playerPositions = null,Object? currentPlayerIndex = null,Object? lastDiceValue = freezed,Object? status = null,Object? questionsEnabled = null,Object? categoryIds = null,Object? isWaitingForQuestion = null,Object? currentQuestion = freezed,Object? winPoints = null,Object? wrongAnswerPenalty = null,Object? snakesCount = null,Object? laddersCount = null,Object? isVsComputer = null,}) {
   return _then(_SnakesLaddersState(
 boardSize: null == boardSize ? _self.boardSize : boardSize // ignore: cast_nullable_to_non_nullable
 as int,elements: null == elements ? _self._elements : elements // ignore: cast_nullable_to_non_nullable
@@ -593,7 +595,8 @@ as dynamic,winPoints: null == winPoints ? _self.winPoints : winPoints // ignore:
 as int,wrongAnswerPenalty: null == wrongAnswerPenalty ? _self.wrongAnswerPenalty : wrongAnswerPenalty // ignore: cast_nullable_to_non_nullable
 as WrongAnswerPenalty,snakesCount: null == snakesCount ? _self.snakesCount : snakesCount // ignore: cast_nullable_to_non_nullable
 as int,laddersCount: null == laddersCount ? _self.laddersCount : laddersCount // ignore: cast_nullable_to_non_nullable
-as int,
+as int,isVsComputer: null == isVsComputer ? _self.isVsComputer : isVsComputer // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 

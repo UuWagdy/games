@@ -33,7 +33,7 @@ final class GeneralSettingsProvider
   GeneralSettings create() => GeneralSettings();
 }
 
-String _$generalSettingsHash() => r'921c5b62d3fc71e6169a51de097ce43eb134b8ca';
+String _$generalSettingsHash() => r'292f9e5c892f325e89bb55efdef216aa98c296e4';
 
 abstract class _$GeneralSettings extends $AsyncNotifier<Map<String, dynamic>> {
   FutureOr<Map<String, dynamic>> build();
@@ -57,3 +57,42 @@ abstract class _$GeneralSettings extends $AsyncNotifier<Map<String, dynamic>> {
     element.handleCreate(ref, build);
   }
 }
+
+@ProviderFor(currentTheme)
+final currentThemeProvider = CurrentThemeProvider._();
+
+final class CurrentThemeProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<ThemeConfig>,
+          ThemeConfig,
+          FutureOr<ThemeConfig>
+        >
+    with $FutureModifier<ThemeConfig>, $FutureProvider<ThemeConfig> {
+  CurrentThemeProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'currentThemeProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$currentThemeHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<ThemeConfig> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<ThemeConfig> create(Ref ref) {
+    return currentTheme(ref);
+  }
+}
+
+String _$currentThemeHash() => r'ab72e31940c4e127b041f72b28d32b5e45dec5f2';

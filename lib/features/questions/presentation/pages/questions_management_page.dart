@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:io';
@@ -22,6 +23,8 @@ class QuestionsManagementPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isSmall = AppDesign.isSmallScreen(context);
+
     return AppDesign.backgroundWrapper(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -32,15 +35,39 @@ class QuestionsManagementPage extends ConsumerWidget {
             icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('إدارة الأسئلة والفئات', style: AppDesign.titleStyle),
+          title: Text('إدارة الأسئلة والفئات', style: AppDesign.titleStyle.copyWith(fontSize: isSmall ? 18 : 24)),
           centerTitle: true,
+          actions: [
+             // Move total count to appbar on small screens to save space
+             if (isSmall) 
+               Consumer(builder: (context, ref, child) {
+                  final questionsAsync = ref.watch(questionsProvider(null));
+                  final count = questionsAsync.value?.length ?? 0;
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                    ),
+                  );
+               }),
+          ],
         ),
         body: DefaultTabController(
           length: 2,
           child: Column(
             children: [
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                margin: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 24, vertical: isSmall ? 6 : 12),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(15),
@@ -61,6 +88,39 @@ class QuestionsManagementPage extends ConsumerWidget {
                   ],
                 ),
               ),
+               if (!isSmall)
+                 Consumer(
+                   builder: (context, ref, child) {
+                     final questionsAsync = ref.watch(questionsProvider(null));
+                     final count = questionsAsync.value?.length ?? 0;
+                     return Padding(
+                       padding: const EdgeInsets.only(bottom: 12),
+                       child: Container(
+                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                         decoration: BoxDecoration(
+                           color: Colors.amber.withOpacity(0.1),
+                           borderRadius: BorderRadius.circular(10),
+                           border: Border.all(color: Colors.amber.withOpacity(0.2)),
+                         ),
+                         child: Row(
+                           mainAxisSize: MainAxisSize.min,
+                           children: [
+                             const Icon(Icons.analytics_outlined, color: Colors.amber, size: 20),
+                             const SizedBox(width: 10),
+                             Text(
+                               'إجمالي الأسئلة بكل الفئات: ',
+                               style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
+                             ),
+                             Text(
+                               '$count',
+                               style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 18),
+                             ),
+                           ],
+                         ),
+                       ),
+                     );
+                   },
+                 ),
               Expanded(
                 child: TabBarView(
                   children: [
@@ -90,7 +150,11 @@ class _CategoriesListState extends ConsumerState<_CategoriesList> {
 
   @override
   Widget build(BuildContext context) {
+    final isSmall = AppDesign.isSmallScreen(context);
     final categoriesAsync = ref.watch(categoriesProvider);
+
+    final allCategories = categoriesAsync.value ?? [];
+    final filteredCategories = allCategories.where((c) => c.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -98,30 +162,52 @@ class _CategoriesListState extends ConsumerState<_CategoriesList> {
         children: [
           // Search and Bulk Action Bar for Categories
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: isSmall ? 16 : 24, vertical: 8),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     onChanged: (val) => setState(() => searchQuery = val),
-                    style: const TextStyle(color: Colors.white),
-                    decoration: AppDesign.searchInputDecoration('بحث في الفئات...').copyWith(
-                      prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                    style: TextStyle(color: Colors.white, fontSize: isSmall ? 14 : 16),
+                    decoration: AppDesign.searchInputDecoration(isSmall ? 'بحث...' : 'بحث في الفئات...').copyWith(
+                      prefixIcon: Icon(Icons.search, color: Colors.white38, size: isSmall ? 18 : 24),
+                      contentPadding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 16),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 if (selectionMode) ...[
                   IconButton(
+                    tooltip: 'اختيار الكل',
+                    icon: Icon(
+                      selectedIds.length == filteredCategories.length && filteredCategories.isNotEmpty
+                          ? Icons.deselect
+                          : Icons.select_all,
+                      color: Colors.amber,
+                    ),
+                    onPressed: filteredCategories.isEmpty ? null : () {
+                      setState(() {
+                        if (selectedIds.length == filteredCategories.length) {
+                          selectedIds.clear();
+                        } else {
+                          selectedIds.addAll(filteredCategories.map((c) => c.id!));
+                        }
+                      });
+                    },
+                  ),
+                  IconButton(
+                    tooltip: 'حذف المختار',
                     icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
                     onPressed: selectedIds.isEmpty ? null : () => _confirmBulkDelete(),
                   ),
                   IconButton(
+                    tooltip: 'إغلاق',
                     icon: const Icon(Icons.close, color: Colors.white60),
                     onPressed: () => setState(() { selectionMode = false; selectedIds.clear(); }),
                   ),
                 ] else
                    IconButton(
+                    tooltip: 'تفعيل الاختيار المتعدد',
                     icon: const Icon(Icons.checklist, color: Colors.amber),
                     onPressed: () => setState(() => selectionMode = true),
                   ),
@@ -130,8 +216,8 @@ class _CategoriesListState extends ConsumerState<_CategoriesList> {
           ),
           Expanded(
             child: categoriesAsync.when(
-              data: (allCategories) {
-                final categories = allCategories.where((c) => c.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
+              data: (_) {
+                final categories = filteredCategories;
                 
                 if (categories.isEmpty) return const Center(child: Text('لا توجد فئات مطابقة', style: TextStyle(color: Colors.white38)));
                 
@@ -162,10 +248,29 @@ class _CategoriesListState extends ConsumerState<_CategoriesList> {
                             activeColor: Colors.amber,
                             onChanged: (v) => setState(() { if (v!) selectedIds.add(category.id!); else selectedIds.remove(category.id!); })
                           ) : null,
-                          title: Text(
-                            category.name, 
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 16 : 18, color: Colors.white),
-                            overflow: TextOverflow.ellipsis,
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  category.name, 
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 16 : 18, color: Colors.white),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                                ),
+                                child: Text(
+                                  '${category.questionsCount}', 
+                                  style: const TextStyle(color: Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
                           ),
                           trailing: selectionMode ? null : Row(
                             mainAxisSize: MainAxisSize.min,
@@ -477,6 +582,240 @@ class _QuestionsList extends ConsumerWidget {
     }
   }
 
+  void _confirmDeleteEverything(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppDesign.slate900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('حذف جميع البيانات', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'هل أنت متأكد من حذف جميع الأسئلة والفئات بشكل نهائي؟\nلا يمكن التراجع عن هذا الإجراء.',
+          style: TextStyle(color: Colors.white70)
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(categoriesProvider.notifier).deleteAllCategories();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم حذف جميع البيانات بنجاح'), backgroundColor: Colors.redAccent)
+                );
+              }
+            },
+            child: const Text('حذف كل شيء'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRemoveDuplicates(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppDesign.slate900,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('حذف الأسئلة المكررة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text('سيتم البحث عن جميع الأسئلة التي لها نفس النص (تطابق تام) وحذف النسخ الإضافية، مع الإبقاء على نسخة واحدة فقط.', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final count = await ref.read(questionsProvider(null).notifier).removeDuplicateQuestions();
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(count > 0 ? 'تم حذف $count سؤال مكرراً بنجاح' : 'لا توجد أسئلة مكررة حالياً'), 
+                    backgroundColor: count > 0 ? Colors.green : Colors.blueGrey
+                  )
+                );
+              }
+            },
+            child: const Text('تأكيد الحذف'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importCsv(BuildContext context, WidgetRef ref) async {
+    final repo = ref.read(questionRepositoryProvider);
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['csv'], withData: true);
+      if (result == null || (result.files.single.path == null && result.files.single.bytes == null)) return;
+      
+      late String input;
+      if (result.files.single.bytes != null) {
+        input = utf8.decode(result.files.single.bytes!, allowMalformed: true);
+      } else {
+        final file = File(result.files.single.path!);
+        input = await file.readAsString();
+      }
+      
+      List<List<dynamic>> fields;
+      try {
+          fields = const CsvToListConverter().convert(input);
+        
+        // Auto-detect semicolon if comma fails to find columns
+        if (fields.isNotEmpty && fields[0].length < 3) {
+           final altFields = const CsvToListConverter(fieldDelimiter: ';').convert(input);
+           if (altFields.isNotEmpty && altFields[0].length >= 3) {
+             fields = altFields;
+           }
+        }
+      } catch (e) {
+        throw 'تنسيق الملف غير صحيح: $e';
+      }
+
+      if (fields.isEmpty) throw 'الملف فارغ';
+      
+      final rows = fields.skip(1).toList();
+      final total = rows.length;
+      if (total == 0) throw 'لا توجد بيانات أسئلة بعد السطر الأول';
+
+      int count = 0;
+      final currentCats = await repo.getCategories();
+      final catMap = {for (var c in currentCats) c.name: c.id!};
+
+      // Show Progress Dialog
+      final progressController = StreamController<int>();
+      _showImportProgress(context, total, progressController.stream);
+
+      try {
+        final existingQuestions = await repo.getQuestions(null);
+        final existingTexts = existingQuestions.map((q) => q.text.trim().toLowerCase()).toSet();
+
+        for (var row in rows) {
+          if (row.length < 3) continue;
+          final qText = _get(row, 0);
+          if (qText.isEmpty) continue;
+          
+          // Skip if question text already exists (case-insensitive, trimmed)
+          if (existingTexts.contains(qText.trim().toLowerCase())) {
+            progressController.add(++count);
+            continue; 
+          }
+          
+          final aText = _get(row, 1);
+          final catString = _get(row, 2).toString();
+          final typeStr = _get(row, 3).toLowerCase();
+          QuestionType type = QuestionType.essay;
+          if (typeStr.contains('اختيار') || typeStr.contains('mcq')) type = QuestionType.multipleChoice;
+          if (typeStr.contains('صح') || typeStr.contains('tf')) type = QuestionType.trueFalse;
+          if (typeStr.contains('شبكي') || typeStr.contains('grid')) type = QuestionType.grid;
+
+          List<int> catIds = [];
+          final catNames = catString.split(RegExp(r'[,;]')).map((e) => e.trim()).where((e) => e.isNotEmpty);
+          for (var name in catNames) {
+            int? cid = catMap[name];
+            if (cid == null) { 
+              cid = await repo.addCategory(name); 
+              catMap[name] = cid; 
+            }
+            catIds.add(cid);
+          }
+
+          final optionsStr = _get(row, 4);
+          List<String>? options = optionsStr.isNotEmpty ? optionsStr.split('|').map((e) => e.trim()).toList() : null;
+          final indicesStr = _get(row, 5);
+          List<int>? correctIndices = indicesStr.isNotEmpty ? indicesStr.split(',').map((e) => int.tryParse(e.trim()) ?? 0).toList() : null;
+          final tfStr = _get(row, 6).toLowerCase();
+          bool? tfValue = tfStr.isEmpty ? null : (tfStr.startsWith('t') || tfStr.contains('صح'));
+          final multipleStr = _get(row, 7).toLowerCase();
+          bool isMultiple = multipleStr.startsWith('t') || multipleStr.contains('صح') || multipleStr.contains('نعم');
+
+          Map<String, dynamic>? gridData;
+          if (type == QuestionType.grid) {
+            final rowNames = _get(row, 8).split('|').map((e) => e.trim()).toList();
+            final colNames = _get(row, 9).split('|').map((e) => e.trim()).toList();
+            final cellsStr = _get(row, 10);
+            final correctCells = cellsStr.isNotEmpty ? cellsStr.split(';').map((s) {
+              final parts = s.split(',');
+              if (parts.length < 2) return [0, 0];
+              return [int.tryParse(parts[0]) ?? 0, int.tryParse(parts[1]) ?? 0];
+            }).toList() : <List<int>>[];
+            gridData = {'rows': rowNames.isEmpty ? ['1','2'] : rowNames, 'cols': colNames.isEmpty ? ['1','2'] : colNames, 'correctCells': correctCells};
+          }
+
+          await repo.addQuestion(Question(text:qText, answer:aText, type:type, categoryIds:catIds, options:options, correctOptionIndices:correctIndices, tfValue:tfValue, isMultiple:isMultiple, gridData:gridData));
+          count++;
+          progressController.add(count);
+          
+          if (count % 20 == 0) await Future.delayed(const Duration(milliseconds: 1));
+        }
+      } finally {
+        progressController.close();
+        if (context.mounted) Navigator.pop(context); // Close dialog
+      }
+
+      ref.invalidate(categoriesProvider); ref.invalidate(questionsProvider(null));
+      if (context.mounted) {
+        String msg = 'تم استيراد $count سؤال بنجاح';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ أثناء الاستيراد: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  void _showImportProgress(BuildContext context, int total, Stream<int> progressStream) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.upload_file, color: Colors.amber),
+              SizedBox(width: 10),
+              Text('جاري الاستيراد...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: StreamBuilder<int>(
+            stream: progressStream,
+            builder: (context, snapshot) {
+              final current = snapshot.data ?? 0;
+              final percent = total > 0 ? (current / total) : 0.0;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  LinearProgressIndicator(
+                    value: percent, 
+                    backgroundColor: Colors.white10, 
+                    color: Colors.amber,
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('$current من $total سؤال', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      Text('${(percent * 100).toInt()}%', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              );
+            }
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _downloadTemplate(BuildContext context) async {
     try {
       final buffer = StringBuffer();
@@ -498,129 +837,77 @@ class _QuestionsList extends ConsumerWidget {
     }
   }
 
-
-  Future<void> _importCsv(BuildContext context, WidgetRef ref) async {
-    final repo = ref.read(questionRepositoryProvider);
-    try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['csv'], withData: true);
-      if (result == null || (result.files.single.path == null && result.files.single.bytes == null)) return;
-      
-      late String input;
-      if (result.files.single.bytes != null) {
-        input = utf8.decode(result.files.single.bytes!, allowMalformed: true);
-      } else {
-        final file = File(result.files.single.path!);
-        input = await file.readAsString();
-      }
-      
-      final fields = const CsvToListConverter().convert(input);
-      if (fields.isEmpty) return;
-      int count = 0;
-      final currentCats = await repo.getCategories();
-      final catMap = {for (var c in currentCats) c.name: c.id!};
-
-      for (var row in fields.skip(1)) {
-        if (row.length < 3) continue;
-        final qText = _get(row, 0);
-        final aText = _get(row, 1);
-        final catString = _get(row, 2);
-        if (qText.isEmpty) continue;
-        final typeStr = _get(row, 3).toLowerCase();
-        QuestionType type = QuestionType.essay;
-        if (typeStr.contains('اختيار') || typeStr.contains('mcq')) type = QuestionType.multipleChoice;
-        if (typeStr.contains('صح') || typeStr.contains('tf')) type = QuestionType.trueFalse;
-        if (typeStr.contains('شبكي') || typeStr.contains('grid')) type = QuestionType.grid;
-
-        List<int> catIds = [];
-        final catNames = catString.split(RegExp(r'[,;]')).map((e) => e.trim()).where((e) => e.isNotEmpty);
-        for (var name in catNames) {
-          int? cid = catMap[name];
-          if (cid == null) { cid = await repo.addCategory(name); catMap[name] = cid; }
-          catIds.add(cid);
-        }
-        if (catIds.isEmpty) continue;
-
-        final optionsStr = _get(row, 4);
-        List<String>? options = optionsStr.isNotEmpty ? optionsStr.split('|').map((e) => e.trim()).toList() : null;
-        final indicesStr = _get(row, 5);
-        List<int>? correctIndices = indicesStr.isNotEmpty ? indicesStr.split(',').map((e) => int.tryParse(e.trim()) ?? 0).toList() : null;
-        final tfStr = _get(row, 6).toLowerCase();
-        bool? tfValue = tfStr.isEmpty ? null : (tfStr.startsWith('t') || tfStr.contains('صح'));
-        final multipleStr = _get(row, 7).toLowerCase();
-        bool isMultiple = multipleStr.startsWith('t') || multipleStr.contains('صح') || multipleStr.contains('نعم');
-
-        Map<String, dynamic>? gridData;
-        if (type == QuestionType.grid) {
-          final rowNames = _get(row, 8).split('|').map((e) => e.trim()).toList();
-          final colNames = _get(row, 9).split('|').map((e) => e.trim()).toList();
-          final cellsStr = _get(row, 10);
-          final correctCells = cellsStr.isNotEmpty ? cellsStr.split(';').map((s) {
-            final parts = s.split(',');
-            return [int.tryParse(parts[0]) ?? 0, int.tryParse(parts[1]) ?? 0];
-          }).toList() : <List<int>>[];
-          gridData = {'rows': rowNames.isEmpty ? ['1','2'] : rowNames, 'cols': colNames.isEmpty ? ['1','2'] : colNames, 'correctCells': correctCells};
-        }
-
-        await repo.addQuestion(Question(text:qText, answer:aText, type:type, categoryIds:catIds, options:options, correctOptionIndices:correctIndices, tfValue:tfValue, isMultiple:isMultiple, gridData:gridData));
-        count++;
-      }
-      ref.invalidate(categoriesProvider); ref.invalidate(questionsProvider(null));
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم استيراد $count سؤال بنجاح'), backgroundColor: Colors.green));
-    } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
-    }
-  }
-
   String _get(List<dynamic> row, int index) { if (index >= row.length) return ''; return row[index]?.toString().trim() ?? ''; }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categoriesAsync = ref.watch(categoriesProvider);
+    final isSmall = AppDesign.isSmallScreen(context);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.center,
-              children: [
-                _buildActionButton(
-                  context, 
-                  'استيراد CSV', 
-                  Icons.cloud_upload_outlined, 
-                  Colors.greenAccent, 
-                  () => _importCsv(context, ref)
-                ),
-                _buildActionButton(
-                  context, 
-                  'تصدير كل الأسئلة (CSV)', 
-                  Icons.download_rounded, 
-                  Colors.blueAccent, 
-                  () => _exportAllCsv(context, ref)
-                ),
-                 _buildActionButton(
-                  context, 
-                  'تصدير PDF', 
-                  Icons.picture_as_pdf_outlined, 
-                  Colors.purpleAccent, 
-                  () => _exportAllPdf(context, ref)
-                ),
-                TextButton.icon(
-                  onPressed: () => _downloadTemplate(context),
-                  icon: const Icon(Icons.help_outline, color: Colors.white60, size: 16),
-                  label: const Text('تحميل نموذج فارغ', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                ),
-              ],
+            padding: EdgeInsets.symmetric(horizontal: isSmall ? 16 : 24.0, vertical: isSmall ? 8 : 12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildActionButton(
+                    context, 
+                    isSmall ? 'استيراد' : 'استيراد CSV', 
+                    Icons.cloud_upload_outlined, 
+                    Colors.greenAccent, 
+                    () => _importCsv(context, ref)
+                  ),
+                  const SizedBox(width: 10),
+                  _buildActionButton(
+                    context, 
+                    isSmall ? 'تصدير' : 'تصدير كل الأسئلة (CSV)', 
+                    Icons.download_rounded, 
+                    Colors.blueAccent, 
+                    () => _exportAllCsv(context, ref)
+                  ),
+                  const SizedBox(width: 10),
+                  _buildActionButton(
+                    context, 
+                    isSmall ? 'PDF' : 'تصدير PDF', 
+                    Icons.picture_as_pdf_outlined, 
+                    Colors.purpleAccent, 
+                    () => _exportAllPdf(context, ref)
+                  ),
+                  const SizedBox(width: 10),
+                  _buildActionButton(
+                    context, 
+                    isSmall ? 'مكرر' : 'حذف المكرر', 
+                    Icons.cleaning_services_rounded, 
+                    Colors.orangeAccent, 
+                    () => _confirmRemoveDuplicates(context, ref)
+                  ),
+                  const SizedBox(width: 10),
+                  _buildActionButton(
+                    context, 
+                    isSmall ? 'حذف الكل' : 'حذف كل البيانات', 
+                    Icons.delete_forever_rounded, 
+                    Colors.redAccent, 
+                    () => _confirmDeleteEverything(context, ref)
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton.icon(
+                    onPressed: () => _downloadTemplate(context),
+                    icon: const Icon(Icons.help_outline, color: Colors.white60, size: 16),
+                    label: Text(isSmall ? 'نموذج' : 'تحميل نموذج فارغ', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
             child: categoriesAsync.when(
               data: (categories) {
-                if (categories.isEmpty) return const Center(child: Text('يرجى إضافة نوع أولاً', style: TextStyle(color: Colors.white70)));
+                // Show questions even if categories are empty to allow managing orphaned questions
                 return Stack(
                   children: [
                     _QuestionsBySelectedCategory(categories: categories),
@@ -630,7 +917,7 @@ class _QuestionsList extends ConsumerWidget {
                       child: FloatingActionButton(
                         backgroundColor: Colors.amber,
                         foregroundColor: Colors.black,
-                        onPressed: () => _showAddQuestionDialog(context, ref, categories, initialCatId: categories.first.id!),
+                        onPressed: () => _showAddQuestionDialog(context, ref, categories, initialCatId: categories.isNotEmpty ? categories.first.id : null),
                         child: const Icon(Icons.add, size: 30),
                       ),
                     ),
@@ -681,40 +968,80 @@ class _QuestionsBySelectedCategory extends ConsumerStatefulWidget {
 class _QuestionsBySelectedCategoryState extends ConsumerState<_QuestionsBySelectedCategory> {
   final List<int> selectedCategoryIds = [];
   bool selectAll = true;
+  bool showUncategorized = false;
   String searchQuery = "";
   bool selectionMode = false;
   final Set<int> multiSelectedIds = {};
 
   @override
   Widget build(BuildContext context) {
+    final questionsAsync = ref.watch(questionsProvider(null));
+    final allQuestions = questionsAsync.value ?? [];
+    final filteredQuestions = allQuestions.where((q) {
+      final validCategoryIds = widget.categories.map((c) => c.id).toSet();
+      final hasValidCategory = q.categoryIds.any((id) => validCategoryIds.contains(id));
+      
+      final matchesCat = selectAll || 
+                         q.categoryIds.any((id) => selectedCategoryIds.contains(id)) ||
+                         (showUncategorized && !hasValidCategory);
+                         
+      final matchesSearch = q.text.toLowerCase().contains(searchQuery.toLowerCase()) || 
+                          q.answer.toLowerCase().contains(searchQuery.toLowerCase());
+      return matchesCat && matchesSearch;
+    }).toList();
+
+    final isSmall = AppDesign.isSmallScreen(context);
+
     return Column(
       children: [
         // Search and Actions Bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: isSmall ? 16 : 24, vertical: isSmall ? 4 : 8),
           child: Row(
             children: [
               Expanded(
                 child: TextField(
                   onChanged: (val) => setState(() => searchQuery = val),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: AppDesign.searchInputDecoration('بحث في الأسئلة...').copyWith(
-                    prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  style: TextStyle(color: Colors.white, fontSize: isSmall ? 14 : 16),
+                  decoration: AppDesign.searchInputDecoration(isSmall ? 'بحث...' : 'بحث في الأسئلة...').copyWith(
+                    prefixIcon: Icon(Icons.search, color: Colors.white38, size: isSmall ? 18 : 24),
+                    contentPadding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 16),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: isSmall ? 8 : 12),
               if (selectionMode) ...[
                 IconButton(
+                  tooltip: 'اختيار الكل',
+                  icon: Icon(
+                    multiSelectedIds.length == filteredQuestions.length && filteredQuestions.isNotEmpty
+                        ? Icons.deselect
+                        : Icons.select_all,
+                    color: Colors.amber,
+                  ),
+                  onPressed: filteredQuestions.isEmpty ? null : () {
+                    setState(() {
+                      if (multiSelectedIds.length == filteredQuestions.length) {
+                        multiSelectedIds.clear();
+                      } else {
+                        multiSelectedIds.addAll(filteredQuestions.map((q) => q.id!));
+                      }
+                    });
+                  },
+                ),
+                IconButton(
+                  tooltip: 'حذف المختار',
                   icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
                   onPressed: multiSelectedIds.isEmpty ? null : () => _confirmBulkDelete(),
                 ),
                 IconButton(
+                  tooltip: 'إغلاق',
                   icon: const Icon(Icons.close, color: Colors.white60),
                   onPressed: () => setState(() { selectionMode = false; multiSelectedIds.clear(); }),
                 ),
               ] else
                 IconButton(
+                  tooltip: 'تفعيل الاختيار المتعدد',
                   icon: const Icon(Icons.checklist, color: Colors.amber),
                   onPressed: () => setState(() => selectionMode = true),
                 ),
@@ -725,24 +1052,46 @@ class _QuestionsBySelectedCategoryState extends ConsumerState<_QuestionsBySelect
         // Category Filter
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+          padding: EdgeInsets.symmetric(horizontal: isSmall ? 16 : 24, vertical: 4),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
                 FilterChip(
-                  label: const Text('الكل'),
+                  label: const Text('الكل', style: TextStyle(fontSize: 12)),
                   selected: selectAll,
                   selectedColor: Colors.amber.withOpacity(0.4),
-                  onSelected: (val) => setState(() { selectAll = true; selectedCategoryIds.clear(); }),
+                  padding: isSmall ? EdgeInsets.zero : null,
+                  onSelected: (val) => setState(() { 
+                    selectAll = true; 
+                    selectedCategoryIds.clear(); 
+                    showUncategorized = false; 
+                  }),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('بدون فئة', style: TextStyle(fontSize: 12, color: Colors.orangeAccent)),
+                  selected: !selectAll && showUncategorized,
+                  selectedColor: Colors.orangeAccent.withOpacity(0.4),
+                  padding: isSmall ? EdgeInsets.zero : null,
+                  onSelected: (val) => setState(() {
+                    if (val) {
+                      selectAll = false;
+                      showUncategorized = true;
+                    } else {
+                      showUncategorized = false;
+                      if (selectedCategoryIds.isEmpty) selectAll = true;
+                    }
+                  }),
+                ),
+                const SizedBox(width: 8),
                 ...widget.categories.map((c) => Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.only(right: 6),
                   child: FilterChip(
-                    label: Text(c.name),
+                    label: Text(c.name, style: const TextStyle(fontSize: 12)),
                     selected: !selectAll && selectedCategoryIds.contains(c.id),
                     selectedColor: Colors.blueAccent.withOpacity(0.4),
+                    padding: isSmall ? EdgeInsets.zero : null,
                     onSelected: (val) => setState(() {
                       if (val) { selectAll = false; selectedCategoryIds.add(c.id!); }
                       else { selectedCategoryIds.remove(c.id); if (selectedCategoryIds.isEmpty) selectAll = true; }
@@ -754,86 +1103,80 @@ class _QuestionsBySelectedCategoryState extends ConsumerState<_QuestionsBySelect
           ),
         ),
         Expanded(
-          child: Consumer(builder: (context, ref, child) {
-            final questionsAsync = ref.watch(questionsProvider(null));
-            return questionsAsync.when(
-              data: (allQuestions) {
-                final questions = allQuestions.where((q) {
-                  final matchesCat = selectAll || q.categoryIds.any((id) => selectedCategoryIds.contains(id));
-                  final matchesSearch = q.text.contains(searchQuery) || q.answer.contains(searchQuery);
-                  return matchesCat && matchesSearch;
-                }).toList();
+          child: questionsAsync.when(
+            data: (_) {
+              final questions = filteredQuestions;
 
-                  final isSmall = AppDesign.isSmallScreen(context);
-                  return GridView.builder(
-                    padding: EdgeInsets.all(isSmall ? 12 : 24).copyWith(bottom: 100),
-                    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 500, 
-                      mainAxisExtent: isSmall ? 130 : 110, 
-                      crossAxisSpacing: 16, 
-                      mainAxisSpacing: 12
-                    ),
-                    itemCount: questions.length,
-                    itemBuilder: (context, index) {
-                      final q = questions[index];
-                      final isSelected = multiSelectedIds.contains(q.id);
-                      final qCats = widget.categories.where((c) => q.categoryIds.contains(c.id)).map((c) => c.name).join('، ');
-                      return InkWell(
-                        onLongPress: () => setState(() { selectionMode = true; multiSelectedIds.add(q.id!); }),
-                        onTap: selectionMode ? () => setState(() { 
-                          if (isSelected) multiSelectedIds.remove(q.id); else multiSelectedIds.add(q.id!); 
-                        }) : null,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.amber.withOpacity(0.2) : Colors.white.withOpacity(0.05), 
-                            borderRadius: BorderRadius.circular(15), 
-                            border: Border.all(color: isSelected ? Colors.amber : Colors.white10)
-                          ),
-                          child: ListTile(
-                            contentPadding: EdgeInsets.symmetric(horizontal: isSmall ? 10 : 16, vertical: 8),
-                            leading: selectionMode 
-                              ? Checkbox(
-                                  value: isSelected, 
-                                  activeColor: Colors.amber,
-                                  onChanged: (v) => setState(() { if (v!) multiSelectedIds.add(q.id!); else multiSelectedIds.remove(q.id!); })
-                                )
-                              : (q.imageData != null 
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.memory(q.imageData!, width: isSmall ? 40 : 50, height: isSmall ? 40 : 50, fit: BoxFit.cover),
-                                  )
-                                : Container(
-                                    width: isSmall ? 40 : 50, height: isSmall ? 40 : 50, 
-                                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
-                                    child: Icon(Icons.text_fields_rounded, color: Colors.white24, size: isSmall ? 20 : 24),
-                                  )),
-                            title: Text(q.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 13 : 14, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+              final isSmall = AppDesign.isSmallScreen(context);
+              return GridView.builder(
+                padding: EdgeInsets.all(isSmall ? 12 : 24).copyWith(bottom: 100),
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 500, 
+                  mainAxisExtent: isSmall ? null : 110, 
+                  crossAxisSpacing: 16, 
+                  mainAxisSpacing: 12
+                ),
+                itemCount: questions.length,
+                itemBuilder: (context, index) {
+                  final q = questions[index];
+                  final isSelected = multiSelectedIds.contains(q.id);
+                  final qCats = widget.categories.where((c) => q.categoryIds.contains(c.id)).map((c) => c.name).join('، ');
+                  return InkWell(
+                    onLongPress: () => setState(() { selectionMode = true; multiSelectedIds.add(q.id!); }),
+                    onTap: selectionMode ? () => setState(() { 
+                      if (isSelected) multiSelectedIds.remove(q.id); else multiSelectedIds.add(q.id!); 
+                    }) : null,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.amber.withOpacity(0.2) : Colors.white.withOpacity(0.05), 
+                        borderRadius: BorderRadius.circular(15), 
+                        border: Border.all(color: isSelected ? Colors.amber : Colors.white10)
+                      ),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.symmetric(horizontal: isSmall ? 10 : 16, vertical: 8),
+                        leading: selectionMode 
+                          ? Checkbox(
+                              value: isSelected, 
+                              activeColor: Colors.amber,
+                              onChanged: (v) => setState(() { if (v!) multiSelectedIds.add(q.id!); else multiSelectedIds.remove(q.id!); })
+                            )
+                          : (q.imageData != null 
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(q.imageData!, width: isSmall ? 40 : 50, height: isSmall ? 40 : 50, fit: BoxFit.cover),
+                              )
+                            : Container(
+                                width: isSmall ? 40 : 50, height: isSmall ? 40 : 50, 
+                                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+                                child: Icon(Icons.text_fields_rounded, color: Colors.white24, size: isSmall ? 20 : 24),
+                              )),
+                        title: Text(q.text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 14 : 16, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('ج: ${q.answer}', style: const TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis),
+                            if (!isSmall) Text(qCats, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                        trailing: selectionMode 
+                          ? null 
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text('ج: ${q.answer}', style: const TextStyle(color: Colors.greenAccent, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                Text(qCats, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                IconButton(icon: Icon(Icons.edit_outlined, color: Colors.blueAccent, size: isSmall ? 18 : 20), onPressed: () => _showEditQuestionDialog(context, ref, widget.categories, q)),
+                                IconButton(icon: Icon(Icons.delete_outline, color: Colors.redAccent, size: isSmall ? 18 : 20), onPressed: () => ref.read(questionsProvider(null).notifier).deleteQuestion(q.id!)),
                               ],
                             ),
-                            trailing: selectionMode 
-                              ? null 
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(icon: Icon(Icons.edit_outlined, color: Colors.blueAccent, size: isSmall ? 18 : 20), onPressed: () => _showEditQuestionDialog(context, ref, widget.categories, q)),
-                                    IconButton(icon: Icon(Icons.delete_outline, color: Colors.redAccent, size: isSmall ? 18 : 20), onPressed: () => ref.read(questionsProvider(null).notifier).deleteQuestion(q.id!)),
-                                  ],
-                                ),
-                          ),
-                        ),
-                      );
-                    },
+                      ),
+                    ),
                   );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, s) => Center(child: Text('Error: $err')),
-            );
-          }),
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, s) => Center(child: Text('Error: $err')),
+          ),
         ),
       ],
     );
@@ -1040,7 +1383,7 @@ void _showQuestionEditorDialog(BuildContext context, WidgetRef ref, List<Categor
           const Divider(color: Colors.white10, height: 40),
           const Text('الفئات المرتبطة:', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
           ...categories.map((cat) => CheckboxListTile(activeColor: Colors.amber, visualDensity: VisualDensity.compact, title: Text(cat.name, style: const TextStyle(color: Colors.white, fontSize: 13)), value: selectedCatIds.contains(cat.id), onChanged: (v) {
-            setState(() { if (v == true) selectedCatIds.add(cat.id!); else if (selectedCatIds.length > 1) selectedCatIds.remove(cat.id!); });
+            setState(() { if (v == true) selectedCatIds.add(cat.id!); else selectedCatIds.remove(cat.id!); });
           })),
         ]))),
         actions: [

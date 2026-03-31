@@ -67,7 +67,7 @@ class QuizArenaGamePage extends ConsumerWidget {
             tooltip: 'إعدادات الجلسة',
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const SettingsPage(initialIndex: 4)),
+              MaterialPageRoute(builder: (_) => const SettingsPage(initialIndex: 6)),
             ),
           ),
           IconButton(
@@ -108,6 +108,7 @@ class QuizArenaGamePage extends ConsumerWidget {
                       child: Column(
                         children: [
                           SizedBox(height: AppDesign.isSmallScreen(context) ? 90 : 120),
+                          _buildTopLeaderboard(state.teams, context),
                           _buildTournamentBanner(state, context),
                           SizedBox(height: AppDesign.isSmallScreen(context) ? 10 : 20),
                           _buildTurnIndicator(state, context),
@@ -155,38 +156,95 @@ class QuizArenaGamePage extends ConsumerWidget {
     final currentTeam = state.teams[state.currentTeamIndex];
     bool isSmall = AppDesign.isSmallScreen(context);
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: isSmall ? 16 : 24, vertical: isSmall ? 6 : 10),
-      margin: EdgeInsets.symmetric(horizontal: isSmall ? 20 : 0),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.amberAccent.withOpacity(0.2), Colors.amberAccent.withOpacity(0.02)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: Colors.amberAccent.withOpacity(0.6), width: 1.5),
-        boxShadow: [
-          BoxShadow(color: Colors.amberAccent.withOpacity(0.1), blurRadius: 10, spreadRadius: 2),
-        ],
-      ),
-      child: Row(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: isSmall ? 16 : 32, vertical: 10),
+      decoration: AppDesign.glassDecoration,
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.stars_rounded, color: Colors.amberAccent, size: 20),
-          const SizedBox(width: 8),
+          const Text('الدور على فريق:', style: TextStyle(fontSize: 12, color: Colors.white60)),
+          const SizedBox(height: 4),
           Text(
-            'دور فريق: ${currentTeam.name}',
+            currentTeam.name,
             style: TextStyle(
-              color: Colors.white, 
+              fontSize: isSmall ? 24 : 32, 
               fontWeight: FontWeight.w900, 
-              fontSize: isSmall ? 18 : 22,
-              shadows: [Shadow(color: Colors.amberAccent.withOpacity(0.5), blurRadius: 8)],
+              color: Colors.amberAccent, 
+              shadows: const [Shadow(color: Colors.amberAccent, blurRadius: 10)]
             ),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildTopLeaderboard(List<Team> teams, BuildContext context) {
+    if (teams.isEmpty) return const SizedBox.shrink();
+    final isSmall = AppDesign.isSmallScreen(context);
+    return Container(
+      height: isSmall ? 40 : 50,
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Center(
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          shrinkWrap: true,
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: teams.length,
+          itemBuilder: (context, index) {
+            final team = teams[index];
+            return Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: isSmall ? 6 : 8,
+                    height: isSmall ? 6 : 8,
+                    decoration: BoxDecoration(
+                      color: _getTeamColor(index),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: _getTeamColor(index).withOpacity(0.4), blurRadius: 4),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    team.name,
+                    style: TextStyle(
+                      color: Colors.white70, 
+                      fontSize: isSmall ? 10 : 12, 
+                      fontWeight: FontWeight.bold
+                    )
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "${team.score}",
+                    style: TextStyle(
+                      color: Colors.white, 
+                      fontSize: isSmall ? 16 : 18, 
+                      fontWeight: FontWeight.w900
+                    )
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Color _getTeamColor(int index) {
+    final colors = [Colors.redAccent, Colors.greenAccent, Colors.blueAccent, Colors.orangeAccent, Colors.purpleAccent];
+    return colors[index % colors.length];
   }
 
   Widget _buildTeamsSidebar(BuildContext context, WidgetRef ref, QuizArenaGameState state) {
@@ -237,43 +295,37 @@ class QuizArenaGamePage extends ConsumerWidget {
   }
 
   Widget _buildTeamScoreItem(BuildContext context, WidgetRef ref, Team team, bool isCurrent) {
-    return GestureDetector(
-      onTap: () => _showScoreLogsDialog(context, ref, team),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isCurrent ? Colors.purpleAccent.withOpacity(0.15) : Colors.white.withOpacity(0.04),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: isCurrent ? Colors.purpleAccent : Colors.white10,
-            width: isCurrent ? 2 : 1,
-          ),
-          boxShadow: isCurrent ? [BoxShadow(color: Colors.purpleAccent.withOpacity(0.1), blurRadius: 10)] : [],
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      decoration: BoxDecoration(
+        color: isCurrent ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isCurrent ? Colors.amberAccent.withOpacity(0.5) : Colors.white10,
+          width: 2,
         ),
-        child: Column(
-          children: [
-            Text(
-              team.name,
-              style: TextStyle(
-                color: isCurrent ? Colors.white : Colors.white70,
-                fontSize: 18,
-                fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-              ),
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${team.score}',
-              style: TextStyle(
-                color: isCurrent ? Colors.amberAccent : Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
+        boxShadow: isCurrent ? [BoxShadow(color: Colors.amberAccent.withOpacity(0.1), blurRadius: 15, spreadRadius: 1)] : [],
+      ),
+      child: ListTile(
+        onTap: () => _showScoreLogsDialog(context, ref, team),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        title: Text(
+          team.name,
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
+            color: isCurrent ? Colors.amberAccent : Colors.white70,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        subtitle: Text(
+          '${team.score}',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.w900,
+            color: isCurrent ? Colors.white : Colors.white54,
+          ),
+          textAlign: TextAlign.center,
         ),
       ),
     );

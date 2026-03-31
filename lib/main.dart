@@ -5,6 +5,8 @@ import 'features/splash/presentation/pages/splash_screen.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 
+import 'package:games/core/design/theme_music_manager.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -21,33 +23,36 @@ void main() {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'GAMES',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0F52BA),
-          brightness: Brightness.dark,
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ThemeMusicManager(
+      child: MaterialApp(
+        title: 'GAMES',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF0F52BA),
+            brightness: Brightness.dark,
+          ),
+          scaffoldBackgroundColor: const Color(0xFF0F172A),
+          fontFamily: 'Amiri',
         ),
-        scaffoldBackgroundColor: const Color(0xFF0F172A),
+        // Arabic RTL Support
+        localizationsDelegates: [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('ar', 'EG'), // Arabic
+        ],
+        locale: const Locale('ar', 'EG'),
+        home: const SplashScreen(),
       ),
-      // Arabic RTL Support
-      localizationsDelegates: [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('ar', 'EG'), // Arabic
-      ],
-      locale: const Locale('ar', 'EG'),
-      home: const SplashScreen(),
     );
   }
 }

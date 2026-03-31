@@ -114,7 +114,39 @@ class QuizArenaGame extends _$QuizArenaGame {
   @override
   QuizArenaGameState build() {
     ref.onDispose(() => _timer?.cancel());
+
+    // Sync with global teams whenever it changes
+    ref.listen<AsyncValue<List<Team>>>(teamsListProvider, (prev, next) {
+      next.whenData((globalTeams) {
+        final settings = ref.read(quizArenaSettingsProvider);
+        final participatingIds = settings.selectedTeamIds;
+        final updatedParticipating = globalTeams.where((t) => participatingIds.contains(t.id)).toList();
+        
+        // Check if anything in the participating teams changed (names, scores, or count)
+        if (!_areParticipatingTeamsEqual(state.teams, updatedParticipating)) {
+          state = state.copyWith(teams: updatedParticipating);
+          // Adjust currentTeamIndex if it's out of bounds after team list update
+          if (state.currentTeamIndex >= updatedParticipating.length && updatedParticipating.isNotEmpty) {
+            state = state.copyWith(currentTeamIndex: 0);
+          }
+        }
+      });
+    });
+
     return const QuizArenaGameState();
+  }
+
+  // Helper to compare participating teams deeply (ID, Name, Score)
+  bool _areParticipatingTeamsEqual(List<Team> list1, List<Team> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+       if (list1[i].id != list2[i].id || 
+           list1[i].name != list2[i].name || 
+           list1[i].score != list2[i].score) {
+         return false;
+       }
+    }
+    return true;
   }
 
   Future<void> startGame(QuizArenaSettings settings, List<Team> initialTeams) async {
@@ -279,6 +311,20 @@ class QuizArenaGame extends _$QuizArenaGame {
     _timer?.cancel();
     final winners = _calculateWinners();
     state = state.copyWith(isGameOver: true, winners: winners);
+
+    final settings = ref.read(quizArenaSettingsProvider);
+    if (settings.winPoints > 0) {
+      for (final winner in winners) {
+        if (winner.id != null) {
+          ref.read(teamsListProvider.notifier).updateScore(
+                winner.id!,
+                settings.winPoints,
+                gameName: 'Quiz Arena',
+                reason: 'الفوز في ساحة الاختبار',
+              );
+        }
+      }
+    }
   }
 
   List<Team> _calculateWinners() {

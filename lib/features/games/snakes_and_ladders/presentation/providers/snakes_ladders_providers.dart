@@ -14,6 +14,7 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
   @override
   SnakesLaddersState build() {
     _loadState();
+    // Default for 100 board is 8/8, but we will adjust in initializeGame or reset.
     return _generateInitialState(100, 8, 8);
   }
 
@@ -53,16 +54,40 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
     final List<BoardElement> elements = [];
     final Random random = Random();
     final usedCells = <int>{1, size};
+    
+    int columnsCount;
+    if (size == 50) {
+      columnsCount = 5;
+    } else if (size == 64) {
+      columnsCount = 8;
+    } else if (size == 100) {
+      columnsCount = 10;
+    } else {
+      columnsCount = sqrt(size).ceil();
+    }
+    
+    final int sideSize = columnsCount;
 
     // Ladders
     int currentLadders = 0;
     int attempts = 0;
-    while (currentLadders < ladderCount && attempts < 200) {
+    while (currentLadders < ladderCount && attempts < 500) {
       attempts++;
-      int start = random.nextInt(size - 15) + 2;
-      int end = random.nextInt(size - start - 5) + start + 5;
+      // Ladders start in bottom half mostly, end in top half
+      int start = random.nextInt(size - (sideSize * 2)) + 2;
+      int end = random.nextInt(size - start - sideSize) + start + sideSize;
       
-      bool overlap = elements.any((e) => e.start == start || e.end == end || e.start == end || e.end == start);
+      int startRow = (start - 1) ~/ sideSize;
+      int endRow = (end - 1) ~/ sideSize;
+
+      if (startRow == endRow) continue; // Must span at least one row
+      if ((endRow - startRow).abs() < 2 && size >= 100) continue; // Long boards need longer ladders
+
+      bool overlap = elements.any((e) => 
+        e.start == start || e.end == end || 
+        e.start == end || e.end == start ||
+        (e.start - start).abs() < 2 || (e.end - end).abs() < 2
+      );
       
       if (!overlap && !usedCells.contains(start) && !usedCells.contains(end)) {
         elements.add(BoardElement(start: start, end: end, isLadder: true));
@@ -75,12 +100,21 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
     // Snakes
     int currentSnakes = 0;
     attempts = 0;
-    while (currentSnakes < snakeCount && attempts < 200) {
+    while (currentSnakes < snakeCount && attempts < 500) {
       attempts++;
-      int start = random.nextInt(size - 20) + 15;
-      int end = random.nextInt(start - 10) + 2;
+      int start = random.nextInt(size - sideSize - 5) + sideSize + 5;
+      int end = random.nextInt(start - sideSize) + 2;
       
-      bool overlap = elements.any((e) => e.start == start || e.end == end || e.start == end || e.end == start);
+      int startRow = (start - 1) ~/ sideSize;
+      int endRow = (end - 1) ~/ sideSize;
+
+      if (startRow == endRow) continue; // Must span at least one row
+
+      bool overlap = elements.any((e) => 
+        e.start == start || e.end == end || 
+        e.start == end || e.end == start ||
+        (e.start - start).abs() < 2 || (e.end - end).abs() < 2
+      );
 
       if (!overlap && !usedCells.contains(start) && !usedCells.contains(end)) {
         elements.add(BoardElement(start: start, end: end, isLadder: false));
@@ -95,22 +129,31 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
   void initializeGame(int size, bool questionsEnabled, List<int> categoryIds, 
       {int winPoints = 25, 
        WrongAnswerPenalty penalty = WrongAnswerPenalty.skip,
-       int snakesCount = 8,
-       int laddersCount = 8}) {
+       int? snakesCount,
+       int? laddersCount,
+       bool isVsComputer = false}) {
     final teamsAsync = ref.read(teamsListProvider);
-    final teams = teamsAsync.value ?? [];
+    final allTeams = List<dynamic>.from(teamsAsync.value ?? []);
+    final teams = isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+
     final Map<int, int> positions = {};
     for (var team in teams) {
       positions[team.id!] = 1;
     }
-    state = _generateInitialState(size, snakesCount, laddersCount).copyWith(
+    
+    int actualSnakes = snakesCount ?? (size <= 64 ? 5 : 8);
+    int actualLadders = laddersCount ?? (size <= 64 ? 5 : 8);
+
+    state = _generateInitialState(size, actualSnakes, actualLadders).copyWith(
       playerPositions: positions,
       questionsEnabled: questionsEnabled,
       categoryIds: categoryIds,
       winPoints: winPoints,
       wrongAnswerPenalty: penalty,
+      isVsComputer: isVsComputer,
     );
     _saveState();
+    _checkComputerTurn();
   }
 
   void setDiceValue(int val) {
@@ -120,7 +163,8 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
 
   Future<void> moveCurrentPlayer(int steps) async {
     final teamsAsync = ref.read(teamsListProvider);
-    final teams = teamsAsync.value ?? [];
+    final allTeams = List<dynamic>.from(teamsAsync.value ?? []);
+    final teams = state.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
     if (teams.isEmpty) return;
     
     final currentTeam = teams[state.currentPlayerIndex % teams.length];
@@ -156,20 +200,22 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
       _saveState();
       // Update points for winner
       ref.read(teamsListProvider.notifier).updateScore(
-        currentTeam.id!,
-        state.winPoints,
-        gameName: 'السلم والثعبان',
-        reason: 'الفوز في لعبة السلم والثعبان',
+         currentTeam.id!,
+         state.winPoints,
+         gameName: 'السلم والثعبان',
+         reason: 'الفوز في لعبة السلم والثعبان',
       );
     } else {
       state = state.copyWith(currentPlayerIndex: (state.currentPlayerIndex + 1) % teams.length);
       _saveState();
+      _checkComputerTurn();
     }
   }
 
   void skipTurn() {
     final teamsAsync = ref.read(teamsListProvider);
-    final teams = teamsAsync.value ?? [];
+    final allTeams = List<dynamic>.from(teamsAsync.value ?? []);
+    final teams = state.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
     if (teams.isEmpty) return;
     state = state.copyWith(currentPlayerIndex: (state.currentPlayerIndex + 1) % teams.length);
     _saveState();
@@ -186,4 +232,62 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
     );
     _saveState();
   }
+
+  void setWinPoints(int val) {
+    state = state.copyWith(winPoints: val);
+    _saveState();
+  }
+
+  void setQuestionsEnabled(bool val) {
+    state = state.copyWith(questionsEnabled: val);
+    _saveState();
+  }
+
+  void setBoardSize(int size) {
+    if (state.boardSize == size) return;
+    initializeGame(size, state.questionsEnabled, state.categoryIds, 
+      winPoints: state.winPoints, 
+      penalty: state.wrongAnswerPenalty,
+      snakesCount: state.snakesCount,
+      laddersCount: state.laddersCount
+    );
+  }
+
+  void setSnakesLaddersCount(int snacks, int ladders) {
+    initializeGame(state.boardSize, state.questionsEnabled, state.categoryIds, 
+      winPoints: state.winPoints, 
+      penalty: state.wrongAnswerPenalty,
+      snakesCount: snacks,
+      laddersCount: ladders
+    );
+  }
+
+  void toggleAiPlayer(bool enable) {
+    state = state.copyWith(isVsComputer: enable);
+    _saveState();
+    if (enable) _checkComputerTurn();
+  }
+
+  void _checkComputerTurn() {
+    if (state.status == SnakesLaddersStatus.finished) return;
+    
+    // In Snakes & Ladders, only index > 0 are computers if vsComputer is true
+    final teamsAsync = ref.read(teamsListProvider);
+    final allTeams = List<dynamic>.from(teamsAsync.value ?? []);
+    final teams = state.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+    if (teams.isEmpty) return;
+
+    final currentTeam = teams[state.currentPlayerIndex % teams.length];
+    final String name = currentTeam.name.toUpperCase().trim();
+    final bool isAi = name == 'AI' || name == 'الآلي' || name == "COMPUTER";
+
+    if (state.isVsComputer && isAi) {
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        final dice = Random().nextInt(6) + 1;
+        setDiceValue(dice);
+        moveCurrentPlayer(dice);
+      });
+    }
+  }
 }
+

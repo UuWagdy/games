@@ -286,11 +286,15 @@ class _WheelPainter extends CustomPainter {
           canvas.restore();
         } else {
           final icon = segments[i].isSwitch ? Icons.sync : Icons.style;
+          double iconSize = radius * 0.25;
+          if (iconSize > 55) iconSize = 55;
+          if (iconSize < 24) iconSize = 24;
+
           final iconPainter = TextPainter(
             text: TextSpan(
               text: String.fromCharCode(icon.codePoint),
               style: TextStyle(
-                fontSize: 28,
+                fontSize: iconSize,
                 fontFamily: icon.fontFamily,
                 package: icon.fontPackage,
                 color: segments[i].isQuestion || segments[i].isSwitch || segments[i].isJoker ? Colors.white : Colors.amberAccent,
@@ -299,28 +303,56 @@ class _WheelPainter extends CustomPainter {
             textDirection: TextDirection.ltr,
           );
           iconPainter.layout();
+          final currentSliceAngle = (startAngle + sweepAngle / 2) % (2 * math.pi);
+          final normalizedAngle = currentSliceAngle < 0 ? currentSliceAngle + 2 * math.pi : currentSliceAngle;
+          final bool shouldFlip = normalizedAngle > math.pi / 2 && normalizedAngle < 3 * math.pi / 2;
+
           canvas.save();
-          canvas.translate(radius * 0.7, 0);
-          canvas.rotate(-(startAngle + sweepAngle / 2));
+          canvas.translate(radius * 0.65, 0);
+          if (shouldFlip) canvas.rotate(math.pi);
           iconPainter.paint(canvas, Offset(-iconPainter.width / 2, -iconPainter.height / 2));
           canvas.restore();
         }
       } else {
-        final textPainter = TextPainter(
-          text: TextSpan(
+        double fontSize = radius * 0.18; // Increased base proportion
+        if (fontSize > 45) fontSize = 45; // Much higher cap for large screens
+        if (fontSize < 12) fontSize = 12; 
+
+        // Let the text occupy up to 75% of the sweep angle's width at our radius
+        final double maxAllowedWidth = radius * 0.75 * sweepAngle; 
+        
+        TextPainter textPainter = TextPainter(
+          textDirection: TextDirection.ltr,
+          maxLines: 1,
+        );
+
+        // Try decreasing font size until it fits the available width
+        bool fits = false;
+        while (!fits && fontSize >= 8) {
+          textPainter.text = TextSpan(
             text: segments[i].text,
             style: TextStyle(
               color: segments[i].isQuestion || segments[i].isSwitch || segments[i].isJoker ? Colors.white : Colors.amberAccent,
-              fontSize: 20,
+              fontSize: fontSize,
               fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
             ),
-          ),
-          textDirection: TextDirection.ltr,
-        );
-        textPainter.layout();
+          );
+          textPainter.layout();
+          if (textPainter.width <= maxAllowedWidth) {
+            fits = true;
+          } else {
+            fontSize -= 1;
+          }
+        }
+
+        final currentSliceAngle = (startAngle + sweepAngle / 2) % (2 * math.pi);
+        final normalizedAngle = currentSliceAngle < 0 ? currentSliceAngle + 2 * math.pi : currentSliceAngle;
+        final bool shouldFlip = normalizedAngle > math.pi / 2 && normalizedAngle < 3 * math.pi / 2;
+
         canvas.save();
-        canvas.translate(radius * 0.7, 0);
-        canvas.rotate(-(startAngle + sweepAngle / 2));
+        canvas.translate(radius * 0.6, 0); 
+        if (shouldFlip) canvas.rotate(math.pi);
         textPainter.paint(canvas, Offset(-textPainter.width / 2, -textPainter.height / 2));
         canvas.restore();
       }

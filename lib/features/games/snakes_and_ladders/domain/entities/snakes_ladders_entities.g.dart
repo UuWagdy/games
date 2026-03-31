@@ -55,6 +55,7 @@ _SnakesLaddersState _$SnakesLaddersStateFromJson(Map<String, dynamic> json) =>
           WrongAnswerPenalty.skip,
       snakesCount: (json['snakesCount'] as num?)?.toInt() ?? 8,
       laddersCount: (json['laddersCount'] as num?)?.toInt() ?? 8,
+      isVsComputer: json['isVsComputer'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$SnakesLaddersStateToJson(_SnakesLaddersState instance) =>
@@ -76,6 +77,7 @@ Map<String, dynamic> _$SnakesLaddersStateToJson(_SnakesLaddersState instance) =>
           _$WrongAnswerPenaltyEnumMap[instance.wrongAnswerPenalty]!,
       'snakesCount': instance.snakesCount,
       'laddersCount': instance.laddersCount,
+      'isVsComputer': instance.isVsComputer,
     };
 
 const _$SnakesLaddersStatusEnumMap = {

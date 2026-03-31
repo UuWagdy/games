@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'dart:io';
+import 'app_themes.dart';
 
 class AppDesign {
   static bool isSmallScreen(BuildContext context) => MediaQuery.of(context).size.width < 900;
@@ -68,7 +70,6 @@ class AppDesign {
     fontWeight: FontWeight.w300,
   );
 
-  // Background Orbs
   static Widget buildOrb({
     double? top,
     double? right,
@@ -98,30 +99,54 @@ class AppDesign {
     );
   }
 
-  static List<Widget> buildBackgroundOrbs() {
+  static List<Widget> buildBackgroundOrbs(ThemeConfig theme) {
+    Color getOrbColor(int i) => theme.orbColors.length > i ? theme.orbColors[i] : theme.primaryColor.withOpacity(0.1);
+    
     return [
-      buildOrb(top: -150, right: -150, size: 500, color: const Color(0xFF1E293B)),
-      buildOrb(bottom: -200, left: -200, size: 600, color: const Color(0xFF334155)),
-      buildOrb(top: 100, left: 100, size: 300, color: Colors.blueAccent),
-      buildOrb(bottom: 200, right: 100, size: 250, color: Colors.purpleAccent),
+      buildOrb(top: -150, right: -150, size: 500, color: getOrbColor(0)),
+      buildOrb(bottom: -200, left: -200, size: 600, color: getOrbColor(1)),
+      buildOrb(top: 100, left: 100, size: 300, color: getOrbColor(2)),
+      buildOrb(bottom: 200, right: 100, size: 250, color: getOrbColor(3)),
     ];
   }
 
-  static Widget backgroundWrapper({required Widget child}) {
+  static Widget backgroundWrapper({required Widget child, ThemeConfig? theme}) {
+    final curTheme = theme ?? AppThemes.defaultTheme;
+    final bgImage = curTheme.backgroundImage;
+    
     return Container(
       width: double.infinity,
       height: double.infinity,
-      decoration: const BoxDecoration(
-        color: slate900,
+      decoration: BoxDecoration(
+        color: curTheme.backgroundDeep,
+        image: bgImage != null ? DecorationImage(
+          image: bgImage.startsWith('assets/') 
+            ? AssetImage(bgImage) as ImageProvider
+            : FileImage(File(bgImage)),
+          fit: BoxFit.cover,
+          opacity: 0.3, // Make it transparent as requested
+        ) : null,
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [slate900, Color(0xFF1E293B), slate900],
+          colors: [curTheme.backgroundDeep, curTheme.backgroundSoft, curTheme.backgroundDeep],
         ),
       ),
       child: Stack(
         children: [
-          ...buildBackgroundOrbs(),
+          if (bgImage != null)
+            // Add a glow effect behind the image
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [curTheme.primaryColor.withOpacity(0.1), Colors.transparent],
+                    radius: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ...buildBackgroundOrbs(curTheme),
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 70, sigmaY: 70),
@@ -134,7 +159,7 @@ class AppDesign {
     );
   }
 
-  static InputDecoration searchInputDecoration(String hint) {
+  static InputDecoration searchInputDecoration(String hint, {Color? focusColor}) {
     return InputDecoration(
       hintText: hint,
       hintStyle: const TextStyle(color: Colors.white24, fontSize: 16),
@@ -142,7 +167,7 @@ class AppDesign {
       fillColor: Colors.white.withOpacity(0.05),
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Colors.white10)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Colors.purpleAccent, width: 2)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: focusColor ?? Colors.blueAccent, width: 2)),
     );
   }
 }

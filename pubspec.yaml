@@ -54,6 +54,7 @@ dependencies:
   share_plus: ^10.1.4
   pdf: ^3.12.0
   printing: ^5.14.3
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -102,6 +103,7 @@ flutter:
     - assets/images/
     - assets/database/
     - assets/fonts/
+    - assets/We Wish You a Merry Christmas-1810407330.mp3
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

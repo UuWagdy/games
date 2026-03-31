@@ -12,6 +12,8 @@ import 'package:games/features/questions/domain/entities/question.dart';
 import 'package:games/features/games/snakes_and_ladders/presentation/widgets/game_board_widget.dart';
 import 'package:games/features/games/snakes_and_ladders/presentation/widgets/dice_widget.dart';
 import 'package:games/features/games/snakes_and_ladders/presentation/widgets/snakes_ladders_settings_dialog.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+
 
 class SnakesLaddersGamePage extends ConsumerStatefulWidget {
   const SnakesLaddersGamePage({super.key});
@@ -46,6 +48,7 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
   void _showQuestionFlow(int diceVal) async {
     final gameState = ref.read(snakesLaddersGameProvider);
     final categoryIds = gameState.categoryIds;
+    final bool isAI = gameState.isVsComputer && gameState.currentPlayerIndex > 0;
     
     List<Question> availableQuestions = [];
     if (categoryIds.isEmpty) {
@@ -69,8 +72,50 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
     }
 
     final randomQuestion = availableQuestions[math.Random().nextInt(availableQuestions.length)];
-    final teams = ref.read(teamsListProvider).value ?? [];
+    final rawTeams = ref.read(teamsListProvider).value ?? [];
+    final allTeams = List<dynamic>.from(rawTeams);
+    final teams = gameState.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
     final currentTeam = teams[gameState.currentPlayerIndex % teams.length];
+
+    if (isAI) {
+       // AI Auto Answer
+       showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) {
+             Future.delayed(const Duration(seconds: 2), () {
+                if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                    bool correct = math.Random().nextDouble() > 0.15; // 85% correct
+                    if (correct) {
+                      _executeMove(diceVal);
+                    } else {
+                        final penalty = ref.read(snakesLaddersGameProvider).wrongAnswerPenalty;
+                        if (penalty == WrongAnswerPenalty.skip) {
+                          ref.read(snakesLaddersGameProvider.notifier).skipTurn();
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الكمبيوتر أجاب خطأ! ضاع دوره')));
+                        } else {
+                          final steps = diceVal ~/ 2;
+                          if (steps > 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('الكمبيوتر أجاب خطأ! سيتحرك $steps خطوات فقط')));
+                            _executeMove(steps);
+                          } else {
+                            ref.read(snakesLaddersGameProvider.notifier).skipTurn();
+                          }
+                        }
+                    }
+                }
+             });
+             return _QuestionDialog(
+                question: randomQuestion,
+                teamName: "الكمبيوتر (${currentTeam.name})",
+                onResult: (_) {}, // Handled by delayed logic
+                isReadOnly: true,
+             );
+          }
+       );
+       return;
+    }
 
     showDialog(
       context: context,
@@ -151,14 +196,48 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
     );
   }
 
+  void _confirmResetScores(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('تصفير النقاط وحذف السجل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text('هل أنت متأكد من تصفير نقاط كل الفرق وحذف سجل النقاط بالكامل؟ سيتم إعادة تشغيل اللعبة أيضاً.', 
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              await ref.read(teamsListProvider.notifier).resetScoresAndClearLogs();
+              ref.read(snakesLaddersGameProvider.notifier).resetPositions();
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('تصفير الكل'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final gameState = ref.watch(snakesLaddersGameProvider);
     final teamsAsync = ref.watch(teamsListProvider);
 
+    ref.listen(generalSettingsProvider, (prev, next) {
+      final prevAi = prev?.value?['global_ai_enabled'] ?? false;
+      final nextAi = next.value?['global_ai_enabled'] ?? false;
+      if (prevAi != nextAi) {
+        ref.read(snakesLaddersGameProvider.notifier).toggleAiPlayer(nextAi);
+      }
+    });
+
     ref.listen(snakesLaddersGameProvider, (previous, next) {
       if (next.status == SnakesLaddersStatus.finished && previous?.status == SnakesLaddersStatus.playing) {
-        final teams = teamsAsync.value ?? [];
+        final allTeams = teamsAsync.value ?? [];
+        final teams = next.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
         if (teams.isNotEmpty) {
            final winnerIndex = (next.currentPlayerIndex - 1) % teams.length;
            final winner = teams[winnerIndex < 0 ? teams.length - 1 : winnerIndex];
@@ -183,7 +262,16 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () => showDialog(context: context, builder: (_) => const SnakesLaddersSettingsDialog()),
           ),
-          IconButton(icon: const Icon(Icons.restart_alt, color: Colors.redAccent), onPressed: () => ref.read(snakesLaddersGameProvider.notifier).resetPositions()),
+          IconButton(
+            icon: const Icon(Icons.restart_alt, color: Colors.white), 
+            tooltip: 'إعادة تعيين الخانات',
+            onPressed: () => ref.read(snakesLaddersGameProvider.notifier).resetPositions()
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+            tooltip: 'تصفير النقاط',
+            onPressed: () => _confirmResetScores(context, ref),
+          ),
           if (AppDesign.isSmallScreen(context))
             Builder(
               builder: (context) => IconButton(
@@ -214,7 +302,10 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
           child: teamsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator(color: Colors.amber)),
             error: (e, s) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.redAccent))),
-            data: (teams) {
+            data: (rawTeams) {
+              final allTeams = List<dynamic>.from(rawTeams);
+              final teams = gameState.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+              
               if (teams.isEmpty) return const Center(child: Text('يرجى إضافة فرق للبدء', style: TextStyle(color: Colors.white, fontSize: 24)));
               
               final currentTeam = teams[gameState.currentPlayerIndex % teams.length];
@@ -252,19 +343,16 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
         children: [
           Expanded(
             child: Center(
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: Container(
-                  margin: const EdgeInsets.all(8),
-                  decoration: AppDesign.glassDecoration.copyWith(
-                    border: Border.all(color: Colors.white24, width: 2),
-                  ),
-                  child: GameBoardWidget(
-                    boardSize: gameState.boardSize,
-                    elements: gameState.elements,
-                    playerPositions: gameState.playerPositions,
-                    teams: teams,
-                  ),
+              child: Container(
+                margin: const EdgeInsets.all(8),
+                decoration: AppDesign.glassDecoration.copyWith(
+                  border: Border.all(color: Colors.white24, width: 2),
+                ),
+                child: GameBoardWidget(
+                  boardSize: gameState.boardSize,
+                  elements: gameState.elements,
+                  playerPositions: gameState.playerPositions,
+                  teams: teams,
                 ),
               ),
             ),
@@ -319,9 +407,13 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
               ),
               Expanded(
                 child: teamsAsync.when(
-                  data: (teams) => ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: teams.length,
+                  data: (rawTeams) {
+                    final allTeams = List<dynamic>.from(rawTeams);
+                    final teams = gameState.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+                    
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: teams.length,
                     itemBuilder: (context, index) {
                       final team = teams[index];
                       final pos = gameState.playerPositions[team.id!] ?? 1;
@@ -367,7 +459,8 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
                         ),
                       );
                     },
-                  ),
+                  );
+                  },
                   loading: () => const Center(child: CircularProgressIndicator()),
                   error: (e, s) => Center(child: Text('Error: $e')),
                 ),
@@ -389,8 +482,14 @@ class _QuestionDialog extends ConsumerStatefulWidget {
   final Question question;
   final String teamName;
   final Function(bool) onResult;
+  final bool isReadOnly;
 
-  const _QuestionDialog({required this.question, required this.teamName, required this.onResult});
+  const _QuestionDialog({
+    required this.question,
+    required this.teamName,
+    required this.onResult,
+    this.isReadOnly = false,
+  });
 
   @override
   ConsumerState<_QuestionDialog> createState() => _QuestionDialogState();
@@ -398,6 +497,26 @@ class _QuestionDialog extends ConsumerStatefulWidget {
 
 class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
   bool _showAnswer = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isReadOnly) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _showAnswer = true;
+          });
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              widget.onResult(true); // AI always answers correctly for now
+              Navigator.pop(context);
+            }
+          });
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

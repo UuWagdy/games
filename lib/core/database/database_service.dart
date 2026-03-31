@@ -10,9 +10,9 @@ class DatabaseService {
   static final DatabaseService instance = DatabaseService._init();
   static Database? _database;
   
-  // Update this number whenever you update the games.db in assets folder
-  // to force all users (and your EXE/APK) to sync with the new assets version.
-  static const int _dbRevision = 2; 
+  // No longer needed manually. We now use an automated fingerprinting 
+  // of the games.db asset to detect changes and sync automatically.
+  // static const int _dbRevision = 4; 
 
   DatabaseService._init();
 
@@ -26,60 +26,144 @@ class DatabaseService {
     final dbPath = await getApplicationDocumentsDirectory();
     final path = join(dbPath.path, filePath);
 
-    // Check if the database exists
     final exists = await databaseExists(path);
-    
-    // Check if we need to force a sync based on revision (for build updates)
     final prefs = await SharedPreferences.getInstance();
-    final lastSyncedRevision = prefs.getInt('db_revision') ?? 0;
-    final needsSync = lastSyncedRevision < _dbRevision;
+    
+    // Load asset and calculate fingerprint to see if the database file in assets has changed
+    final assetData = await rootBundle.load('assets/database/games.db');
+    final fingerprint = _calculateFingerprint(assetData);
+    
+    final lastSyncedFingerprint = prefs.getString('db_fingerprint') ?? '';
+    final needsSync = lastSyncedFingerprint != fingerprint;
 
-    if (!exists || needsSync) {
-      // Sync from asset
+    if (!exists) {
+      await _copyFromAssets(path);
+      await prefs.setString('db_fingerprint', fingerprint);
+    } else if (needsSync) {
+      print('Database Sync/Update detected (Fingerprint changed). Preserving settings...');
+      
+      Map<String, List<Map<String, dynamic>>> backup = {};
+      final userTables = [
+        'teams', 
+        'wheel_segments', 
+        'bah_settings', 
+        'bah_game_state', 
+        'score_logs',
+        'categories', 
+        'questions',
+        'question_categories'
+      ];
+
       try {
-        await Directory(dirname(path)).create(recursive: true);
-        
-        // Close existing connection ONLY if we already have one (unlikely during init)
-        if (_database != null) {
-          await _database!.close();
-          _database = null;
+        final oldDb = await openDatabase(path);
+        for (var table in userTables) {
+          try {
+            backup[table] = await oldDb.query(table);
+          } catch (_) {} 
         }
+        await oldDb.close();
 
-        ByteData data = await rootBundle.load('assets/database/$filePath');
-        List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-        await File(path).writeAsBytes(bytes, flush: true);
+        await _copyFromAssets(path);
+
+        final newDb = await openDatabase(path);
+        await newDb.transaction((txn) async {
+          // Check if the new asset database already has data for questions/categories
+          // If the developer pre-populated the asset, we trust it and don't restore old backups
+          // to avoid "pollution" or merging (increased counts).
+          final List<Map<String, dynamic>> assetQ = await txn.query('questions', limit: 1);
+          final List<Map<String, dynamic>> assetC = await txn.query('categories', limit: 1);
+          
+          bool shouldRestoreQuestions = assetQ.isEmpty;
+          bool shouldRestoreCategories = assetC.isEmpty;
+
+          for (var table in userTables) {
+            final data = backup[table];
+            if (data != null && data.isNotEmpty) {
+              // Conditional restoration
+              if ((table == 'questions' || table == 'question_categories') && !shouldRestoreQuestions) continue;
+              if (table == 'categories' && !shouldRestoreCategories) continue;
+
+              // If we are restoring questions/categories, we clear the table first
+              // but given the logic above, we only reach here if they were empty anyway,
+              // or for other non-question tables (like teams, settings).
+              if (table != 'questions' && table != 'categories' && table != 'question_categories') {
+                 // For settings, segments, etc., we clear and replace with user's backup
+                 await txn.delete(table);
+              }
+
+              for (var row in data) {
+                await txn.insert(
+                  table, 
+                  row, 
+                  conflictAlgorithm: (table == 'questions' || table == 'categories' || table == 'question_categories')
+                    ? ConflictAlgorithm.ignore 
+                    : ConflictAlgorithm.replace
+                );
+              }
+            }
+          }
+        });
+        await newDb.close();
         
-        // Mark as synced with the new revision
-        await prefs.setInt('db_revision', _dbRevision);
-        print('Database synced from assets (Revision: $_dbRevision)');
+        await prefs.setString('db_fingerprint', fingerprint);
+        print('Database update completed. User settings and wheel segments preserved.');
       } catch (e) {
-        print('Error copying database from assets: $e');
+        print('Error during incremental database sync: $e');
       }
     }
 
     return await openDatabase(
       path,
-      version: 25,
+      version: 28,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
+  }
+
+  String _calculateFingerprint(ByteData data) {
+    // Generate a unique fingerprint based on file size and content sampling
+    int len = data.lengthInBytes;
+    if (len == 0) return 'empty';
+    
+    // Sum up some bytes from start, middle and end as a lightweight hash
+    int checksum = 0;
+    int samplePoints = 50; 
+    
+    // Sample first part
+    for (int i = 0; i < samplePoints && i < len; i++) {
+      checksum += data.getUint8(i);
+    }
+    // Sample middle part
+    int mid = len ~/ 2;
+    for (int i = 0; i < samplePoints && (mid + i) < len; i++) {
+      checksum += data.getUint8(mid + i);
+    }
+    // Sample end part
+    for (int i = 0; i < samplePoints && (len - 1 - i) >= 0; i++) {
+      checksum += data.getUint8(len - 1 - i);
+    }
+    
+    return '$len-$checksum';
+  }
+
+  Future<void> _copyFromAssets(String path) async {
+    await Directory(dirname(path)).create(recursive: true);
+    ByteData data = await rootBundle.load('assets/database/games.db');
+    List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    await File(path).writeAsBytes(bytes, flush: true);
   }
 
   Future<void> forceSyncFromAssets() async {
     final dbPath = await getApplicationDocumentsDirectory();
     final path = join(dbPath.path, 'games.db');
     
-    // Close existing connection if any
     if (_database != null) {
       await _database!.close();
       _database = null;
     }
 
     try {
-      await Directory(dirname(path)).create(recursive: true);
-      ByteData data = await rootBundle.load('assets/database/games.db');
-      List<int> bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-      await File(path).writeAsBytes(bytes, flush: true);
+      await _copyFromAssets(path);
       print('Database successfully synced from assets');
     } catch (e) {
       print('Error syncing database from assets: $e');
@@ -299,6 +383,22 @@ class DatabaseService {
       }
     }
 
+    if (oldVersion < 26) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS bah_game_state (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            state_json TEXT
+          )
+        ''');
+      } catch (_) {}
+    }
+    
+    if (oldVersion < 28) {
+      // Force re-seed default Bank Al Haz data to apply "Al-Majmaa Al-Yahudi" and building restrictions
+      await BankAlHazDefaultData.seed(db, force: true);
+    }
+    
     if (oldVersion < 19) {
       await BankAlHazDefaultData.seed(db);
     }
@@ -378,6 +478,14 @@ class DatabaseService {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT
     )''');
+
+    // 6. Game State Persistence
+    await db.execute('''
+      CREATE TABLE bah_game_state (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        state_json TEXT
+      )
+    ''');
 
     // Insert default settings if not exists
     await db.insert('bah_settings', {
@@ -512,15 +620,30 @@ class DatabaseService {
     // Initial Seeding
     await BankAlHazDefaultData.seed(db);
 
-    await db.insert('categories', {'name': 'الكتاب المقدس'});
-    await db.insert('categories', {'name': 'معلومات عامة'});
-    await db.insert('categories', {'name': 'شخصيات'});
+    // Categories are now strictly derived from user imports or Bank Al Haz setup
   }
 
   Future<void> close() async {
     final db = _database;
     if (db != null) {
       await db.close();
+      _database = null;
     }
+  }
+
+  Future<String> getDatabasePath() async {
+    final dbPath = await getApplicationDocumentsDirectory();
+    return join(dbPath.path, 'games.db');
+  }
+
+  Future<File> getDatabaseFile() async {
+    return File(await getDatabasePath());
+  }
+
+  Future<void> restoreFromPath(String sourcePath) async {
+    await close();
+    final targetPath = await getDatabasePath();
+    final sourceFile = File(sourcePath);
+    await sourceFile.copy(targetPath);
   }
 }
