@@ -50,12 +50,45 @@ class AppThemes {
       const Color(0xFF0A4D27),
       Colors.white.withOpacity(0.5),
     ],
+    backgroundImage: 'assets/images/christmas_bg.png',
     icon: Icons.ac_unit,
+  );
+
+  static final ThemeConfig holyWeekTheme = ThemeConfig(
+    id: 'holy_week',
+    name: 'ثيم أسبوع الآلام',
+    primaryColor: const Color(0xFF424242), // Charcoal Gray
+    backgroundDeep: const Color(0xFF000000), // Pure Black
+    backgroundSoft: const Color(0xFF121212), // Deep Charcoal
+    orbColors: [
+      Colors.black,
+      const Color(0xFF212121), // Medium Charcoal
+      const Color(0xFF424242), // Light Charcoal
+      Colors.black.withOpacity(0.9),
+    ],
+    icon: Icons.church,
+  );
+
+  static final ThemeConfig resurrectionTheme = ThemeConfig(
+    id: 'resurrection',
+    name: 'ثيم القيامة',
+    primaryColor: const Color(0xFFFFD700), // Gold
+    backgroundDeep: const Color(0xFF4A3515), // Deep brown/gold
+    backgroundSoft: const Color(0xFF8B6B13), // Golden brown
+    orbColors: [
+      const Color(0xFFFFD700),
+      const Color(0xFFFFFACD),
+      const Color(0xFFDAA520),
+      Colors.white.withOpacity(0.5),
+    ],
+    icon: Icons.brightness_high,
   );
 
   static List<ThemeConfig> allThemes = [
     defaultTheme,
     christmasTheme,
+    holyWeekTheme,
+    resurrectionTheme,
     // The UI will add 'custom' as a virtual theme
   ];
 

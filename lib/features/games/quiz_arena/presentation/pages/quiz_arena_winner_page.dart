@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import 'package:games/features/games/quiz_arena/presentation/providers/quiz_arena_provider.dart';
 import 'package:games/features/games/quiz_arena/presentation/pages/quiz_arena_game_page.dart';
 import 'package:games/features/teams/domain/entities/team.dart';
@@ -15,7 +16,7 @@ class QuizArenaWinnerPage extends ConsumerWidget {
     final winners = state.winners;
 
     return Scaffold(
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: SingleChildScrollView(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: AppDesign.isSmallScreen(context) ? 16 : 32, vertical: 40),

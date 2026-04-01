@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import '../../../../core/database/database_service.dart';
 import '../../../../core/design/app_design.dart';
+import '../../../../core/design/themed_background.dart';
 
-class BackupRestorePage extends StatelessWidget {
+class BackupRestorePage extends ConsumerWidget {
   const BackupRestorePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return AppDesign.backgroundWrapper(
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ThemedBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(

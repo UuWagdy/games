@@ -7,6 +7,7 @@ import '../providers/bank_al_haz_providers.dart';
 import '../providers/game_engine_provider.dart';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import '../../../../questions/presentation/providers/question_providers.dart';
 
 class TemplateEditorPage extends ConsumerStatefulWidget {
@@ -72,7 +73,7 @@ class _TemplateEditorPageState extends ConsumerState<TemplateEditorPage>
           ],
         ),
       ),
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: SafeArea(
           child: TabBarView(
             controller: _tabController,

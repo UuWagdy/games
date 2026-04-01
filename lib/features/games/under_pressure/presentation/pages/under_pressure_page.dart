@@ -12,7 +12,11 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+import 'package:games/core/providers/sound_effects_provider.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
+import 'package:games/core/design/app_themes.dart';
 
 class UnderPressurePage extends ConsumerStatefulWidget {
   const UnderPressurePage({super.key});
@@ -27,6 +31,12 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
   Team? _teamB;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  double? _localFontSize;
+
+  double _getEffectiveFontSize(Map<String, dynamic> settings) {
+    if (_localFontSize != null) return _localFontSize!;
+    return (settings['question_font_size'] ?? 24).toDouble();
+  }
 
   @override
   void dispose() {
@@ -38,16 +48,21 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
   Widget build(BuildContext context) {
     final state = ref.watch(underPressureProvider);
     final settingsAsync = ref.watch(underPressureSettingsProvider);
+    // Watch general settings for global font size
+    ref.watch(generalSettingsProvider);
     final settings = settingsAsync.value ?? {};
     final String correctKey = (settings['correct_key'] ?? '1').toString().toUpperCase();
     final String wrongKey = (settings['wrong_key'] ?? '2').toString().toUpperCase();
     final String skipKey = (settings['skip_key'] ?? '3').toString().toUpperCase();
 
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('تحت الضغط', style: AppDesign.titleStyle),
+        title: Text('تحت الضغط', style: AppDesign.titleStyle.copyWith(color: theme.primaryColor)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -57,7 +72,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
         ),
         actions: [
             IconButton(
-              icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent),
+              icon: Icon(Icons.restart_alt, color: theme.primaryColor.withOpacity(0.8)),
               tooltip: 'تصفير النقاط',
               onPressed: () => _confirmResetScores(),
             ),
@@ -71,7 +86,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                     builder: (context) => Scaffold(
                       extendBodyBehindAppBar: true,
                       appBar: AppBar(
-                        title: const Text('إعدادات تحت الضغط', style: AppDesign.titleStyle),
+                        title: Text('إعدادات تحت الضغط', style: AppDesign.titleStyle.copyWith(color: theme.primaryColor)),
                         centerTitle: true,
                         backgroundColor: Colors.transparent,
                         elevation: 0,
@@ -80,7 +95,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                           onPressed: () => Navigator.pop(context),
                         ),
                       ),
-                      body: AppDesign.backgroundWrapper(
+                      body: ThemedBackground(
                         child: const SafeArea(child: UnderPressureSettingsPage()),
                       ),
                     ),
@@ -91,16 +106,18 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
           const SizedBox(width: 8),
         ],
       ),
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: Focus(
           autofocus: true,
           onKeyEvent: (node, event) {
             if (event is KeyDownEvent && state.status == UnderPressureStatus.playing) {
               final String label = event.logicalKey.keyLabel.toUpperCase();
               if (label == correctKey) {
+                SoundEffectsManager.playCorrect();
                 ref.read(underPressureProvider.notifier).nextQuestion(true);
                 return KeyEventResult.handled;
               } else if (label == wrongKey) {
+                SoundEffectsManager.playIncorrect();
                 ref.read(underPressureProvider.notifier).nextQuestion(false);
                 return KeyEventResult.handled;
               } else if (label == skipKey) {
@@ -115,14 +132,14 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
               children: [
                 Expanded(
                   child: state.status == UnderPressureStatus.idle
-                      ? _buildIdleScreen(context, state)
+                      ? _buildIdleScreen(context, state, theme)
                       : state.status == UnderPressureStatus.finished
-                          ? _buildFinishedScreen(state, settings)
+                          ? _buildFinishedScreen(state, settings, theme)
                           : state.status == UnderPressureStatus.paused
-                              ? _buildTransitionScreen(state)
-                              : _buildGamingScreen(state),
+                              ? _buildTransitionScreen(state, theme)
+                              : _buildGamingScreen(state, theme),
                 ),
-                if (state.status != UnderPressureStatus.finished) _buildGlobalTeamsScore(state),
+                if (state.status != UnderPressureStatus.finished) _buildGlobalTeamsScore(state, theme),
               ],
             ),
           ),
@@ -131,7 +148,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildGlobalTeamsScore(UnderPressureState state) {
+  Widget _buildGlobalTeamsScore(UnderPressureState state, ThemeConfig theme) {
     final currentActingTeam = state.isTeam2Turn ? state.team2 : state.team1;
     final isSmall = AppDesign.isSmallScreen(context);
     
@@ -159,11 +176,11 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                     padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12),
                     decoration: BoxDecoration(
                       gradient: isPlaying 
-                          ? LinearGradient(colors: [Colors.purpleAccent.withOpacity(0.3), Colors.purpleAccent.withOpacity(0.1)], begin: Alignment.topLeft, end: Alignment.bottomRight)
+                          ? LinearGradient(colors: [theme.primaryColor.withOpacity(0.3), theme.primaryColor.withOpacity(0.1)], begin: Alignment.topLeft, end: Alignment.bottomRight)
                           : LinearGradient(colors: [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)], begin: Alignment.topLeft, end: Alignment.bottomRight),
                       borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: isPlaying ? Colors.purpleAccent.withOpacity(0.6) : Colors.white10, width: isPlaying ? 2 : 1),
-                      boxShadow: isPlaying ? [BoxShadow(color: Colors.purpleAccent.withOpacity(0.2), blurRadius: 10)] : [],
+                      border: Border.all(color: isPlaying ? theme.primaryColor.withOpacity(0.6) : Colors.white10, width: isPlaying ? 2 : 1),
+                      boxShadow: isPlaying ? [BoxShadow(color: theme.primaryColor.withOpacity(0.2), blurRadius: 10)] : [],
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -173,7 +190,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: isPlaying ? Colors.purpleAccent : Colors.white60, 
+                            color: isPlaying ? theme.primaryColor : Colors.white60, 
                             fontWeight: FontWeight.w900, 
                             fontSize: isSmall ? 10 : 14,
                             letterSpacing: 0.5,
@@ -205,7 +222,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildIdleScreen(BuildContext context, UnderPressureState state) {
+  Widget _buildIdleScreen(BuildContext context, UnderPressureState state, ThemeConfig theme) {
     final categoriesAsync = ref.watch(categoriesProvider);
     final List<Team> teams = state.teams;
     
@@ -222,126 +239,131 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     return Center(
       child: SingleChildScrollView(
         padding: EdgeInsets.all(AppDesign.isSmallScreen(context) ? 16 : 24),
-      child: Column(
-        children: [
-          if (!AppDesign.isSmallScreen(context)) ...[
-            const SizedBox(height: 10),
-            const Icon(Icons.timer_outlined, size: 80, color: Colors.purpleAccent),
-            const SizedBox(height: 15),
-            const Text(
-              'استعد للضغط!',
-              style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
-            ),
-            const Text(
-              'اختر فريقين لبدء المواجهة التنافسية',
-              style: TextStyle(fontSize: 16, color: Colors.white70),
-            ),
-            const SizedBox(height: 30),
-          ] else ...[
-            const SizedBox(height: 4),
-          ],
-          
-          Container(
-            width: double.infinity,
-            constraints: BoxConstraints(maxWidth: AppDesign.isSmallScreen(context) ? 500 : 1100),
-            padding: EdgeInsets.all(AppDesign.isSmallScreen(context) ? 12 : 40),
-            decoration: AppDesign.glassDecoration,
-            child: Column(
-              children: [
-                Text('تجهيز الفرق المتبارية:', style: AppDesign.titleStyle.copyWith(fontSize: AppDesign.isSmallScreen(context) ? 20 : 26)),
-                SizedBox(height: AppDesign.isSmallScreen(context) ? 16 : 32),
-                if (AppDesign.isSmallScreen(context))
-                  Column(
-                    children: [
-                      _buildTeamPicker('الفريق الأول', _teamA, teams, (t) => setState(() => _teamA = t), Colors.blueAccent),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 4),
-                        child: Text('VS', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 20)),
-                      ),
-                      _buildTeamPicker('الفريق الثاني', _teamB, teams, (t) => setState(() => _teamB = t), Colors.tealAccent),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(child: _buildTeamPicker('الفريق الأول', _teamA, teams, (t) => setState(() => _teamA = t), Colors.blueAccent)),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20),
-                        child: Text('VS', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 32)),
-                      ),
-                      Expanded(child: _buildTeamPicker('الفريق الثاني', _teamB, teams, (t) => setState(() => _teamB = t), Colors.tealAccent)),
-                    ],
-                  ),
-                SizedBox(height: AppDesign.isSmallScreen(context) ? 24 : 48),
-                ElevatedButton(
-                  onPressed: (_teamA != null && _teamB != null && _teamA != _teamB)
-                    ? () => ref.read(underPressureProvider.notifier).startGame(_teamA!, _teamB!, _selectedCategoryIds.isEmpty ? null : _selectedCategoryIds.toList())
-                    : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purpleAccent,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AppDesign.isSmallScreen(context) ? 32 : 64,
-                      vertical: AppDesign.isSmallScreen(context) ? 12 : 24,
-                    ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    elevation: 10,
-                  ),
-                  child: Text('ابدأ المواجهة', style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 18 : 28, fontWeight: FontWeight.w900)),
+        child: Column(
+          children: [
+            if (!AppDesign.isSmallScreen(context)) ...[
+              const SizedBox(height: 10),
+              Icon(Icons.timer_outlined, size: 80, color: theme.primaryColor),
+              const SizedBox(height: 15),
+              const Text(
+                'استعد للضغط!',
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white),
+              ),
+              const Text(
+                'اختر فريقين لبدء المواجهة التنافسية',
+                style: TextStyle(fontSize: 16, color: Colors.white70),
+              ),
+              const SizedBox(height: 30),
+            ] else ...[
+              const SizedBox(height: 4),
+            ],
+            
+            ThemedGameFrame(
+              child: Container(
+                width: double.infinity,
+                constraints: BoxConstraints(maxWidth: AppDesign.isSmallScreen(context) ? 500 : 1100),
+                padding: EdgeInsets.all(AppDesign.isSmallScreen(context) ? 12 : 40),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.03),
+                  borderRadius: BorderRadius.circular(24),
                 ),
-                if (_teamA == _teamB && _teamA != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: Text('لا يمكن اختيار نفس الفريق للمواجهة!', style: TextStyle(color: Colors.redAccent.withOpacity(0.8), fontWeight: FontWeight.bold)),
-                  ),
-                const SizedBox(height: 16),
-                if (state.templateName != null && state.templateQuestions != null && state.templateQuestions!.isNotEmpty) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.description, color: Colors.purpleAccent),
-                        const SizedBox(width: 8),
-                        Flexible(child: Text('القالب الحالي: ${state.templateName}', style: const TextStyle(color: Colors.white, fontSize: 14), overflow: TextOverflow.ellipsis)),
-                        const SizedBox(width: 16),
-                        TextButton.icon(
-                          icon: const Icon(Icons.download, size: 16, color: Colors.purpleAccent),
-                          label: const Text('تنزيل', style: TextStyle(color: Colors.purpleAccent)),
-                          onPressed: () => _downloadCurrentTemplatePdf(context, ref, state),
+                child: Column(
+                  children: [
+                    Text('تجهيز الفرق المتبارية:', style: AppDesign.titleStyle.copyWith(fontSize: AppDesign.isSmallScreen(context) ? 20 : 26)),
+                    SizedBox(height: AppDesign.isSmallScreen(context) ? 16 : 32),
+                    if (AppDesign.isSmallScreen(context))
+                      Column(
+                        children: [
+                          _buildTeamPicker('الفريق الأول', _teamA, teams, (t) => setState(() => _teamA = t), Colors.blueAccent),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 4),
+                            child: Text('VS', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 20)),
+                          ),
+                          _buildTeamPicker('الفريق الثاني', _teamB, teams, (t) => setState(() => _teamB = t), Colors.tealAccent),
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(child: _buildTeamPicker('الفريق الأول', _teamA, teams, (t) => setState(() => _teamA = t), Colors.blueAccent)),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 20),
+                            child: Text('VS', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 32)),
+                          ),
+                          Expanded(child: _buildTeamPicker('الفريق الثاني', _teamB, teams, (t) => setState(() => _teamB = t), Colors.tealAccent)),
+                        ],
+                      ),
+                    SizedBox(height: AppDesign.isSmallScreen(context) ? 24 : 48),
+                    ElevatedButton(
+                      onPressed: (_teamA != null && _teamB != null && _teamA != _teamB)
+                        ? () => ref.read(underPressureProvider.notifier).startGame(_teamA!, _teamB!, _selectedCategoryIds.isEmpty ? null : _selectedCategoryIds.toList())
+                        : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: AppDesign.isSmallScreen(context) ? 32 : 64,
+                          vertical: AppDesign.isSmallScreen(context) ? 12 : 24,
                         ),
-                        TextButton.icon(
-                          icon: const Icon(Icons.refresh, size: 16, color: Colors.white70),
-                          label: const Text('قالب جديد', style: TextStyle(color: Colors.white70)),
-                          onPressed: () => _generateNewTemplatePdf(context, ref, state),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        elevation: 10,
+                      ),
+                      child: Text('ابدأ المواجهة', style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 18 : 28, fontWeight: FontWeight.w900)),
+                    ),
+                    if (_teamA == _teamB && _teamA != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Text('لا يمكن اختيار نفس الفريق للمواجهة!', style: TextStyle(color: Colors.redAccent.withOpacity(0.8), fontWeight: FontWeight.bold)),
+                      ),
+                    const SizedBox(height: 16),
+                    if (state.templateName != null && state.templateQuestions != null && state.templateQuestions!.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.description, color: theme.primaryColor),
+                            const SizedBox(width: 8),
+                            Flexible(child: Text('القالب الحالي: ${state.templateName}', style: const TextStyle(color: Colors.white, fontSize: 14), overflow: TextOverflow.ellipsis)),
+                            const SizedBox(width: 16),
+                            TextButton.icon(
+                              icon: Icon(Icons.download, size: 16, color: theme.primaryColor),
+                              label: Text('تنزيل', style: TextStyle(color: theme.primaryColor)),
+                              onPressed: () => _downloadCurrentTemplatePdf(context, ref, state),
+                            ),
+                            TextButton.icon(
+                              icon: const Icon(Icons.refresh, size: 16, color: Colors.white70),
+                              label: const Text('قالب جديد', style: TextStyle(color: Colors.white70)),
+                              onPressed: () => _generateNewTemplatePdf(context, ref, state),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  OutlinedButton.icon(
-                    onPressed: () => _generateNewTemplatePdf(context, ref, state),
-                    icon: const Icon(Icons.picture_as_pdf, color: Colors.purpleAccent),
-                    label: const Text('تصدير القالب وتوليد الأسئلة PDF', style: TextStyle(color: Colors.white)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      side: const BorderSide(color: Colors.purpleAccent),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                    ),
-                  ),
-                ],
-              ],
+                      ),
+                    ] else ...[
+                      OutlinedButton.icon(
+                        onPressed: () => _generateNewTemplatePdf(context, ref, state),
+                        icon: Icon(Icons.picture_as_pdf, color: theme.primaryColor),
+                        label: const Text('تصدير القالب وتوليد الأسئلة PDF', style: TextStyle(color: Colors.white)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          side: BorderSide(color: theme.primaryColor),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-          ),
-          
-          SizedBox(height: AppDesign.isSmallScreen(context) ? 20 : 40),
-          _buildCategorySelection(categoriesAsync),
-        ],
+            
+            SizedBox(height: AppDesign.isSmallScreen(context) ? 20 : 40),
+            _buildCategorySelection(categoriesAsync, theme),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Future<void> _downloadCurrentTemplatePdf(BuildContext context, WidgetRef ref, UnderPressureState state) async {
     if (state.templateQuestions == null || state.templateQuestions!.isEmpty) {
@@ -415,6 +437,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
 
   Future<void> _generateNewTemplatePdf(BuildContext context, WidgetRef ref, UnderPressureState state) async {
     final nameController = TextEditingController(text: 'قالب ${DateTime.now().toString().substring(0, 16).replaceAll(':', '-')}');
+    final theme = ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme;
     final name = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
       title: const Text('اسم القالب', style: TextStyle(color: Colors.white)),
       backgroundColor: const Color(0xFF1E293B),
@@ -425,7 +448,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-        ElevatedButton(onPressed: () => Navigator.pop(ctx, nameController.text), style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent), child: const Text('مصادقة')),
+        ElevatedButton(onPressed: () => Navigator.pop(ctx, nameController.text), style: ElevatedButton.styleFrom(backgroundColor: theme.primaryColor), child: const Text('مصادقة')),
       ],
     ));
 
@@ -537,7 +560,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildTransitionScreen(UnderPressureState state) {
+  Widget _buildTransitionScreen(UnderPressureState state, ThemeConfig theme) {
     final isSmall = AppDesign.isSmallScreen(context);
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -564,8 +587,8 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
               onPressed: () => state.isTeam2Turn ? ref.read(underPressureProvider.notifier).startTeam2() : ref.read(underPressureProvider.notifier).startTeam1(),
               style: ElevatedButton.styleFrom(
                 padding: EdgeInsets.symmetric(horizontal: isSmall ? 32 : 50, vertical: isSmall ? 16 : 22),
-                backgroundColor: Colors.tealAccent,
-                foregroundColor: Colors.black87,
+                backgroundColor: theme.primaryColor,
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
               child: Text(
@@ -580,7 +603,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildCategorySelection(AsyncValue categoriesAsync) {
+  Widget _buildCategorySelection(AsyncValue categoriesAsync, ThemeConfig theme) {
     return Container(
       width: double.infinity,
       constraints: const BoxConstraints(maxWidth: 900),
@@ -604,8 +627,8 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.purpleAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
-                    child: const Icon(Icons.category_rounded, color: Colors.purpleAccent, size: 28),
+                    decoration: BoxDecoration(color: theme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+                    child: Icon(Icons.category_rounded, color: theme.primaryColor, size: 28),
                   ),
                   const SizedBox(width: 16),
                   const Column(
@@ -617,7 +640,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                   ),
                 ],
               ),
-              _buildCategoryTopControls(categoriesAsync),
+              _buildCategoryTopControls(categoriesAsync, theme),
             ],
           ),
           const SizedBox(height: 16),
@@ -628,7 +651,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
             decoration: InputDecoration(
               hintText: 'البحث عن فئة...',
               hintStyle: const TextStyle(color: Colors.white24),
-              prefixIcon: const Icon(Icons.search, color: Colors.purpleAccent),
+              prefixIcon: Icon(Icons.search, color: theme.primaryColor),
               filled: true,
               fillColor: Colors.white.withOpacity(0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
@@ -668,16 +691,16 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       decoration: BoxDecoration(
-                        color: isSelected ? Colors.purpleAccent.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                        color: isSelected ? theme.primaryColor.withOpacity(0.15) : Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: isSelected ? Colors.purpleAccent.withOpacity(0.6) : Colors.white10, width: 2),
-                        boxShadow: isSelected ? [BoxShadow(color: Colors.purpleAccent.withOpacity(0.1), blurRadius: 10)] : [],
+                        border: Border.all(color: isSelected ? theme.primaryColor.withOpacity(0.6) : Colors.white10, width: 2),
+                        boxShadow: isSelected ? [BoxShadow(color: theme.primaryColor.withOpacity(0.1), blurRadius: 10)] : [],
                       ),
                       child: Stack(
                         children: [
                           Positioned(
                             right: -10, bottom: -10,
-                            child: Icon(Icons.category_outlined, size: 40, color: isSelected ? Colors.purpleAccent.withOpacity(0.1) : Colors.white.withOpacity(0.02)),
+                            child: Icon(Icons.category_outlined, size: 40, color: isSelected ? theme.primaryColor.withOpacity(0.1) : Colors.white.withOpacity(0.02)),
                           ),
                           Center(
                             child: Padding(
@@ -685,7 +708,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(isSelected ? Icons.check_circle_rounded : Icons.circle_outlined, size: 18, color: isSelected ? Colors.purpleAccent : Colors.white24),
+                                  Icon(isSelected ? Icons.check_circle_rounded : Icons.circle_outlined, size: 18, color: isSelected ? theme.primaryColor : Colors.white24),
                                   const SizedBox(width: 10),
                                   Flexible(child: Text(cat.name, style: TextStyle(fontSize: 14, color: isSelected ? Colors.white : Colors.white70, fontWeight: isSelected ? FontWeight.w900 : FontWeight.bold), textAlign: TextAlign.center, maxLines: 2)),
                                 ],
@@ -699,7 +722,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                 },
               );
             },
-            loading: () => const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Colors.purpleAccent))),
+            loading: () => Center(child: Padding(padding: const EdgeInsets.all(40), child: CircularProgressIndicator(color: theme.primaryColor))),
             error: (e, s) => const SizedBox(),
           ),
         ],
@@ -707,7 +730,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildCategoryTopControls(AsyncValue categoriesAsync) {
+  Widget _buildCategoryTopControls(AsyncValue categoriesAsync, ThemeConfig theme) {
     return Row(
       children: [
         _buildActionIconButton(
@@ -743,7 +766,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildGamingScreen(UnderPressureState state) {
+  Widget _buildGamingScreen(UnderPressureState state, ThemeConfig theme) {
     final question = state.currentQuestion;
     final isSmall = AppDesign.isSmallScreen(context);
 
@@ -754,16 +777,16 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildProgressTrack(state),
+          _buildProgressTrack(state, theme),
           SizedBox(height: isSmall ? 6 : 24),
-          _buildTimer(state),
+          _buildTimer(state, theme),
           SizedBox(height: isSmall ? 6 : 24),
           if (question != null)
             _buildQuestionCard(question)
           else
             const Text('انتهت الأسئلة!', style: TextStyle(fontSize: 24, color: Colors.white, fontWeight: FontWeight.bold)),
           SizedBox(height: isSmall ? 6 : 24),
-          _buildControls(),
+          _buildControls(theme),
           SizedBox(height: isSmall ? 10 : 24),
           _buildScoreBoard(state),
         ],
@@ -771,15 +794,15 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildTimer(UnderPressureState state) {
+  Widget _buildTimer(UnderPressureState state, ThemeConfig theme) {
     final bool warning = state.timeLeft < 10;
-    final color = warning ? Colors.redAccent : Colors.purpleAccent;
+    final color = warning ? Colors.redAccent : theme.primaryColor;
     final currentlyAnswering = state.isTeam2Turn ? state.team2 : state.team1;
     final isSmall = AppDesign.isSmallScreen(context);
 
     return Container(
-      width: isSmall ? 70 : 100,
-      height: isSmall ? 70 : 100,
+      width: isSmall ? 80 : 120,
+      height: isSmall ? 80 : 120,
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.05),
         shape: BoxShape.circle,
@@ -798,7 +821,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                 fontSize: isSmall ? 24 : 36,
                 fontWeight: FontWeight.w900,
                 color: warning ? Colors.redAccent : Colors.white,
-                shadows: [Shadow(color: (warning ? Colors.redAccent : Colors.blueAccent).withOpacity(0.5), blurRadius: 10)],
+                shadows: [Shadow(color: (warning ? Colors.redAccent : theme.primaryColor).withOpacity(0.5), blurRadius: 10)],
               ),
             ),
             Text(
@@ -813,37 +836,72 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
 
   Widget _buildQuestionCard(dynamic question) {
     final isSmall = AppDesign.isSmallScreen(context);
-    return Container(
-      width: double.infinity,
-      constraints: BoxConstraints(maxWidth: AppDesign.isSmallScreen(context) ? 800 : 1000),
-      padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 24, vertical: isSmall ? 6 : 12),
-      decoration: AppDesign.glassDecoration,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (question.imageData != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.memory(
-                question.imageData!,
-                height: isSmall ? 80 : 180,
-                width: double.infinity,
-                fit: BoxFit.contain,
-              ),
+    final settings = ref.read(generalSettingsProvider).value ?? {};
+    final fontSize = _getEffectiveFontSize(settings);
+
+    return ThemedGameFrame(
+      child: Container(
+        width: double.infinity,
+        constraints: BoxConstraints(maxWidth: AppDesign.isSmallScreen(context) ? 800 : 1000),
+        padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : 24, vertical: isSmall ? 6 : 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _localFontSize = (fontSize - 2).clamp(12, 100);
+                    });
+                  },
+                  icon: const Icon(Icons.zoom_out, color: Colors.white70),
+                  iconSize: isSmall ? 18 : 22,
+                ),
+                Text(
+                  fontSize.toInt().toString(),
+                  style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _localFontSize = fontSize + 2;
+                    });
+                  },
+                  icon: const Icon(Icons.zoom_in, color: Colors.white70),
+                  iconSize: isSmall ? 18 : 22,
+                ),
+              ],
             ),
-            SizedBox(height: isSmall ? 4 : 16),
+            if (question.imageData != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.memory(
+                  question.imageData!,
+                  height: isSmall ? 80 : 180,
+                  width: double.infinity,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              SizedBox(height: isSmall ? 4 : 16),
+            ],
+            Text(
+              question.text,
+              style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w900, color: Colors.white, height: 1.1),
+              textAlign: TextAlign.center,
+            ),
           ],
-          Text(
-            question.text,
-            style: TextStyle(fontSize: isSmall ? 16 : 24, fontWeight: FontWeight.w900, color: Colors.white, height: 1.1),
-            textAlign: TextAlign.center,
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildControls() {
+  Widget _buildControls(ThemeConfig theme) {
     return Wrap(
       alignment: WrapAlignment.center,
       spacing: AppDesign.isSmallScreen(context) ? 10 : 20,
@@ -853,18 +911,27 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
           label: 'صح',
           icon: Icons.check_circle_rounded,
           color: Colors.greenAccent,
-          onPressed: () => ref.read(underPressureProvider.notifier).nextQuestion(true),
+          theme: theme,
+          onPressed: () {
+            SoundEffectsManager.playCorrect();
+            ref.read(underPressureProvider.notifier).nextQuestion(true);
+          },
         ),
         _ControlButton(
           label: 'خـطأ',
           icon: Icons.cancel_rounded,
           color: Colors.redAccent,
-          onPressed: () => ref.read(underPressureProvider.notifier).nextQuestion(false),
+          theme: theme,
+          onPressed: () {
+            SoundEffectsManager.playIncorrect();
+            ref.read(underPressureProvider.notifier).nextQuestion(false);
+          },
         ),
         _ControlButton(
           label: 'تخطي',
           icon: Icons.skip_next_rounded,
           color: Colors.orangeAccent,
+          theme: theme,
           isProminent: true,
           onPressed: () => ref.read(underPressureProvider.notifier).skipQuestion(),
         ),
@@ -895,7 +962,7 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildFinishedScreen(UnderPressureState state, Map<String, dynamic> allSettings) {
+  Widget _buildFinishedScreen(UnderPressureState state, Map<String, dynamic> allSettings, ThemeConfig theme) {
     final winner = state.winnerTeamId == state.team1?.id ? state.team1 : (state.winnerTeamId == state.team2?.id ? state.team2 : null);
 
     return Center(
@@ -934,7 +1001,8 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                            state.team1Results.where((r) => r == QuestionResult.correct).length,
                            allSettings['points_per_question'] ?? 1,
                            (state.winnerTeamId == state.team1?.id || state.isTie) ? (allSettings['bonus_points'] ?? 10) : 0,
-                           state.team1Results.length
+                           state.team1Results.length,
+                           theme
                          )
                        ),
                        Container(width: 1, height: AppDesign.isSmallScreen(context) ? 80 : 100, color: Colors.white10),
@@ -947,17 +1015,18 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
                            state.team2Results.where((r) => r == QuestionResult.correct).length,
                            allSettings['points_per_question'] ?? 1,
                            (state.winnerTeamId == state.team2?.id || state.isTie) ? (allSettings['bonus_points'] ?? 10) : 0,
-                           state.team2Results.length
+                           state.team2Results.length,
+                           theme
                          )
                        ),
                      ],
                    ),
                   SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 20),
-                  _buildProgressTrack(state),
+                  _buildProgressTrack(state, theme),
                   SizedBox(height: AppDesign.isSmallScreen(context) ? 8 : 16),
                   
                   if (state.isTie)
-                    Text('تعادل حاسم! حصل الفريقان على البونص', textAlign: TextAlign.center, style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 12 : 18, color: Colors.amberAccent, fontWeight: FontWeight.bold))
+                    Text('تعادل حاسم! حصل الفريقان على البونص', textAlign: TextAlign.center, style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 12 : 18, color: theme.primaryColor, fontWeight: FontWeight.bold))
                   else if (winner != null)
                     Text('الفائز فريق ${winner.name} وحصل على البونص!', textAlign: TextAlign.center, style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 12 : 18, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                   
@@ -1001,17 +1070,17 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildResultColumn(String name, int pointsAdded, int totalScore, bool isWinner, int correctCount, int pointsPerQuestion, int bonusGotten, int totalQuestions) {
+  Widget _buildResultColumn(String name, int pointsAdded, int totalScore, bool isWinner, int correctCount, int pointsPerQuestion, int bonusGotten, int totalQuestions, ThemeConfig theme) {
     bool isSmall = AppDesign.isSmallScreen(context);
     return Column(
       children: [
-        Text(name, style: TextStyle(fontSize: isSmall ? 16 : 20, fontWeight: FontWeight.bold, color: isWinner ? Colors.amberAccent : Colors.white70)),
+        Text(name, style: TextStyle(fontSize: isSmall ? 16 : 20, fontWeight: FontWeight.bold, color: isWinner ? theme.primaryColor : Colors.white70)),
         SizedBox(height: isSmall ? 4 : 8),
         Text('+$pointsAdded', style: TextStyle(fontSize: isSmall ? 24 : 36, fontWeight: FontWeight.w900, color: isWinner ? Colors.greenAccent : Colors.white54)),
         if (isSmall) ...[
           Text('$correctCount صح من $totalQuestions', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
           Text('$correctCount × $pointsPerQuestion نقاط = ${correctCount * pointsPerQuestion}', style: const TextStyle(fontSize: 10, color: Colors.white38)),
-          if (bonusGotten > 0) Text('بونص +$bonusGotten', style: const TextStyle(fontSize: 10, color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+          if (bonusGotten > 0) Text('بونص +$bonusGotten', style: TextStyle(fontSize: 10, color: theme.primaryColor, fontWeight: FontWeight.bold)),
         ] else
           const Text('نقطة مكتسبة', style: TextStyle(fontSize: 12, color: Colors.white38)),
         SizedBox(height: isSmall ? 6 : 10),
@@ -1027,22 +1096,22 @@ class _UnderPressurePageState extends ConsumerState<UnderPressurePage> {
     );
   }
 
-  Widget _buildProgressTrack(UnderPressureState state) {
+  Widget _buildProgressTrack(UnderPressureState state, ThemeConfig theme) {
     final isSmall = AppDesign.isSmallScreen(context);
     return Padding(
       padding: EdgeInsets.symmetric(vertical: isSmall ? 4 : 10, horizontal: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          Expanded(child: _buildTeamProgress(state.team1?.name ?? 'فريق 1', state.team1Results, !state.isTeam2Turn && state.status == UnderPressureStatus.playing)),
+          Expanded(child: _buildTeamProgress(state.team1?.name ?? 'فريق 1', state.team1Results, !state.isTeam2Turn && state.status == UnderPressureStatus.playing, theme)),
           SizedBox(width: isSmall ? 12 : 40),
-          Expanded(child: _buildTeamProgress(state.team2?.name ?? 'فريق 2', state.team2Results, state.isTeam2Turn && state.status == UnderPressureStatus.playing)),
+          Expanded(child: _buildTeamProgress(state.team2?.name ?? 'فريق 2', state.team2Results, state.isTeam2Turn && state.status == UnderPressureStatus.playing, theme)),
         ],
       ),
     );
   }
 
-  Widget _buildTeamProgress(String name, List<QuestionResult> results, bool isActive) {
+  Widget _buildTeamProgress(String name, List<QuestionResult> results, bool isActive, ThemeConfig theme) {
     return Column(
       children: [
         Text(
@@ -1134,6 +1203,7 @@ class _ControlButton extends StatelessWidget {
   final Color color;
   final VoidCallback onPressed;
   final bool isProminent;
+  final ThemeConfig theme;
 
   const _ControlButton({
     required this.label,
@@ -1141,11 +1211,13 @@ class _ControlButton extends StatelessWidget {
     required this.color,
     required this.onPressed,
     this.isProminent = false,
+    required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
     final isSmall = AppDesign.isSmallScreen(context);
+    final finalColor = isProminent ? theme.primaryColor : color;
     return InkWell(
       onTap: onPressed,
       borderRadius: BorderRadius.circular(20),
@@ -1154,19 +1226,19 @@ class _ControlButton extends StatelessWidget {
         width: isSmall ? 80 : 100,
         padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12),
         decoration: BoxDecoration(
-          color: isProminent ? color.withOpacity(0.2) : color.withOpacity(0.1),
+          color: isProminent ? finalColor.withOpacity(0.2) : finalColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isProminent ? color : color.withOpacity(0.3), width: isProminent ? 2 : 1),
+          border: Border.all(color: isProminent ? finalColor : finalColor.withOpacity(0.3), width: isProminent ? 2 : 1),
           boxShadow: isProminent ? [
-            BoxShadow(color: color.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)
+            BoxShadow(color: finalColor.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)
           ] : [],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: isSmall ? 24 : 40, color: isProminent ? color : color.withOpacity(0.8)),
+            Icon(icon, size: isSmall ? 24 : 40, color: isProminent ? finalColor : finalColor.withOpacity(0.8)),
             SizedBox(height: isSmall ? 4 : 8),
-            Text(label, style: TextStyle(fontSize: isSmall ? 14 : 20, fontWeight: FontWeight.w900, color: isProminent ? Colors.white : color)),
+            Text(label, style: TextStyle(fontSize: isSmall ? 14 : 20, fontWeight: FontWeight.w900, color: isProminent ? Colors.white : finalColor)),
           ],
         ),
       ),

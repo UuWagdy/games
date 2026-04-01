@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/team_providers.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 
 class TeamsManagementPage extends ConsumerWidget {
   const TeamsManagementPage({super.key});
@@ -22,7 +23,7 @@ class TeamsManagementPage extends ConsumerWidget {
             leading: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white), onPressed: () => Navigator.pop(context)),
           )
         : null,
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: SafeArea(
           child: teamsAsync.when(
             data: (teams) => teams.isEmpty

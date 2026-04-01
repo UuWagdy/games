@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:games/core/utils/arabic_utils.dart';
-import 'package:games/features/games/bank_al_haz/domain/repositories/bank_al_haz_repository.dart';
-import 'package:games/features/questions/domain/repositories/question_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:ui';
 import 'package:games/features/games/bank_al_haz/domain/entities/bank_al_haz_entities.dart';
@@ -15,7 +12,10 @@ import 'package:games/features/questions/domain/entities/question.dart';
 import 'package:games/features/games/bank_al_haz/presentation/pages/templates_management_page.dart';
 import 'package:games/features/teams/presentation/pages/teams_management_page.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
+import 'package:games/core/design/app_themes.dart';
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+import 'package:games/core/providers/sound_effects_provider.dart';
 import '../../../../settings/presentation/pages/settings_page.dart';
 
 import 'dart:math' as math;
@@ -135,11 +135,8 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       gameEngineProvider.select((s) => s.pendingLandingStation),
       (prev, next) {
         if (next != null && !_isHandlingLanding) {
-          _isHandlingLanding = true;
-          // Cancel any pending timer
+          if (mounted) setState(() => _isHandlingLanding = true);
           _pendingLandingTimer?.cancel();
-          // Timer fires in next event loop turn — GUARANTEED outside
-          // any frame processing, pointer events, or mouse tracker updates
           _pendingLandingTimer = Timer(const Duration(milliseconds: 200), () {
             if (mounted) _startLandingFlow(next);
           });
@@ -147,22 +144,23 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       },
     );
 
-    final theme = ref.watch(currentThemeProvider).value;
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
 
     final bool isActionLocked = gameState.isMovingPlayer || gameState.isRollingDice || gameState.pendingLandingStation != null;
     final bool isLock = isActionLocked || gameState.isEndingTurn;
     final bool hasPending = gameState.pendingLandingStation != null;
     final bool canEndTurn = gameState.isEndingTurn;
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      endDrawer: AppDesign.isSmallScreen(context) ? Drawer(
-        backgroundColor: AppDesign.slate900,
-        child: _buildMobileDrawer(gameState),
-      ) : null,
-      body: AppDesign.backgroundWrapper(
-        theme: theme,
-        child: Focus(
+    return ThemedBackground(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: Colors.transparent,
+        endDrawer: AppDesign.isSmallScreen(context) ? Drawer(
+          backgroundColor: theme.backgroundDeep,
+          child: _buildMobileDrawer(gameState),
+        ) : null,
+        body: Focus(
           autofocus: true,
           onKey: (node, event) {
             if (event is RawKeyDownEvent && 
@@ -183,7 +181,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
               children: [
                 Column(
                   children: [
-                    _buildFloatingHeader(gameState, engine, context),
+                    _buildFloatingHeader(gameState, engine, context, theme),
                     Expanded(
                       child: FadeTransition(
                         opacity: _boardRevealController,
@@ -372,7 +370,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: (ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme).backgroundDeep,
         title: const Text('حفظ كقالب جديد', style: TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
@@ -539,7 +537,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: (ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme).backgroundDeep,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('تصفير اللعبة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text('هل أنت متأكد من تصفير كافة الأموال والعمليات والبدء من جديد؟', style: TextStyle(color: Colors.white70)),
@@ -570,7 +568,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppDesign.slate800,
+        backgroundColor: (ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme).backgroundDeep,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('إنهاء اللعبة', style: AppDesign.titleStyle),
         content: const Text('هل أنت متأكد من إنهاء اللعبة الآن؟ سيتم احتساب إجمالي الثروة وتحديد الفائز', style: AppDesign.subtitleStyle),
@@ -613,7 +611,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       print("Landing flow error: $e");
       if (mounted) engine.resolveLanding();
     }
-    _isHandlingLanding = false;
+    if (mounted) setState(() => _isHandlingLanding = false);
   }
 
 
@@ -725,7 +723,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: AppDesign.slate800,
+        backgroundColor: (ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme).backgroundDeep,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Row(
           children: [
@@ -1221,7 +1219,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
 
   // ==================== HEADER ====================
 
-  Widget _buildFloatingHeader(GameState state, GameEngine engine, BuildContext context) {
+  Widget _buildFloatingHeader(GameState state, GameEngine engine, BuildContext context, ThemeConfig theme) {
     bool isSmall = AppDesign.isSmallScreen(context);
     return Container(
       margin: EdgeInsets.symmetric(horizontal: isSmall ? 6 : 20, vertical: isSmall ? 4 : 12),
@@ -1330,7 +1328,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.settings, color: Colors.white70, size: 26),
+                  icon: Icon(Icons.settings, color: theme.primaryColor, size: 26),
                   tooltip: 'الإعدادات',
                   onPressed: () => Navigator.push(
                     context,
@@ -1536,13 +1534,14 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
         final double finalWidth = availWidth;
         final double finalHeight = availHeight;
 
-        return Container(
-          width: finalWidth,
-          height: finalHeight,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.04),
-            border: Border.all(color: Colors.white12),
-          ),
+        return ThemedGameFrame(
+          child: Container(
+            width: finalWidth,
+            height: finalHeight,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.04),
+              border: Border.all(color: Colors.white12),
+            ),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -1607,9 +1606,10 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
                 ),
             ],
           ),
-        );
-      },
-    );
+        ),
+      );
+    },
+);
   }
 
   Widget _buildCenterArea(
@@ -2456,7 +2456,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
           tooltip: 'رجوع',
         ),
       ),
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: Center(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -2651,7 +2651,7 @@ class _BankAlHazBoardPageState extends ConsumerState<BankAlHazBoardPage>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppDesign.slate800,
+      backgroundColor: (ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme).backgroundDeep,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Row(
           children: [
@@ -3360,16 +3360,21 @@ class _ShineAnimationState extends State<_ShineAnimation> with SingleTickerProvi
 }
 
 
-class _QuestionDialogContent extends StatefulWidget {
+class _QuestionDialogContent extends ConsumerStatefulWidget {
   final Question question;
   const _QuestionDialogContent({required this.question});
 
   @override
-  State<_QuestionDialogContent> createState() => _QuestionDialogContentState();
+  ConsumerState<_QuestionDialogContent> createState() => _QuestionDialogContentState();
 }
 
-class _QuestionDialogContentState extends State<_QuestionDialogContent> {
+class _QuestionDialogContentState extends ConsumerState<_QuestionDialogContent> {
   bool _showAnswer = false;
+  double? _localFontSize;
+
+  double _getEffectiveFontSize(Map<String, dynamic> settings) {
+    return _localFontSize ?? (settings['question_font_size'] ?? 26.0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3394,19 +3399,54 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Icon(Icons.quiz_outlined, size: 22, color: Colors.blueAccent),
-                        SizedBox(width: 10),
-                        Text(
-                          'سؤال التحدي',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            color: Colors.blueAccent,
-                            fontSize: 16,
-                            letterSpacing: 1,
-                          ),
+                        const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.quiz_outlined, size: 22, color: Colors.blueAccent),
+                            SizedBox(width: 10),
+                            Text(
+                              'سؤال التحدي',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.blueAccent,
+                                fontSize: 16,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Font Size Controls
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () {
+                                final settings = ref.read(generalSettingsProvider).value ?? {};
+                                setState(() {
+                                  _localFontSize = (_getEffectiveFontSize(settings) - 2).clamp(12, 100);
+                                });
+                              },
+                              icon: const Icon(Icons.zoom_out, color: Colors.white70),
+                              tooltip: 'تصغير الخط',
+                            ),
+                            Text(
+                              _getEffectiveFontSize(ref.read(generalSettingsProvider).value ?? {}).toInt().toString(),
+                              style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                final settings = ref.read(generalSettingsProvider).value ?? {};
+                                setState(() {
+                                  _localFontSize = _getEffectiveFontSize(settings) + 2;
+                                });
+                              },
+                              icon: const Icon(Icons.zoom_in, color: Colors.white70),
+                              tooltip: 'تكبير الخط',
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -3426,12 +3466,12 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                   ],
                   Text(
                     widget.question.text,
-                    style: const TextStyle(
-                      fontSize: 26,
+                    style: TextStyle(
+                      fontSize: _getEffectiveFontSize(ref.watch(generalSettingsProvider).value ?? {}),
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
                       height: 1.5,
-                      shadows: [Shadow(color: Colors.blueAccent, blurRadius: 10)],
+                      shadows: const [Shadow(color: Colors.blueAccent, blurRadius: 10)],
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -3552,9 +3592,9 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                       ),
                       child: Text(
                         widget.question.answer,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.greenAccent,
-                          fontSize: 22,
+                          fontSize: _getEffectiveFontSize(ref.watch(generalSettingsProvider).value ?? {}) * 0.85,
                           fontWeight: FontWeight.w900,
                         ),
                         textAlign: TextAlign.center,
@@ -3587,7 +3627,10 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
-                                onPressed: () => Navigator.pop(context, true),
+                                onPressed: () {
+                                  SoundEffectsManager.playCorrect();
+                                  Navigator.pop(context, true);
+                                },
                                 icon: const Icon(Icons.check_circle),
                                 label: const Text('إجابة صحيحة', style: TextStyle(fontWeight: FontWeight.bold)),
                                 style: ElevatedButton.styleFrom(
@@ -3602,7 +3645,10 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton.icon(
-                                onPressed: () => Navigator.pop(context, false),
+                                onPressed: () {
+                                  SoundEffectsManager.playIncorrect();
+                                  Navigator.pop(context, false);
+                                },
                                 icon: const Icon(Icons.cancel),
                                 label: const Text('إجابة خاطئة', style: TextStyle(fontWeight: FontWeight.bold)),
                                 style: ElevatedButton.styleFrom(
@@ -3619,7 +3665,10 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                           children: [
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: () => Navigator.pop(context, true),
+                                onPressed: () {
+                                  SoundEffectsManager.playCorrect();
+                                  Navigator.pop(context, true);
+                                },
                                 icon: const Icon(Icons.check_circle),
                                 label: const Text(
                                   'إجابة صحيحة',
@@ -3636,7 +3685,10 @@ class _QuestionDialogContentState extends State<_QuestionDialogContent> {
                             const SizedBox(width: 16),
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: () => Navigator.pop(context, false),
+                                onPressed: () {
+                                  SoundEffectsManager.playIncorrect();
+                                  Navigator.pop(context, false);
+                                },
                                 icon: const Icon(Icons.cancel),
                                 label: const Text(
                                   'إجابة خاطئة',

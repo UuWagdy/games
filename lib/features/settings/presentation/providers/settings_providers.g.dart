@@ -33,7 +33,7 @@ final class GeneralSettingsProvider
   GeneralSettings create() => GeneralSettings();
 }
 
-String _$generalSettingsHash() => r'292f9e5c892f325e89bb55efdef216aa98c296e4';
+String _$generalSettingsHash() => r'59f80412f51e2612c2aba2560338128dfeb45947';
 
 abstract class _$GeneralSettings extends $AsyncNotifier<Map<String, dynamic>> {
   FutureOr<Map<String, dynamic>> build();

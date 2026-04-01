@@ -15,6 +15,8 @@ import '../../data/sources/bank_al_haz_csv_service.dart';
 import 'package:games/core/database/database_service.dart';
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import '../../../../questions/presentation/providers/question_providers.dart';
+import 'package:games/core/design/app_themes.dart';
+import 'package:games/core/design/themed_background.dart';
 
 
 class BankAlHazSettingsPage extends ConsumerStatefulWidget {
@@ -206,6 +208,9 @@ class _BankAlHazSettingsPageState extends ConsumerState<BankAlHazSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
+
     final content = SingleChildScrollView(
       padding: EdgeInsets.all(widget.isView ? 16.0 : 24.0),
       child: Column(
@@ -1114,7 +1119,7 @@ class _BankAlHazSettingsPageState extends ConsumerState<BankAlHazSettingsPage> {
         title: const Text('إعدادات بنك الحظ', style: AppDesign.titleStyle),
         centerTitle: true,
       ),
-      body: AppDesign.backgroundWrapper(child: SafeArea(child: content)),
+      body: ThemedBackground(child: SafeArea(child: content)),
     );
   }
 

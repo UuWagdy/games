@@ -42,7 +42,7 @@ final class TicTacToeControllerProvider
 }
 
 String _$ticTacToeControllerHash() =>
-    r'2c73bc87e4566c4e31a57132cde553acbce412d8';
+    r'5e3bc737f94cc8c450f23df205cb5f204f3c52e4';
 
 abstract class _$TicTacToeController extends $Notifier<TicTacToeState> {
   TicTacToeState build();

@@ -4,11 +4,14 @@ import 'dart:ui';
 import 'dart:math' as math;
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import '../providers/tic_tac_toe_providers.dart';
 import '../../domain/entities/tic_tac_toe_state.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
 import 'package:games/features/questions/presentation/providers/question_providers.dart';
 import 'package:games/features/questions/domain/entities/question.dart';
+import 'package:games/core/providers/sound_effects_provider.dart';
+import 'package:games/core/design/app_themes.dart';
 
 import '../widgets/xo_board_widget.dart';
 import '../widgets/xo_settings_dialog.dart';
@@ -228,12 +231,13 @@ class _TicTacToePageState extends ConsumerState<TicTacToePage> {
       }
     });
 
-    final currentTheme = ref.watch(currentThemeProvider);
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
     
-    return AppDesign.backgroundWrapper(
-      theme: currentTheme.value,
+    return ThemedBackground(
       child: Scaffold(
         extendBodyBehindAppBar: true,
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -241,12 +245,12 @@ class _TicTacToePageState extends ConsumerState<TicTacToePage> {
             icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('لعبة XO', style: AppDesign.titleStyle),
+          title: Text('لعبة XO', style: AppDesign.titleStyle.copyWith(color: theme.primaryColor)),
           centerTitle: true,
           actions: [
 
             IconButton(
-              icon: const Icon(Icons.settings, color: Colors.white),
+              icon: Icon(Icons.settings, color: theme.primaryColor),
               onPressed: () => showDialog(context: context, builder: (_) => const XOSettingsDialog()),
             ),
             IconButton(
@@ -270,12 +274,11 @@ class _TicTacToePageState extends ConsumerState<TicTacToePage> {
                       maxWidth: 500,
                     ),
                     margin: const EdgeInsets.all(24),
-                    decoration: AppDesign.glassDecoration.copyWith(
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: XOBoardWidget(
-                      gameState: gameState,
-                      onCellTap: _handleBoardTap,
+                    child: ThemedGameFrame(
+                      child: XOBoardWidget(
+                        gameState: gameState,
+                        onCellTap: _handleBoardTap,
+                      ),
                     ),
                   ),
                 ),
@@ -312,9 +315,13 @@ class _TicTacToePageState extends ConsumerState<TicTacToePage> {
           }
       }
 
-      return Container(
+      return ThemedGameFrame(
+        child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: AppDesign.glassDecoration,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -334,6 +341,7 @@ class _TicTacToePageState extends ConsumerState<TicTacToePage> {
                 ),
               ],
           ),
+        ),
       );
   }
 
@@ -369,7 +377,7 @@ class _TicTacToePageState extends ConsumerState<TicTacToePage> {
   }
 }
 
-class _QuestionDialog extends StatefulWidget {
+class _QuestionDialog extends ConsumerStatefulWidget {
   final Question question;
   final String teamName;
   final Function(bool) onResult;
@@ -383,11 +391,16 @@ class _QuestionDialog extends StatefulWidget {
   });
 
   @override
-  State<_QuestionDialog> createState() => _QuestionDialogState();
+  ConsumerState<_QuestionDialog> createState() => _QuestionDialogState();
 }
 
-class _QuestionDialogState extends State<_QuestionDialog> {
+class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
   bool _showAnswer = false;
+  double? _localFontSize;
+
+  double _getEffectiveFontSize(Map<String, dynamic> settings) {
+    return _localFontSize ?? (settings['question_font_size'] ?? 24.0);
+  }
 
   @override
   void initState() {
@@ -418,7 +431,39 @@ class _QuestionDialogState extends State<_QuestionDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('سؤال للاعب: ${widget.teamName}', style: const TextStyle(fontSize: 16, color: Colors.blueAccent)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('سؤال للاعب: ${widget.teamName}', style: const TextStyle(fontSize: 16, color: Colors.blueAccent)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          final settings = ref.read(generalSettingsProvider).value ?? {};
+                          setState(() {
+                            _localFontSize = (_getEffectiveFontSize(settings) - 2).clamp(12, 100);
+                          });
+                        },
+                        icon: const Icon(Icons.zoom_out, color: Colors.blueAccent),
+                      ),
+                      Text(
+                        _getEffectiveFontSize(ref.read(generalSettingsProvider).value ?? {}).toInt().toString(),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        onPressed: () {
+                          final settings = ref.read(generalSettingsProvider).value ?? {};
+                          setState(() {
+                            _localFontSize = _getEffectiveFontSize(settings) + 2;
+                          });
+                        },
+                        icon: const Icon(Icons.zoom_in, color: Colors.blueAccent),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
               const SizedBox(height: 20),
               if (widget.question.imageData != null) ...[
                 ClipRRect(
@@ -427,11 +472,27 @@ class _QuestionDialogState extends State<_QuestionDialog> {
                 ),
                 const SizedBox(height: 20),
               ],
-              Text(widget.question.text, style: TextStyle(fontSize: isSmall ? 20 : 26, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
+              Text(
+                widget.question.text, 
+                style: TextStyle(
+                  fontSize: _getEffectiveFontSize(ref.watch(generalSettingsProvider).value ?? {}),
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ), 
+                textAlign: TextAlign.center
+              ),
               const SizedBox(height: 30),
               if (_showAnswer) ...[
                 const Text('الإجابة الصحيحة:', style: TextStyle(color: Colors.amberAccent, fontSize: 14)),
-                Text(widget.question.answer, style: const TextStyle(fontSize: 22, color: Colors.greenAccent, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                Text(
+                  widget.question.answer, 
+                  style: TextStyle(
+                    fontSize: _getEffectiveFontSize(ref.watch(generalSettingsProvider).value ?? {}) * 0.85,
+                    color: Colors.greenAccent,
+                    fontWeight: FontWeight.bold,
+                  ), 
+                  textAlign: TextAlign.center
+                ),
                 const SizedBox(height: 30),
               ],
               Row(
@@ -445,13 +506,21 @@ class _QuestionDialogState extends State<_QuestionDialog> {
                     )
                   else if (!widget.isReadOnly) ...[
                     ElevatedButton(
-                      onPressed: () { widget.onResult(true); Navigator.pop(context); },
+                      onPressed: () { 
+                        SoundEffectsManager.playCorrect();
+                        widget.onResult(true); 
+                        Navigator.pop(context); 
+                      },
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                       child: const Text('إجابة صحيحة'),
                     ),
                     const SizedBox(width: 12),
                     ElevatedButton(
-                      onPressed: () { widget.onResult(false); Navigator.pop(context); },
+                      onPressed: () { 
+                        SoundEffectsManager.playIncorrect();
+                        widget.onResult(false); 
+                        Navigator.pop(context); 
+                      },
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
                       child: const Text('إجابة خاطئة'),
                     ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/spy_game_provider.dart';
+import 'package:games/core/design/themed_background.dart';
+import 'package:games/core/design/app_themes.dart';
 import '../widgets/glass_container.dart';
 import 'spy_settings_page.dart';
 import 'spy_reveal_page.dart';
@@ -73,17 +75,18 @@ class _SpySetupPageState extends ConsumerState<SpySetupPage> {
 
     final players = state.players;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: const Text(
-          "لعبة الجاسوس",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+    return ThemedBackground(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        actions: [
+        appBar: AppBar(
+          title: const Text(
+            "لعبة الجاسوس",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () => Navigator.push(
@@ -221,6 +224,7 @@ class _SpySetupPageState extends ConsumerState<SpySetupPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -29,7 +29,9 @@ class GeneralSettings extends _$GeneralSettings {
   static const _ticTacToeTeamXIdKey = 'tic_tac_toe_team_x_id';
   static const _ticTacToeTeamOIdKey = 'tic_tac_toe_team_o_id';
   static const _christmasMusicEnabledKey = 'christmas_music_enabled';
-  static const _appThemeKey = 'app_theme'; // 'default', 'christmas', 'custom'
+  static const _holyWeekMusicEnabledKey = 'holy_week_music_enabled';
+  static const _resurrectionMusicEnabledKey = 'resurrection_music_enabled';
+  static const _appThemeKey = 'app_theme'; // 'default', 'christmas', 'holy_week', 'resurrection', 'custom'
   static const _globalAiEnabledKey = 'global_ai_enabled';
   static const _customPrimaryColorKey = 'custom_primary_color';
   static const _customBgDeepKey = 'custom_bg_deep';
@@ -40,6 +42,7 @@ class GeneralSettings extends _$GeneralSettings {
   static const _customBgImageKey = 'custom_bg_image';
   static const _customMusicPathKey = 'custom_music_path';
   static const _customMusicEnabledKey = 'custom_music_enabled';
+  static const _questionFontSizeKey = 'question_font_size';
 
   @override
   Future<Map<String, dynamic>> build() async {
@@ -67,6 +70,8 @@ class GeneralSettings extends _$GeneralSettings {
       'tic_tac_toe_team_x_id': prefs.getInt(_ticTacToeTeamXIdKey),
       'tic_tac_toe_team_o_id': prefs.getInt(_ticTacToeTeamOIdKey),
       'christmas_music_enabled': prefs.getBool(_christmasMusicEnabledKey) ?? true,
+      'holy_week_music_enabled': prefs.getBool(_holyWeekMusicEnabledKey) ?? true,
+      'resurrection_music_enabled': prefs.getBool(_resurrectionMusicEnabledKey) ?? true,
       'app_theme': prefs.getString(_appThemeKey) ?? 'default',
       'custom_primary_color': prefs.getInt(_customPrimaryColorKey) ?? 0xFF00BCD4,
       'custom_bg_deep': prefs.getInt(_customBgDeepKey) ?? 0xFF001F3F,
@@ -77,6 +82,7 @@ class GeneralSettings extends _$GeneralSettings {
       'custom_bg_image': prefs.getString(_customBgImageKey),
       'custom_music_path': prefs.getString(_customMusicPathKey),
       'custom_music_enabled': prefs.getBool(_customMusicEnabledKey) ?? true,
+      'question_font_size': prefs.getDouble(_questionFontSizeKey) ?? 32.0,
     };
   }
 
@@ -268,9 +274,27 @@ class GeneralSettings extends _$GeneralSettings {
     ref.invalidateSelf();
   }
 
+  Future<void> setResurrectionMusicEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_resurrectionMusicEnabledKey, value);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setHolyWeekMusicEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_holyWeekMusicEnabledKey, value);
+    ref.invalidateSelf();
+  }
+
   Future<void> setChristmasMusicEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_christmasMusicEnabledKey, value);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setQuestionFontSize(double size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_questionFontSizeKey, size);
     ref.invalidateSelf();
   }
 }

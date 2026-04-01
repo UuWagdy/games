@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/spy_game_provider.dart';
 import '../widgets/glass_container.dart';
+import 'package:games/core/design/themed_background.dart';
 import '../../domain/repositories/word_repository.dart';
 
 class SpySettingsPage extends ConsumerStatefulWidget {
@@ -265,18 +266,20 @@ class _SpySettingsPageState extends ConsumerState<SpySettingsPage> {
 
     if (widget.isView) return content;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: const Text("إعدادات الجلسة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    return ThemedBackground(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+        appBar: AppBar(
+          title: const Text("إعدادات الجلسة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
+        body: content,
       ),
-      body: content,
     );
   }
 

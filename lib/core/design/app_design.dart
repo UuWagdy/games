@@ -114,18 +114,54 @@ class AppDesign {
     final curTheme = theme ?? AppThemes.defaultTheme;
     final bgImage = curTheme.backgroundImage;
     
+    if (bgImage != null && bgImage.isNotEmpty) {
+      // When a background image exists, show it prominently
+      return Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          color: curTheme.backgroundDeep,
+        ),
+        child: Stack(
+          children: [
+            // Background image - fills entire screen
+            Positioned.fill(
+              child: Image(
+                image: bgImage.startsWith('assets/')
+                  ? AssetImage(bgImage) as ImageProvider
+                  : FileImage(File(bgImage)),
+                fit: BoxFit.fill,
+                opacity: const AlwaysStoppedAnimation(0.6),
+              ),
+            ),
+            // Subtle gradient overlay to ensure text readability
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      curTheme.backgroundDeep.withOpacity(0.3),
+                      Colors.transparent,
+                      curTheme.backgroundDeep.withOpacity(0.4),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            child,
+          ],
+        ),
+      );
+    }
+    
+    // No background image: use gradient + orbs + blur
     return Container(
       width: double.infinity,
       height: double.infinity,
       decoration: BoxDecoration(
         color: curTheme.backgroundDeep,
-        image: bgImage != null ? DecorationImage(
-          image: bgImage.startsWith('assets/') 
-            ? AssetImage(bgImage) as ImageProvider
-            : FileImage(File(bgImage)),
-          fit: BoxFit.cover,
-          opacity: 0.3, // Make it transparent as requested
-        ) : null,
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -134,18 +170,6 @@ class AppDesign {
       ),
       child: Stack(
         children: [
-          if (bgImage != null)
-            // Add a glow effect behind the image
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    colors: [curTheme.primaryColor.withOpacity(0.1), Colors.transparent],
-                    radius: 1.5,
-                  ),
-                ),
-              ),
-            ),
           ...buildBackgroundOrbs(curTheme),
           Positioned.fill(
             child: BackdropFilter(

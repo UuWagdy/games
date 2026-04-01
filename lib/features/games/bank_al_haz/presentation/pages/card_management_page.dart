@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import '../providers/bank_al_haz_providers.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 
 class CardManagementPage extends ConsumerWidget {
   const CardManagementPage({super.key});
@@ -16,7 +17,7 @@ class CardManagementPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: Column(
           children: [
             AppBar(

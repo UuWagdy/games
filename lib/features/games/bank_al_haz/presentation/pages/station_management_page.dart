@@ -7,6 +7,7 @@ import '../../domain/entities/bank_al_haz_entities.dart';
 import '../providers/bank_al_haz_providers.dart';
 import '../../../../questions/presentation/providers/question_providers.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import '../../data/sources/bank_al_haz_csv_service.dart';
 import 'package:games/core/utils/arabic_utils.dart';
 
@@ -33,7 +34,7 @@ class _StationManagementPageState extends ConsumerState<StationManagementPage> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: Column(
           children: [
             AppBar(

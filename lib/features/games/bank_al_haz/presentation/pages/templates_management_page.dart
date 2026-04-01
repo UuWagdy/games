@@ -7,6 +7,7 @@ import '../providers/game_engine_provider.dart';
 import '../../domain/entities/bank_al_haz_entities.dart';
 import 'template_editor_page.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import '../../data/sources/bank_al_haz_csv_service.dart';
 import '../../../../teams/presentation/providers/team_providers.dart';
 import '../../../../questions/presentation/providers/question_providers.dart';
@@ -48,7 +49,7 @@ class TemplatesManagementPage extends ConsumerWidget {
         icon: const Icon(Icons.add),
         backgroundColor: Colors.indigoAccent,
       ),
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: SafeArea(
           child: templatesAsync.when(
             data: (templates) => ListView.builder(

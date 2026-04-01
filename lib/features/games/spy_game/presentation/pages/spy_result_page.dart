@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/spy_game_provider.dart';
+import 'package:games/core/design/themed_background.dart';
+import 'package:games/core/design/app_themes.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import '../widgets/glass_container.dart';
 
 class SpyResultPage extends ConsumerWidget {
@@ -13,10 +16,14 @@ class SpyResultPage extends ConsumerWidget {
     final isSpyWinner = state.winnerTeam == 1;
     final spies = state.players.where((p) => p.isSpy).map((p) => p.name).join(' و ');
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: const Text("النتائج النهائية", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
+
+    return ThemedBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text("النتائج النهائية", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -136,6 +143,7 @@ class SpyResultPage extends ConsumerWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -41,7 +41,7 @@ final class SnakesLaddersGameProvider
   }
 }
 
-String _$snakesLaddersGameHash() => r'60869eefe91fc16370398c533ce7efb3bb874423';
+String _$snakesLaddersGameHash() => r'cbbde54bcf373b80890a495a2b656a711ac5db6c';
 
 abstract class _$SnakesLaddersGame extends $Notifier<SnakesLaddersState> {
   SnakesLaddersState build();

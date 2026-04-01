@@ -107,7 +107,7 @@ class MainScreen extends ConsumerWidget {
             child: CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
-                _buildGamesGrid(context),
+                _buildGamesGrid(context, ref),
               ],
             ),
           ),
@@ -191,7 +191,7 @@ class MainScreen extends ConsumerWidget {
     return colors[index % colors.length];
   }
 
-  Widget _buildGamesGrid(BuildContext context) {
+  Widget _buildGamesGrid(BuildContext context, WidgetRef ref) {
     final games = [
       {
         'title': 'تحت الضغط',
@@ -270,7 +270,7 @@ class MainScreen extends ConsumerWidget {
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final game = games[index];
-            return _buildGameCard(context, game);
+            return _buildGameCard(context, ref, game);
           },
           childCount: games.length,
         ),
@@ -278,8 +278,14 @@ class MainScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGameCard(BuildContext context, Map<String, dynamic> game) {
-    final Color color = game['color'] as Color;
+  Widget _buildGameCard(BuildContext context, WidgetRef ref, Map<String, dynamic> game) {
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
+    final bool isThemed = theme.id != 'default';
+
+    final Color originalColor = game['color'] as Color;
+    final Color color = isThemed ? theme.primaryColor : originalColor;
+
     return InkWell(
       onTap: () => Navigator.push(
         context,
@@ -288,12 +294,12 @@ class MainScreen extends ConsumerWidget {
       borderRadius: BorderRadius.circular(32),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1F3D).withOpacity(0.6),
+          color: Color.lerp(theme.backgroundDeep, Colors.black, 0.3)!.withOpacity(0.75),
           borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: color.withOpacity(0.15)),
           boxShadow: [
              BoxShadow(
-               color: color.withOpacity(0.05),
+               color: color.withOpacity(0.08),
                blurRadius: 20,
                spreadRadius: 2,
              )
@@ -307,10 +313,10 @@ class MainScreen extends ConsumerWidget {
               height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: color.withOpacity(0.1),
+                color: color.withOpacity(0.12),
                 boxShadow: [
                   BoxShadow(
-                    color: color.withOpacity(0.2),
+                    color: color.withOpacity(0.25),
                     blurRadius: 15,
                     spreadRadius: 5,
                   ),

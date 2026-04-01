@@ -43,6 +43,13 @@ class GeneralSettingsPage extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               _buildCard(context, [
+                ListTile(
+                  title: const Text('حجم خط الأسئلة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text('${(settings['question_font_size'] ?? 24.0).toInt()} بكسل', style: const TextStyle(color: Colors.white60)),
+                  trailing: const Icon(Icons.text_fields, color: Colors.amberAccent),
+                  onTap: () => _showFontSizePicker(context, ref, (settings['question_font_size'] ?? 24.0).toInt()),
+                ),
+                const Divider(),
                 SwitchListTile(
                   title: const Text('تكرار الأسئلة', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                   subtitle: const Text('هل يسمح بتكرار ظهور السؤال مرة أخرى؟', style: TextStyle(color: Colors.white60)),
@@ -605,6 +612,40 @@ class GeneralSettingsPage extends ConsumerWidget {
           ElevatedButton(
             onPressed: () {
               onSave(val);
+              Navigator.pop(context);
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFontSizePicker(BuildContext context, WidgetRef ref, int current) {
+    int val = current;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('حجم خط الأسئلة', style: TextStyle(color: Colors.white)),
+        content: StatefulBuilder(
+          builder: (context, setState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$val بكسل', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Slider(
+                value: val.toDouble(),
+                min: 12, max: 72, divisions: 60,
+                onChanged: (newVal) => setState(() => val = newVal.toInt()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(generalSettingsProvider.notifier).setQuestionFontSize(val.toDouble());
               Navigator.pop(context);
             },
             child: const Text('حفظ'),

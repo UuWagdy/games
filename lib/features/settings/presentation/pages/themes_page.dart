@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import 'package:games/core/design/app_themes.dart';
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'package:games/features/settings/presentation/pages/custom_theme_config_page.dart';
@@ -32,8 +33,7 @@ class ThemesPage extends ConsumerWidget {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          body: AppDesign.backgroundWrapper(
-            theme: currentTheme,
+          body: ThemedBackground(
             child: SafeArea(
               child: Column(
                 children: [
@@ -64,6 +64,42 @@ class ThemesPage extends ConsumerWidget {
                           value: settings['christmas_music_enabled'] ?? true,
                           activeColor: Colors.amberAccent,
                           onChanged: (val) => ref.read(generalSettingsProvider.notifier).setChristmasMusicEnabled(val),
+                        ),
+                      ),
+                    ),
+                  if (currentThemeId == 'holy_week')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                      child: Container(
+                        decoration: AppDesign.glassDecoration.copyWith(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: SwitchListTile(
+                          title: const Text('موسيقى أسبوع الآلام', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          subtitle: const Text('holy_week_music.mp3', style: TextStyle(color: Colors.white60)),
+                          secondary: const Icon(Icons.music_note, color: Colors.purpleAccent),
+                          value: settings['holy_week_music_enabled'] ?? true,
+                          activeColor: Colors.purpleAccent,
+                          onChanged: (val) => ref.read(generalSettingsProvider.notifier).setHolyWeekMusicEnabled(val),
+                        ),
+                      ),
+                    ),
+                  if (currentThemeId == 'resurrection')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                      child: Container(
+                        decoration: AppDesign.glassDecoration.copyWith(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: SwitchListTile(
+                          title: const Text('موسيقى القيامة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          subtitle: const Text('resurrection_music.mp3', style: TextStyle(color: Colors.white60)),
+                          secondary: const Icon(Icons.music_note, color: Colors.amberAccent),
+                          value: settings['resurrection_music_enabled'] ?? true,
+                          activeColor: Colors.amberAccent,
+                          onChanged: (val) => ref.read(generalSettingsProvider.notifier).setResurrectionMusicEnabled(val),
                         ),
                       ),
                     ),

@@ -12,7 +12,10 @@ import 'package:games/features/questions/domain/entities/question.dart';
 import 'package:games/features/games/snakes_and_ladders/presentation/widgets/game_board_widget.dart';
 import 'package:games/features/games/snakes_and_ladders/presentation/widgets/dice_widget.dart';
 import 'package:games/features/games/snakes_and_ladders/presentation/widgets/snakes_ladders_settings_dialog.dart';
-import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+import 'package:games/core/providers/sound_effects_provider.dart';
+import 'package:games/core/design/app_themes.dart';
+import '../../../../settings/presentation/providers/settings_providers.dart';
+import 'package:games/core/design/themed_background.dart';
 
 
 class SnakesLaddersGamePage extends ConsumerStatefulWidget {
@@ -25,18 +28,23 @@ class SnakesLaddersGamePage extends ConsumerStatefulWidget {
 class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
   bool _isRolling = false;
   bool _isMoving = false;
+  bool _isHandlingTurn = false;
 
   void _handleRoll() async {
     final gameState = ref.read(snakesLaddersGameProvider);
-    if (gameState.status == SnakesLaddersStatus.finished || _isRolling || _isMoving) return;
+    if (gameState.status == SnakesLaddersStatus.finished || _isRolling || _isMoving || _isHandlingTurn) return;
 
-    setState(() => _isRolling = true);
+    setState(() {
+      _isRolling = true;
+      _isHandlingTurn = true;
+    });
+    
     await Future.delayed(const Duration(milliseconds: 1500));
     
     final diceVal = math.Random().nextInt(6) + 1;
     ref.read(snakesLaddersGameProvider.notifier).setDiceValue(diceVal);
     
-    setState(() => _isRolling = false);
+    if (mounted) setState(() => _isRolling = false);
 
     if (gameState.questionsEnabled) {
       _showQuestionFlow(diceVal);
@@ -48,7 +56,6 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
   void _showQuestionFlow(int diceVal) async {
     final gameState = ref.read(snakesLaddersGameProvider);
     final categoryIds = gameState.categoryIds;
-    final bool isAI = gameState.isVsComputer && gameState.currentPlayerIndex > 0;
     
     List<Question> availableQuestions = [];
     if (categoryIds.isEmpty) {
@@ -72,50 +79,12 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
     }
 
     final randomQuestion = availableQuestions[math.Random().nextInt(availableQuestions.length)];
-    final rawTeams = ref.read(teamsListProvider).value ?? [];
-    final allTeams = List<dynamic>.from(rawTeams);
-    final teams = gameState.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
-    final currentTeam = teams[gameState.currentPlayerIndex % teams.length];
-
-    if (isAI) {
-       // AI Auto Answer
-       showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) {
-             Future.delayed(const Duration(seconds: 2), () {
-                if (Navigator.canPop(context)) {
-                    Navigator.pop(context);
-                    bool correct = math.Random().nextDouble() > 0.15; // 85% correct
-                    if (correct) {
-                      _executeMove(diceVal);
-                    } else {
-                        final penalty = ref.read(snakesLaddersGameProvider).wrongAnswerPenalty;
-                        if (penalty == WrongAnswerPenalty.skip) {
-                          ref.read(snakesLaddersGameProvider.notifier).skipTurn();
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الكمبيوتر أجاب خطأ! ضاع دوره')));
-                        } else {
-                          final steps = diceVal ~/ 2;
-                          if (steps > 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('الكمبيوتر أجاب خطأ! سيتحرك $steps خطوات فقط')));
-                            _executeMove(steps);
-                          } else {
-                            ref.read(snakesLaddersGameProvider.notifier).skipTurn();
-                          }
-                        }
-                    }
-                }
-             });
-             return _QuestionDialog(
-                question: randomQuestion,
-                teamName: "الكمبيوتر (${currentTeam.name})",
-                onResult: (_) {}, // Handled by delayed logic
-                isReadOnly: true,
-             );
-          }
-       );
-       return;
+    final teams = ref.read(teamsListProvider).value ?? [];
+    if (teams.isEmpty) {
+      if (mounted) setState(() => _isHandlingTurn = false);
+      return;
     }
+    final currentTeam = teams[gameState.currentPlayerIndex % teams.length];
 
     showDialog(
       context: context,
@@ -142,15 +111,27 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
               }
             }
           }
+          if (mounted) setState(() => _isHandlingTurn = false);
         },
       ),
     );
   }
 
   void _executeMove(int steps) async {
-    setState(() => _isMoving = true);
-    await ref.read(snakesLaddersGameProvider.notifier).moveCurrentPlayer(steps);
-    if (mounted) setState(() => _isMoving = false);
+    setState(() {
+      _isMoving = true;
+      _isHandlingTurn = true;
+    });
+    try {
+      await ref.read(snakesLaddersGameProvider.notifier).moveCurrentPlayer(steps);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isMoving = false;
+          _isHandlingTurn = false;
+        });
+      }
+    }
   }
 
   void _showWinnerDialog(String winnerName) {
@@ -225,19 +206,12 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
   Widget build(BuildContext context) {
     final gameState = ref.watch(snakesLaddersGameProvider);
     final teamsAsync = ref.watch(teamsListProvider);
-
-    ref.listen(generalSettingsProvider, (prev, next) {
-      final prevAi = prev?.value?['global_ai_enabled'] ?? false;
-      final nextAi = next.value?['global_ai_enabled'] ?? false;
-      if (prevAi != nextAi) {
-        ref.read(snakesLaddersGameProvider.notifier).toggleAiPlayer(nextAi);
-      }
-    });
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
 
     ref.listen(snakesLaddersGameProvider, (previous, next) {
       if (next.status == SnakesLaddersStatus.finished && previous?.status == SnakesLaddersStatus.playing) {
-        final allTeams = teamsAsync.value ?? [];
-        final teams = next.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+        final teams = teamsAsync.value ?? [];
         if (teams.isNotEmpty) {
            final winnerIndex = (next.currentPlayerIndex - 1) % teams.length;
            final winner = teams[winnerIndex < 0 ? teams.length - 1 : winnerIndex];
@@ -248,6 +222,7 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -255,11 +230,11 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('السلم والثعبان', style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 18 : 22, fontWeight: FontWeight.w900, color: Colors.white, shadows: [Shadow(color: Colors.amberAccent, blurRadius: 10)])),
+        title: Text('السلم والثعبان', style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 18 : 22, fontWeight: FontWeight.w900, color: theme.primaryColor, shadows: [Shadow(color: theme.primaryColor.withOpacity(0.5), blurRadius: 10)])),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
+            icon: Icon(Icons.settings, color: theme.primaryColor),
             onPressed: () => showDialog(context: context, builder: (_) => const SnakesLaddersSettingsDialog()),
           ),
           IconButton(
@@ -286,7 +261,7 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
         backgroundColor: AppDesign.slate900,
         child: _buildSidebar(teamsAsync, gameState),
       ) : null,
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: Focus(
           autofocus: true,
           onKey: (node, event) {
@@ -302,10 +277,7 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
           child: teamsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator(color: Colors.amber)),
             error: (e, s) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.redAccent))),
-            data: (rawTeams) {
-              final allTeams = List<dynamic>.from(rawTeams);
-              final teams = gameState.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
-              
+            data: (teams) {
               if (teams.isEmpty) return const Center(child: Text('يرجى إضافة فرق للبدء', style: TextStyle(color: Colors.white, fontSize: 24)));
               
               final currentTeam = teams[gameState.currentPlayerIndex % teams.length];
@@ -345,14 +317,13 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
             child: Center(
               child: Container(
                 margin: const EdgeInsets.all(8),
-                decoration: AppDesign.glassDecoration.copyWith(
-                  border: Border.all(color: Colors.white24, width: 2),
-                ),
-                child: GameBoardWidget(
-                  boardSize: gameState.boardSize,
-                  elements: gameState.elements,
-                  playerPositions: gameState.playerPositions,
-                  teams: teams,
+                child: ThemedGameFrame(
+                  child: GameBoardWidget(
+                    boardSize: gameState.boardSize,
+                    elements: gameState.elements,
+                    playerPositions: gameState.playerPositions,
+                    teams: teams,
+                  ),
                 ),
               ),
             ),
@@ -407,10 +378,7 @@ class _SnakesLaddersGamePageState extends ConsumerState<SnakesLaddersGamePage> {
               ),
               Expanded(
                 child: teamsAsync.when(
-                  data: (rawTeams) {
-                    final allTeams = List<dynamic>.from(rawTeams);
-                    final teams = gameState.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
-                    
+                  data: (teams) {
                     return ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: teams.length,
@@ -482,13 +450,11 @@ class _QuestionDialog extends ConsumerStatefulWidget {
   final Question question;
   final String teamName;
   final Function(bool) onResult;
-  final bool isReadOnly;
 
   const _QuestionDialog({
     required this.question,
     required this.teamName,
     required this.onResult,
-    this.isReadOnly = false,
   });
 
   @override
@@ -497,25 +463,15 @@ class _QuestionDialog extends ConsumerStatefulWidget {
 
 class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
   bool _showAnswer = false;
+  double? _localFontSize;
+
+  double _getEffectiveFontSize(Map<String, dynamic> settings) {
+    return _localFontSize ?? (settings['question_font_size'] ?? 24.0);
+  }
 
   @override
   void initState() {
     super.initState();
-    if (widget.isReadOnly) {
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _showAnswer = true;
-          });
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) {
-              widget.onResult(true); // AI always answers correctly for now
-              Navigator.pop(context);
-            }
-          });
-        }
-      });
-    }
   }
 
   @override
@@ -537,7 +493,39 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('سؤال لفريق: ${widget.teamName}', style: const TextStyle(fontSize: 18, color: Colors.amberAccent)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('سؤال لفريق: ${widget.teamName}', style: const TextStyle(fontSize: 18, color: Colors.amberAccent)),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () {
+                                final settings = ref.read(generalSettingsProvider).value ?? {};
+                                setState(() {
+                                  _localFontSize = (_getEffectiveFontSize(settings) - 2).clamp(12, 100);
+                                });
+                              },
+                              icon: const Icon(Icons.zoom_out, color: Colors.amberAccent),
+                            ),
+                            Text(
+                              _getEffectiveFontSize(ref.read(generalSettingsProvider).value ?? {}).toInt().toString(),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                final settings = ref.read(generalSettingsProvider).value ?? {};
+                                setState(() {
+                                  _localFontSize = _getEffectiveFontSize(settings) + 2;
+                                });
+                              },
+                              icon: const Icon(Icons.zoom_in, color: Colors.amberAccent),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                 const SizedBox(height: 24),
                 if (widget.question.imageData != null) ...[
                   ClipRRect(
@@ -553,7 +541,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                 ],
                 Text(
                   widget.question.text, 
-                  style: TextStyle(fontSize: isSmall ? 24 : 32, fontWeight: FontWeight.bold, color: Colors.white), 
+                  style: TextStyle(
+                    fontSize: _getEffectiveFontSize(ref.watch(generalSettingsProvider).value ?? {}),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ), 
                   textAlign: TextAlign.center
                 ),
                 const SizedBox(height: 40),
@@ -561,7 +553,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                   const Text('الإجابة الصحيحة:', style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold)),
                   Text(
                     widget.question.answer, 
-                    style: TextStyle(fontSize: isSmall ? 22 : 28, color: Colors.greenAccent, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: _getEffectiveFontSize(ref.watch(generalSettingsProvider).value ?? {}) * 0.85,
+                      color: Colors.greenAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 30),
@@ -593,7 +589,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onPressed: () { widget.onResult(true); Navigator.pop(context); },
+                            onPressed: () { 
+                              SoundEffectsManager.playCorrect();
+                              widget.onResult(true); 
+                              Navigator.pop(context); 
+                            },
                             child: const Text('إجابة صحيحة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                           ),
                         ),
@@ -607,7 +607,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onPressed: () { widget.onResult(false); Navigator.pop(context); },
+                            onPressed: () { 
+                              SoundEffectsManager.playIncorrect();
+                              widget.onResult(false); 
+                              Navigator.pop(context); 
+                            },
                             child: const Text('إجابة خاطئة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                           ),
                         ),
@@ -637,7 +641,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                             padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          onPressed: () { widget.onResult(true); Navigator.pop(context); },
+                          onPressed: () { 
+                            SoundEffectsManager.playCorrect();
+                            widget.onResult(true); 
+                            Navigator.pop(context); 
+                          },
                           child: const Text('إجابة صحيحة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                         ),
                         const SizedBox(width: 20),
@@ -648,7 +656,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                             padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          onPressed: () { widget.onResult(false); Navigator.pop(context); },
+                          onPressed: () { 
+                            SoundEffectsManager.playIncorrect();
+                            widget.onResult(false); 
+                            Navigator.pop(context); 
+                          },
                           child: const Text('إجابة خاطئة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                         ),
                       ]

@@ -103,6 +103,9 @@ flutter:
     - assets/images/
     - assets/database/
     - assets/fonts/
+    - assets/audio/
+    - assets/holy_week_music.mp3
+    - assets/resurrection_music.mp3
     - assets/We Wish You a Merry Christmas-1810407330.mp3
 
   # An image asset can refer to one or more resolution-specific "variants", see

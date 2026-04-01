@@ -8,8 +8,8 @@ import '../widgets/ludo_board.dart';
 import '../widgets/dice_widget.dart';
 import '../widgets/ludo_question_dialog.dart';
 import 'ludo_settings_page.dart';
-
-
+import 'package:games/core/design/themed_background.dart';
+import 'package:games/core/design/app_themes.dart';
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'package:flutter/services.dart';
 
@@ -76,94 +76,102 @@ class LudoGamePage extends ConsumerWidget {
     final String teamName = state.colorTeamNames[currentColor] ??
         (teams.length > state.currentTurn ? teams[state.currentTurn].name : _nameMap[currentColor]!);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1B1B2F),
-      appBar: AppBar(
-        title: const Text("لودو الأسئلة", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
+
+    return ThemedBackground(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        toolbarHeight: 40,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
-          onPressed: () => Navigator.pop(context),
+        appBar: AppBar(
+          title: Text("لودو الأسئلة", style: TextStyle(fontWeight: FontWeight.bold, color: theme.primaryColor, fontSize: 16)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          toolbarHeight: 40,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 18),
+            onPressed: () => Navigator.pop(context),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent, size: 20),
+              tooltip: 'تصفير النقاط',
+              onPressed: () => _confirmResetScores(context, ref),
+            ),
+            IconButton(
+              icon: Icon(Icons.settings_outlined, color: theme.primaryColor, size: 20),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LudoSettingsPage())),
+            ),
+          ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent, size: 20),
-            tooltip: 'تصفير النقاط',
-            onPressed: () => _confirmResetScores(context, ref),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LudoSettingsPage())),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Focus(
-          autofocus: true,
-          onKey: (node, event) {
-            if (event is RawKeyDownEvent && 
-                (event.logicalKey == LogicalKeyboardKey.space || event.logicalKey == LogicalKeyboardKey.enter)) {
-              if (state.phase == LudoGameState.idle) {
-                notifier.rollDice();
-                return KeyEventResult.handled;
+        body: SafeArea(
+          child: Focus(
+            autofocus: true,
+            onKey: (node, event) {
+              if (event is RawKeyDownEvent && 
+                  (event.logicalKey == LogicalKeyboardKey.space || event.logicalKey == LogicalKeyboardKey.enter)) {
+                if (state.phase == LudoGameState.idle) {
+                  notifier.rollDice();
+                  return KeyEventResult.handled;
+                }
               }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Column(
-            children: [
-              // Compact Score chips
-              if (teams.isNotEmpty) _buildScoreChips(teams, state),
-              
-              // Slim Turn indicator
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-                decoration: BoxDecoration(
-                  color: _colorMap[currentColor]!.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _colorMap[currentColor]!.withOpacity(0.5), width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: _colorMap[currentColor],
-                        shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: _colorMap[currentColor]!, blurRadius: 4)],
+              return KeyEventResult.ignored;
+            },
+            child: Column(
+              children: [
+                // Compact Score chips
+                if (teams.isNotEmpty) _buildScoreChips(teams, state),
+                
+                // Slim Turn indicator
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: _colorMap[currentColor]!.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _colorMap[currentColor]!.withOpacity(0.5), width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _colorMap[currentColor],
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: _colorMap[currentColor]!, blurRadius: 4)],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'دور: $teamName',
-                      style: TextStyle(color: _colorMap[currentColor], fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        'دور: $teamName',
+                        style: TextStyle(color: _colorMap[currentColor], fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-    
-              // Board (Takes max space)
-              const Expanded(
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: 1,
+      
+                // Board In Themed Frame
+                Expanded(
+                  child: Center(
                     child: Padding(
-                      padding: EdgeInsets.all(4),
-                      child: LudoBoard(),
+                      padding: const EdgeInsets.all(8.0),
+                      child: AspectRatio(
+                        aspectRatio: 1,
+                        child: ThemedGameFrame(
+                          padding: const EdgeInsets.all(8),
+                          child: const LudoBoard(),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-    
-              // Slim Bottom controls
-              _buildBottomBar(state, notifier),
-            ],
+      
+                // Slim Bottom controls
+                _buildBottomBar(state, notifier),
+              ],
+            ),
           ),
         ),
       ),

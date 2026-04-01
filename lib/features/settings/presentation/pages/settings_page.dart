@@ -14,6 +14,7 @@ import 'package:games/features/settings/presentation/pages/general_settings_page
 import 'package:games/features/settings/presentation/pages/themes_page.dart';
 import 'package:games/features/settings/presentation/pages/about_page.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import 'package:games/core/design/app_themes.dart';
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'dart:ui';
@@ -86,9 +87,8 @@ class SettingsPage extends ConsumerWidget {
             ],
           ),
         ),
-        body: AppDesign.backgroundWrapper(
-          theme: theme,
-          child: const SafeArea(
+        body: ThemedBackground(
+          child: SafeArea(
             child: TabBarView(
               children: [
                 GeneralSettingsPage(),

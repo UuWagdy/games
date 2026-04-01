@@ -7,6 +7,8 @@ import 'package:games/features/questions/domain/entities/category.dart';
 import 'package:games/features/questions/presentation/providers/question_providers.dart';
 import 'package:games/features/games/ludo_quiz/presentation/providers/ludo_controller.dart';
 import 'package:games/features/games/ludo_quiz/domain/entities/ludo_entities.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+import 'package:games/core/providers/sound_effects_provider.dart';
 
 class LudoQuestionDialog extends ConsumerStatefulWidget {
   final QuestionTriggerType trigger;
@@ -23,6 +25,12 @@ class _LudoQuestionDialogState extends ConsumerState<LudoQuestionDialog> {
   int? _selectedIndex;
   bool _showManualAnswer = false;
   bool _needsProtectionChoice = false;
+  double? _localFontSize;
+
+  double _getEffectiveFontSize(Map<String, dynamic> settings) {
+    if (_localFontSize != null) return _localFontSize!;
+    return (settings['question_font_size'] ?? 24).toDouble();
+  }
 
   @override
   void initState() {
@@ -81,6 +89,8 @@ class _LudoQuestionDialogState extends ConsumerState<LudoQuestionDialog> {
 
     final questionsAsync = ref.watch(questionsProvider(null));
     final categoriesAsync = ref.watch(categoriesProvider);
+    // Explicitly watch settings for real-time updates
+    ref.watch(generalSettingsProvider);
 
     return questionsAsync.when(
       data: (questions) {
@@ -197,6 +207,8 @@ class _LudoQuestionDialogState extends ConsumerState<LudoQuestionDialog> {
 
   Widget _buildMainDialog(BuildContext context) {
     final bool hasOptions = _currentQuestion!.options != null && _currentQuestion!.options!.isNotEmpty;
+    final settings = ref.read(generalSettingsProvider).value ?? {};
+    final fontSize = _getEffectiveFontSize(settings);
 
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
@@ -216,22 +228,54 @@ class _LudoQuestionDialogState extends ConsumerState<LudoQuestionDialog> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: _getTriggerColor(widget.trigger).withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _getTriggerColor(widget.trigger)),
-                    ),
-                    child: Text(
-                      widget.trigger.categoryLabel,
-                      style: TextStyle(color: _getTriggerColor(widget.trigger), fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _getTriggerColor(widget.trigger).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _getTriggerColor(widget.trigger)),
+                        ),
+                        child: Text(
+                          widget.trigger.categoryLabel,
+                          style: TextStyle(color: _getTriggerColor(widget.trigger), fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _localFontSize = (fontSize - 2).clamp(12, 100);
+                              });
+                            },
+                            icon: const Icon(Icons.zoom_out, color: Colors.white70),
+                            iconSize: 20,
+                          ),
+                          Text(
+                            fontSize.toInt().toString(),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _localFontSize = fontSize + 2;
+                              });
+                            },
+                            icon: const Icon(Icons.zoom_in, color: Colors.white70),
+                            iconSize: 20,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
                   Text(
                     _currentQuestion!.text,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: Colors.white, fontSize: fontSize, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -424,8 +468,10 @@ class _LudoQuestionDialogState extends ConsumerState<LudoQuestionDialog> {
       if (!mounted) return;
       Navigator.pop(context);
       if (_isCorrect!) {
+        SoundEffectsManager.playCorrect();
         ref.read(ludoControllerProvider.notifier).onQuestionAnsweredCorrectly();
       } else {
+        SoundEffectsManager.playIncorrect();
         ref.read(ludoControllerProvider.notifier).onQuestionAnsweredWrong();
       }
     });

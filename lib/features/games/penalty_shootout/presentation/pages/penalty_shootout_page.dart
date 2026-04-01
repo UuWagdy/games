@@ -13,7 +13,11 @@ import '../../domain/entities/penalty_shootout_state.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
 import 'package:games/features/teams/domain/entities/team.dart';
 import 'package:games/features/questions/presentation/providers/question_providers.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+import 'package:games/core/providers/sound_effects_provider.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
+import 'package:games/core/design/app_themes.dart';
 
 class PenaltyShootoutPage extends ConsumerStatefulWidget {
   const PenaltyShootoutPage({super.key});
@@ -34,6 +38,12 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
   Set<int> _selectedCategoryIds = {};
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  double? _localFontSize;
+
+  double _getEffectiveFontSize(Map<String, dynamic> settings) {
+    if (_localFontSize != null) return _localFontSize!;
+    return (settings['question_font_size'] ?? 24).toDouble();
+  }
 
   @override
   void initState() {
@@ -77,6 +87,8 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
   Widget build(BuildContext context) {
     final gameState = ref.watch(penaltyShootoutProvider);
     final teamsAsync = ref.watch(teamsListProvider);
+    // Watch general settings for font size
+    ref.watch(generalSettingsProvider);
     
     ref.listen(penaltyShootoutProvider, (previous, next) {
       if (next.status == PenaltyGameStatus.feedback && previous?.status == PenaltyGameStatus.playing) {
@@ -88,6 +100,9 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
           }
       }
     });
+
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
 
     return KeyboardListener(
       focusNode: _focusNode,
@@ -104,33 +119,33 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
           }
         }
       },
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        extendBodyBehindAppBar: true,
-        appBar: AppBar(
+      child: ThemedBackground(
+        child: Scaffold(
           backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+          extendBodyBehindAppBar: true,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: Text('ضربات الجزاء', style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.w900, fontSize: 24)),
+            centerTitle: true,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent, size: 28),
+                tooltip: 'تصفير النقاط',
+                onPressed: () => _confirmResetScores(context, ref),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white70, size: 28),
+                onPressed: () => _showExitDialog(),
+              ),
+              const SizedBox(width: 16),
+            ],
           ),
-          title: const Text('ضربات الجزاء', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 24)),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.restart_alt, color: Colors.orangeAccent, size: 28),
-              tooltip: 'تصفير النقاط',
-              onPressed: () => _confirmResetScores(context, ref),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.white70, size: 28),
-              onPressed: () => _showExitDialog(),
-            ),
-            const SizedBox(width: 16),
-          ],
-        ),
-        body: AppDesign.backgroundWrapper(
-          child: Stack(
+          body: Stack(
             children: [
               Positioned.fill(child: Opacity(opacity: 0.1, child: CustomPaint(painter: FootballFieldPainter()))),
               SafeArea(
@@ -153,7 +168,7 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
                   ],
                 ),
               ),
-
+  
               IgnorePointer(
                 child: Center(
                   child: ScaleTransition(
@@ -420,10 +435,14 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
     _selectedTeamB ??= teams.length > 1 ? teams[1] : teams[0];
 
     return Center(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        constraints: const BoxConstraints(maxWidth: 800),
-        decoration: AppDesign.glassDecoration,
+      child: ThemedGameFrame(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 800),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(24),
+          ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -519,6 +538,7 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
               ),
           ],
         ),
+       ),
       ),
     );
   }
@@ -570,17 +590,14 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
     final currentTeam = currentlyAnswering == PenaltyTurn.teamA ? state.teamA : state.teamB;
     final teamColor = currentlyAnswering == PenaltyTurn.teamA ? Colors.blueAccent : Colors.redAccent;
 
-    return Container(
+    final settings = ref.read(generalSettingsProvider).value ?? {};
+    final fontSize = _getEffectiveFontSize(settings);
+
+    return ThemedGameFrame(
       width: min(900, MediaQuery.of(context).size.width * 0.98),
       padding: EdgeInsets.symmetric(
         horizontal: AppDesign.isSmallScreen(context) ? 16 : 24, 
         vertical: AppDesign.isSmallScreen(context) ? 12 : 16
-      ),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: teamColor.withOpacity(0.3), width: 1.5),
-        boxShadow: [BoxShadow(color: teamColor.withOpacity(0.05), blurRadius: 30)],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -600,6 +617,33 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
                   ),
                   child: Text('فريق: ${currentTeam?.name}', style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 16 : 20, fontWeight: FontWeight.w900, color: Colors.white)),
                 ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _localFontSize = (fontSize - 2).clamp(12, 100);
+                      });
+                    },
+                    icon: const Icon(Icons.zoom_out, color: Colors.white70),
+                    iconSize: AppDesign.isSmallScreen(context) ? 18 : 22,
+                  ),
+                  Text(
+                    fontSize.toInt().toString(),
+                    style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _localFontSize = fontSize + 2;
+                      });
+                    },
+                    icon: const Icon(Icons.zoom_in, color: Colors.white70),
+                    iconSize: AppDesign.isSmallScreen(context) ? 18 : 22,
+                  ),
+                ],
+               ),
               if (state.isSuddenDeath)
                 Text('موت مفاجئ!', style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.w900, fontSize: AppDesign.isSmallScreen(context) ? 14 : 20))
               else
@@ -628,7 +672,7 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
             Text(
               state.currentQuestion?.text ?? 'تحميل السؤال...', 
               style: TextStyle(
-                fontSize: AppDesign.isSmallScreen(context) ? 18 : 26, 
+                fontSize: fontSize, 
                 fontWeight: FontWeight.w900, 
                 color: Colors.white, 
                 height: 1.15
@@ -691,6 +735,11 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
 
   void _handleAnswerSelection(bool correct, PenaltyShootoutState state) {
     if (state.isCompetitiveMode && state.buzzedTurn == null) return;
+    if (correct) {
+      SoundEffectsManager.playCorrect();
+    } else {
+      SoundEffectsManager.playIncorrect();
+    }
     ref.read(penaltyShootoutProvider.notifier).submitAnswer(correct);
   }
 
@@ -707,14 +756,13 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
 
   Widget _buildWinnerArea(PenaltyShootoutState state) {
     bool isSmall = AppDesign.isSmallScreen(context);
-    return Container(
-      padding: EdgeInsets.all(isSmall ? 20 : 40),
-      decoration: BoxDecoration(
-        color: Colors.amber.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(isSmall ? 20 : 40),
-        border: Border.all(color: Colors.amber.withOpacity(0.3), width: 2),
-        boxShadow: [BoxShadow(color: Colors.amber.withOpacity(0.1), blurRadius: 40)],
-      ),
+    return ThemedGameFrame(
+      child: Container(
+        padding: EdgeInsets.all(isSmall ? 20 : 40),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(24),
+        ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -750,6 +798,7 @@ class _PenaltyShootoutPageState extends ConsumerState<PenaltyShootoutPage> with 
           TextButton(onPressed: () => Navigator.pop(context), child: Text('الخروج من اللعبة', style: TextStyle(color: Colors.white24, fontSize: isSmall ? 14 : 18))),
         ],
       ),
+     ),
     );
   }
 

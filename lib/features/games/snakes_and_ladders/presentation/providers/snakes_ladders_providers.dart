@@ -130,11 +130,9 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
       {int winPoints = 25, 
        WrongAnswerPenalty penalty = WrongAnswerPenalty.skip,
        int? snakesCount,
-       int? laddersCount,
-       bool isVsComputer = false}) {
+       int? laddersCount}) {
     final teamsAsync = ref.read(teamsListProvider);
-    final allTeams = List<dynamic>.from(teamsAsync.value ?? []);
-    final teams = isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+    final teams = teamsAsync.value ?? [];
 
     final Map<int, int> positions = {};
     for (var team in teams) {
@@ -150,10 +148,8 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
       categoryIds: categoryIds,
       winPoints: winPoints,
       wrongAnswerPenalty: penalty,
-      isVsComputer: isVsComputer,
     );
     _saveState();
-    _checkComputerTurn();
   }
 
   void setDiceValue(int val) {
@@ -163,8 +159,7 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
 
   Future<void> moveCurrentPlayer(int steps) async {
     final teamsAsync = ref.read(teamsListProvider);
-    final allTeams = List<dynamic>.from(teamsAsync.value ?? []);
-    final teams = state.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+    final teams = teamsAsync.value ?? [];
     if (teams.isEmpty) return;
     
     final currentTeam = teams[state.currentPlayerIndex % teams.length];
@@ -208,14 +203,12 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
     } else {
       state = state.copyWith(currentPlayerIndex: (state.currentPlayerIndex + 1) % teams.length);
       _saveState();
-      _checkComputerTurn();
     }
   }
 
   void skipTurn() {
     final teamsAsync = ref.read(teamsListProvider);
-    final allTeams = List<dynamic>.from(teamsAsync.value ?? []);
-    final teams = state.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
+    final teams = teamsAsync.value ?? [];
     if (teams.isEmpty) return;
     state = state.copyWith(currentPlayerIndex: (state.currentPlayerIndex + 1) % teams.length);
     _saveState();
@@ -261,33 +254,4 @@ class SnakesLaddersGame extends _$SnakesLaddersGame {
       laddersCount: ladders
     );
   }
-
-  void toggleAiPlayer(bool enable) {
-    state = state.copyWith(isVsComputer: enable);
-    _saveState();
-    if (enable) _checkComputerTurn();
-  }
-
-  void _checkComputerTurn() {
-    if (state.status == SnakesLaddersStatus.finished) return;
-    
-    // In Snakes & Ladders, only index > 0 are computers if vsComputer is true
-    final teamsAsync = ref.read(teamsListProvider);
-    final allTeams = List<dynamic>.from(teamsAsync.value ?? []);
-    final teams = state.isVsComputer ? allTeams : allTeams.where((t) => t.name != 'AI' && t.name != 'الآلي' && t.name != 'COMPUTER').toList();
-    if (teams.isEmpty) return;
-
-    final currentTeam = teams[state.currentPlayerIndex % teams.length];
-    final String name = currentTeam.name.toUpperCase().trim();
-    final bool isAi = name == 'AI' || name == 'الآلي' || name == "COMPUTER";
-
-    if (state.isVsComputer && isAi) {
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        final dice = Random().nextInt(6) + 1;
-        setDiceValue(dice);
-        moveCurrentPlayer(dice);
-      });
-    }
-  }
 }
-

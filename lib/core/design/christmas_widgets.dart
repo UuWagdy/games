@@ -12,6 +12,12 @@ class ChristmasDecorations extends StatelessWidget {
         // 1. Premium Aurora / Fog Effect (Greenish mist)
         const _AuroraBackground(),
 
+        // 1.5. Large Background Star (Magi Star)
+        const Align(
+          alignment: Alignment(0.0, -0.3), // Centered
+          child: _MagiStar(),
+        ),
+
         // 2. High-Quality Snowfall (with depth)
         const SnowfallEffect(),
         
@@ -45,17 +51,17 @@ class ChristmasDecorations extends StatelessWidget {
         ),
         Positioned(
           top: -20,
-          right: 100,
+          left: 140,
           child: _buildHangingOrnament(const Color(0xFFFBBF24), 180),
         ),
         Positioned(
           top: -10,
           left: 220,
-          child: _buildHangingOrnament(const Color(0xFF10B981), 90), // Green ornament to match theme
+          child: _buildHangingOrnament(const Color(0xFF10B981), 90),
         ),
         Positioned(
           top: -5,
-          right: 40,
+          left: 310,
           child: _buildHangingOrnament(Colors.white, 140),
         ),
 
@@ -302,6 +308,45 @@ class _GlowingStarState extends State<_GlowingStar> with SingleTickerProviderSta
             color: Colors.amberAccent,
             size: widget.size,
           ),
+        );
+      },
+    );
+  }
+}
+
+class _MagiStar extends StatefulWidget {
+  const _MagiStar();
+  @override
+  State<_MagiStar> createState() => _MagiStarState();
+}
+
+class _MagiStarState extends State<_MagiStar> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat(reverse: true);
+  }
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: Colors.white.withOpacity(0.5), blurRadius: 40 + 20 * _controller.value, spreadRadius: 10 + 5 * _controller.value),
+              BoxShadow(color: Colors.amberAccent.withOpacity(0.4), blurRadius: 80 + 30 * _controller.value, spreadRadius: 30 + 10 * _controller.value),
+              BoxShadow(color: Colors.amber.withOpacity(0.2), blurRadius: 150 + 50 * _controller.value, spreadRadius: 80 + 20 * _controller.value),
+            ],
+          ),
+          child: Icon(Icons.star_rounded, color: Colors.white, size: 80 + 20 * _controller.value),
         );
       },
     );

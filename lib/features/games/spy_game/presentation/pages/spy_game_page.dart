@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/spy_game_provider.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+import 'package:games/core/design/themed_background.dart';
+import 'package:games/core/design/app_themes.dart';
 import '../widgets/glass_container.dart';
 
 class SpyGameplayPage extends ConsumerStatefulWidget {
@@ -64,23 +67,27 @@ class _SpyGameplayPageState extends ConsumerState<SpyGameplayPage> {
     final questioner = state.players.firstWhere((p) => p.id == questionerId, orElse: () => state.players[0]);
     final answerer = state.players.firstWhere((p) => p.id == answererId, orElse: () => state.players[1]);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: const Text("وقت الأسئلة", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
+
+    return ThemedBackground(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: () => _showEndGameDialog(context),
-            icon: const Icon(Icons.logout_outlined, color: Colors.redAccent, size: 20),
-            tooltip: "إنهاء اللعبة",
-          ),
-          const SizedBox(width: 8),
-        ],
-        automaticallyImplyLeading: false,
-      ),
+        appBar: AppBar(
+          title: Text("وقت الأسئلة", style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          actions: [
+            IconButton(
+              onPressed: () => _showEndGameDialog(context),
+              icon: const Icon(Icons.logout_outlined, color: Colors.redAccent, size: 20),
+              tooltip: "إنهاء اللعبة",
+            ),
+            const SizedBox(width: 8),
+          ],
+          automaticallyImplyLeading: false,
+        ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -95,7 +102,7 @@ class _SpyGameplayPageState extends ConsumerState<SpyGameplayPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.timer_outlined, color: _secondsRemaining < 30 ? Colors.redAccent : Colors.blueAccent),
+                        Icon(Icons.timer_outlined, color: _secondsRemaining < 30 ? Colors.redAccent : theme.primaryColor),
                         const SizedBox(width: 12),
                         Text(
                           _formatTime(_secondsRemaining),
@@ -115,7 +122,7 @@ class _SpyGameplayPageState extends ConsumerState<SpyGameplayPage> {
                 style: TextStyle(color: Colors.white60, fontSize: 16),
               ),
               const SizedBox(height: 16),
-              GlassContainer(
+              ThemedGameFrame(
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   children: [
@@ -137,7 +144,7 @@ class _SpyGameplayPageState extends ConsumerState<SpyGameplayPage> {
                       fit: BoxFit.scaleDown,
                       child: Text(
                         answerer.name,
-                        style: const TextStyle(color: Colors.blueAccent, fontSize: 28, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: theme.primaryColor, fontSize: 28, fontWeight: FontWeight.bold),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -172,7 +179,7 @@ class _SpyGameplayPageState extends ConsumerState<SpyGameplayPage> {
                        value: state.cycleProgress,
                        minHeight: 6,
                        backgroundColor: Colors.white10,
-                       valueColor: AlwaysStoppedAnimation<Color>(state.isCycleCompleted ? Colors.greenAccent : Colors.blueAccent),
+                       valueColor: AlwaysStoppedAnimation<Color>(state.isCycleCompleted ? theme.primaryColor.withAlpha(150) : theme.primaryColor),
                      ),
                    ),
                 ],
@@ -208,7 +215,7 @@ class _SpyGameplayPageState extends ConsumerState<SpyGameplayPage> {
                 child: ElevatedButton(
                   onPressed: state.isCycleCompleted ? null : () => ref.read(spyGameProvider.notifier).nextTurn(),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: state.isCycleCompleted ? Colors.grey.withOpacity(0.2) : Colors.blueAccent,
+                    backgroundColor: state.isCycleCompleted ? Colors.grey.withOpacity(0.2) : theme.primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     elevation: state.isCycleCompleted ? 0 : 5,
@@ -247,7 +254,7 @@ class _SpyGameplayPageState extends ConsumerState<SpyGameplayPage> {
           ),
         ),
       ),
-    );
+    ),);
   }
 
   void _showEndGameDialog(BuildContext context) {

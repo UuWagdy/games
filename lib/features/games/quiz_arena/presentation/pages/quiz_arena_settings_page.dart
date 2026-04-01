@@ -8,6 +8,7 @@ import 'package:games/features/games/quiz_arena/domain/models/quiz_arena_setting
 import 'package:games/features/games/quiz_arena/presentation/pages/quiz_arena_game_page.dart';
 import 'package:games/features/questions/domain/entities/category.dart';
 import 'package:games/features/teams/domain/entities/team.dart';
+import 'package:games/core/design/themed_background.dart';
 
 class QuizArenaSettingsPage extends ConsumerStatefulWidget {
   final bool isView;
@@ -82,7 +83,7 @@ class _QuizArenaSettingsPageState extends ConsumerState<QuizArenaSettingsPage> {
     if (widget.isView) return content;
 
     return Scaffold(
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: content,
       ),
       floatingActionButton: FloatingActionButton.extended(

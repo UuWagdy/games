@@ -40,7 +40,13 @@ class _ThemeMusicManagerState extends ConsumerState<ThemeMusicManager> with Widg
         final theme = settings['app_theme'] as String?;
         final customMusicEnabled = settings['custom_music_enabled'] == true;
         final christmasMusicEnabled = settings['christmas_music_enabled'] == true;
-        if ((theme == 'custom' && customMusicEnabled) || (theme == 'christmas' && christmasMusicEnabled)) {
+        final holyWeekMusicEnabled = settings['holy_week_music_enabled'] == true;
+        final resurrectionMusicEnabled = settings['resurrection_music_enabled'] == true;
+
+        if ((theme == 'custom' && customMusicEnabled) || 
+            (theme == 'christmas' && christmasMusicEnabled) ||
+            (theme == 'holy_week' && holyWeekMusicEnabled) ||
+            (theme == 'resurrection' && resurrectionMusicEnabled)) {
           _audioPlayer.resume();
         }
       }
@@ -54,6 +60,8 @@ class _ThemeMusicManagerState extends ConsumerState<ThemeMusicManager> with Widg
 
     final isCustom = themeId == 'custom' && musicEnabled && musicPath != null && musicPath.isNotEmpty;
     final isChristmas = themeId == 'christmas' && (settings['christmas_music_enabled'] ?? true);
+    final isHolyWeek = themeId == 'holy_week' && (settings['holy_week_music_enabled'] ?? true);
+    final isResurrection = themeId == 'resurrection' && (settings['resurrection_music_enabled'] ?? true);
 
     if (isCustom) {
       if (_currentMusicPath != musicPath) {
@@ -74,6 +82,28 @@ class _ThemeMusicManagerState extends ConsumerState<ThemeMusicManager> with Widg
           await _audioPlayer.play(AssetSource(christmasMusic));
         } catch (e) {
           debugPrint('Error playing christmas music: $e');
+        }
+      }
+    } else if (isHolyWeek) {
+      const holyWeekMusic = 'holy_week_music.mp3';
+      if (_currentMusicPath != holyWeekMusic) {
+        _currentMusicPath = holyWeekMusic;
+        try {
+          await _audioPlayer.stop();
+          await _audioPlayer.play(AssetSource(holyWeekMusic));
+        } catch (e) {
+          debugPrint('Error playing holy week music: $e');
+        }
+      }
+    } else if (isResurrection) {
+      const resurrectionMusic = 'resurrection_music.mp3';
+      if (_currentMusicPath != resurrectionMusic) {
+        _currentMusicPath = resurrectionMusic;
+        try {
+          await _audioPlayer.stop();
+          await _audioPlayer.play(AssetSource(resurrectionMusic));
+        } catch (e) {
+          debugPrint('Error playing resurrection music: $e');
         }
       }
     } else {

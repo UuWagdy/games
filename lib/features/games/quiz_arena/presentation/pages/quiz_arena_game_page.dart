@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import 'package:games/features/games/quiz_arena/presentation/providers/quiz_arena_provider.dart';
 import 'package:games/features/games/quiz_arena/domain/models/quiz_arena_game_state.dart';
 import 'package:games/features/teams/domain/entities/team.dart';
@@ -11,14 +12,31 @@ import 'dart:ui';
 import 'package:games/features/teams/presentation/pages/teams_management_page.dart';
 import 'package:games/features/settings/presentation/pages/settings_page.dart';
 import 'package:games/features/teams/presentation/providers/team_providers.dart';
+import 'package:games/core/design/app_themes.dart';
+import 'package:games/features/settings/presentation/providers/settings_providers.dart';
+import 'package:games/core/providers/sound_effects_provider.dart';
 
-class QuizArenaGamePage extends ConsumerWidget {
+class QuizArenaGamePage extends ConsumerStatefulWidget {
   const QuizArenaGamePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<QuizArenaGamePage> createState() => _QuizArenaGamePageState();
+}
+
+class _QuizArenaGamePageState extends ConsumerState<QuizArenaGamePage> {
+  double? _localFontSize;
+
+  double _getEffectiveFontSize(Map<String, dynamic> settings) {
+    if (_localFontSize != null) return _localFontSize!;
+    return (settings['question_font_size'] ?? 24).toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(quizArenaGameProvider);
     final currentQuestion = state.currentQuestion;
+    // Watch general settings for font size
+    ref.watch(generalSettingsProvider);
 
     // Listen to game over state to navigate
     ref.listen(quizArenaGameProvider.select((s) => s.isGameOver), (prev, next) {
@@ -30,8 +48,12 @@ class QuizArenaGamePage extends ConsumerWidget {
       }
     });
 
+    final themeAsync = ref.watch(currentThemeProvider);
+    final theme = themeAsync.value ?? AppThemes.defaultTheme;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -44,10 +66,11 @@ class QuizArenaGamePage extends ConsumerWidget {
           child: Text(
             'ساحة التحدي', 
             style: TextStyle(
-              color: Colors.white,
+              color: theme.primaryColor,
               fontSize: AppDesign.isSmallScreen(context) ? 18 : 22,
               fontWeight: FontWeight.w900,
               letterSpacing: 0.5,
+              shadows: [Shadow(color: theme.primaryColor.withOpacity(0.5), blurRadius: 10)],
             ),
           ),
         ),
@@ -55,7 +78,7 @@ class QuizArenaGamePage extends ConsumerWidget {
         titleSpacing: 0,
         actions: [
           IconButton(
-            icon: Icon(Icons.group_add, color: Colors.white70, size: AppDesign.isSmallScreen(context) ? 18 : 24),
+            icon: Icon(Icons.group_add, color: theme.primaryColor, size: AppDesign.isSmallScreen(context) ? 18 : 24),
             tooltip: 'إدارة الفرق',
             onPressed: () => Navigator.push(
               context,
@@ -63,7 +86,7 @@ class QuizArenaGamePage extends ConsumerWidget {
             ),
           ),
           IconButton(
-            icon: Icon(Icons.settings, color: Colors.white70, size: AppDesign.isSmallScreen(context) ? 18 : 24),
+            icon: Icon(Icons.settings, color: theme.primaryColor, size: AppDesign.isSmallScreen(context) ? 18 : 24),
             tooltip: 'إعدادات الجلسة',
             onPressed: () => Navigator.push(
               context,
@@ -84,16 +107,16 @@ class QuizArenaGamePage extends ConsumerWidget {
         ],
       ),
       endDrawer: AppDesign.isSmallScreen(context) ? Drawer(
-        backgroundColor: AppDesign.slate900,
-        child: _buildTeamsSidebar(context, ref, state),
+        backgroundColor: theme.backgroundDeep,
+        child: _buildTeamsSidebar(context, ref, state, theme),
       ) : null,
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: state.isLoading
-            ? const Center(
+            ? Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(color: Colors.purpleAccent),
+                    CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(theme.primaryColor.withOpacity(0.8))),
                     SizedBox(height: 20),
                     Text('جاري التحميل...', style: TextStyle(color: Colors.white70, fontSize: 18)),
                   ],
@@ -109,7 +132,7 @@ class QuizArenaGamePage extends ConsumerWidget {
                         children: [
                           SizedBox(height: AppDesign.isSmallScreen(context) ? 90 : 120),
                           _buildTopLeaderboard(state.teams, context),
-                          _buildTournamentBanner(state, context),
+                          _buildTournamentBanner(state, context, theme),
                           SizedBox(height: AppDesign.isSmallScreen(context) ? 10 : 20),
                           _buildTurnIndicator(state, context),
                           SizedBox(height: AppDesign.isSmallScreen(context) ? 10 : 20),
@@ -121,7 +144,7 @@ class QuizArenaGamePage extends ConsumerWidget {
                           ),
                           Padding(
                             padding: EdgeInsets.symmetric(vertical: AppDesign.isSmallScreen(context) ? 15 : 40),
-                            child: _buildActiveButton(ref, state, context),
+                            child: _buildActiveButton(ref, state, context, theme),
                           ),
                         ],
                       ),
@@ -129,20 +152,20 @@ class QuizArenaGamePage extends ConsumerWidget {
                   ),
                   // Teams Sidebar
                   if (!AppDesign.isSmallScreen(context))
-                    _buildTeamsSidebar(context, ref, state),
+                    _buildTeamsSidebar(context, ref, state, theme),
                 ],
               ),
       ),
     );
   }
 
-  Widget _buildTournamentBanner(QuizArenaGameState state, BuildContext context) {
+  Widget _buildTournamentBanner(QuizArenaGameState state, BuildContext context, ThemeConfig theme) {
     bool isSmall = AppDesign.isSmallScreen(context);
     return Container(
       padding: EdgeInsets.symmetric(horizontal: isSmall ? 20 : 32, vertical: isSmall ? 8 : 12),
       decoration: AppDesign.glassDecoration.copyWith(
         borderRadius: BorderRadius.circular(30),
-        color: Colors.purpleAccent.withOpacity(0.1),
+        color: theme.primaryColor.withOpacity(0.1),
       ),
       child: Text(
         'الجولة ${state.currentRound}',
@@ -247,7 +270,7 @@ class QuizArenaGamePage extends ConsumerWidget {
     return colors[index % colors.length];
   }
 
-  Widget _buildTeamsSidebar(BuildContext context, WidgetRef ref, QuizArenaGameState state) {
+  Widget _buildTeamsSidebar(BuildContext context, WidgetRef ref, QuizArenaGameState state, ThemeConfig theme) {
     return Container(
       width: 320,
       decoration: BoxDecoration(
@@ -332,10 +355,11 @@ class QuizArenaGamePage extends ConsumerWidget {
   }
 
   void _showScoreLogsDialog(BuildContext context, WidgetRef ref, Team team) {
+    final theme = ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: theme.backgroundDeep,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text('سجل نقاط فريق ${team.name}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: SizedBox(
@@ -359,12 +383,18 @@ class QuizArenaGamePage extends ConsumerWidget {
                         ),
                         title: Text(log.reason ?? (log.points >= 0 ? 'إضافة نقاط' : 'خصم نقاط'), style: const TextStyle(color: Colors.white, fontSize: 16)),
                         subtitle: Text(timeStr, style: const TextStyle(color: Colors.white38)),
-                        trailing: Text(log.gameName ?? '', style: const TextStyle(color: Colors.purpleAccent, fontSize: 10)),
+                        trailing: Consumer(builder: (context, ref, _) {
+                          final pColor = ref.watch(currentThemeProvider).value?.primaryColor ?? Colors.blueAccent;
+                          return Text(log.gameName ?? '', style: TextStyle(color: pColor, fontSize: 10));
+                        }),
                       );
                     },
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator(color: Colors.purpleAccent)),
+                loading: () => Consumer(builder: (context, ref, _) {
+                  final pColor = ref.watch(currentThemeProvider).value?.primaryColor ?? Colors.blueAccent;
+                  return Center(child: CircularProgressIndicator(color: pColor));
+                }),
                 error: (err, s) => Text('خطأ: $err', style: const TextStyle(color: Colors.redAccent)),
               );
             },
@@ -378,6 +408,7 @@ class QuizArenaGamePage extends ConsumerWidget {
   }
 
   void _showManualAdjustmentDialog(BuildContext context, WidgetRef ref, QuizArenaGameState state) {
+    final theme = ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme;
     List<int> selectedTeamIds = [];
     final ptsController = TextEditingController();
     final reasonController = TextEditingController(text: 'تعديل يدوي');
@@ -386,7 +417,7 @@ class QuizArenaGamePage extends ConsumerWidget {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: theme.backgroundDeep,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: const Text('تعديل النقاط يدوياً', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
@@ -409,7 +440,7 @@ class QuizArenaGamePage extends ConsumerWidget {
                           else selectedTeamIds.remove(team.id);
                         });
                       },
-                      selectedColor: Colors.purpleAccent.withOpacity(0.3),
+                      selectedColor: theme.primaryColor.withOpacity(0.3),
                       checkmarkColor: Colors.white,
                       labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white60, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -449,7 +480,7 @@ class QuizArenaGamePage extends ConsumerWidget {
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(color: Colors.white38))),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purpleAccent,
+                backgroundColor: theme.primaryColor,
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               ),
@@ -478,10 +509,11 @@ class QuizArenaGamePage extends ConsumerWidget {
   }
 
   void _confirmResetScores(BuildContext context, WidgetRef ref) {
+    final theme = ref.read(currentThemeProvider).value ?? AppThemes.defaultTheme;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: theme.backgroundDeep,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('تصفير النقاط وحذف السجل', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text('هل أنت متأكد من تصفير نقاط كل الفرق وحذف سجل النقاط بالكامل؟ سيتم إعادة تشغيل اللعبة أيضاً.', 
@@ -504,21 +536,55 @@ class QuizArenaGamePage extends ConsumerWidget {
 
   Widget _buildQuestionCard(BuildContext context, WidgetRef ref, QuizArenaGameState state, Question question) {
     bool isSmall = AppDesign.isSmallScreen(context);
+    final settings = ref.watch(generalSettingsProvider).value ?? {};
+    final fontSize = _getEffectiveFontSize(settings);
+
     return Center(
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.all(isSmall ? 16 : 32),
-        decoration: AppDesign.glassDecoration.copyWith(
-          color: Colors.white.withOpacity(0.03),
-          boxShadow: [
-            BoxShadow(color: Colors.purpleAccent.withOpacity(0.1), blurRadius: 40, spreadRadius: -10),
-          ],
-        ),
+      child: ThemedGameFrame(
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(isSmall ? 16 : 32),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.03),
+          ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _localFontSize = (fontSize - 2).clamp(12, 100);
+                    });
+                  },
+                  icon: const Icon(Icons.zoom_out, color: Colors.white70),
+                  iconSize: isSmall ? 18 : 22,
+                ),
+                Text(
+                  fontSize.toInt().toString(),
+                  style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _localFontSize = fontSize + 2;
+                    });
+                  },
+                  icon: const Icon(Icons.zoom_in, color: Colors.white70),
+                  iconSize: isSmall ? 18 : 22,
+                ),
+              ],
+            ),
             if (ref.read(quizArenaSettingsProvider).timerEnabled)
-              _buildTimer(state.remainingTime, ref.read(quizArenaSettingsProvider).timeLimitSeconds, context),
+             Consumer(
+            builder: (context, ref, _) {
+              final themeAsync = ref.watch(currentThemeProvider);
+              final theme = themeAsync.value ?? AppThemes.defaultTheme;
+              return _buildTimer(state.remainingTime, ref.read(quizArenaSettingsProvider).timeLimitSeconds, context, theme);
+            }
+          ),
             SizedBox(height: isSmall ? 10 : 20),
             if (question.imageData != null) ...[
               ClipRRect(
@@ -535,7 +601,7 @@ class QuizArenaGamePage extends ConsumerWidget {
             Text(
               question.text,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white, fontSize: isSmall ? 18 : 24, fontWeight: FontWeight.bold, height: 1.5),
+              style: TextStyle(color: Colors.white, fontSize: fontSize, fontWeight: FontWeight.bold, height: 1.5),
             ),
             SizedBox(height: isSmall ? 12 : 40),
               if (question.type == QuestionType.multipleChoice && question.options != null)
@@ -601,13 +667,14 @@ class QuizArenaGamePage extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
-  Widget _buildTimer(int remaining, int total, BuildContext context) {
+  Widget _buildTimer(int remaining, int total, BuildContext context, ThemeConfig theme) {
     bool isSmall = AppDesign.isSmallScreen(context);
     final progress = remaining / total;
-    final color = remaining < 10 ? Colors.redAccent : Colors.purpleAccent;
+    final color = remaining < 10 ? Colors.redAccent : theme.primaryColor;
 
     return Column(
       children: [
@@ -635,7 +702,7 @@ class QuizArenaGamePage extends ConsumerWidget {
     );
   }
 
-  Widget _buildActiveButton(WidgetRef ref, QuizArenaGameState state, BuildContext context) {
+  Widget _buildActiveButton(WidgetRef ref, QuizArenaGameState state, BuildContext context, ThemeConfig theme) {
     final notifier = ref.read(quizArenaGameProvider.notifier);
     bool isSmall = AppDesign.isSmallScreen(context);
 
@@ -646,7 +713,7 @@ class QuizArenaGamePage extends ConsumerWidget {
         label: Text('إظهار الإجابة',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: isSmall ? 16 : 18)),
         icon: const Icon(Icons.visibility_rounded),
-        backgroundColor: Colors.blueAccent,
+        backgroundColor: theme.primaryColor,
       );
     } else if (!state.hasVerdict) {
       // Step 2: Show verdict buttons
@@ -659,14 +726,20 @@ class QuizArenaGamePage extends ConsumerWidget {
             label: 'إجابة صحيحة',
             icon: Icons.check_circle_outline,
             color: Colors.greenAccent,
-            onPressed: () => notifier.answerCorrectly(),
+            onPressed: () {
+              SoundEffectsManager.playCorrect();
+              notifier.answerCorrectly();
+            },
             isSmall: isSmall,
           ),
           _ActionButton(
             label: 'إجابة خاطئة',
             icon: Icons.highlight_off_rounded,
             color: Colors.redAccent,
-            onPressed: () => notifier.answerWrong(),
+            onPressed: () {
+              SoundEffectsManager.playIncorrect();
+              notifier.answerWrong();
+            },
             isSmall: isSmall,
           ),
         ],

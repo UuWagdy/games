@@ -34,7 +34,6 @@ abstract class SnakesLaddersState with _$SnakesLaddersState {
     @Default(WrongAnswerPenalty.skip) WrongAnswerPenalty wrongAnswerPenalty,
     @Default(8) int snakesCount,
     @Default(8) int laddersCount,
-    @Default(false) bool isVsComputer,
   }) = _SnakesLaddersState;
 
   factory SnakesLaddersState.fromJson(Map<String, dynamic> json) => _$SnakesLaddersStateFromJson(json);

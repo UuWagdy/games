@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../widgets/spinning_wheel_widget.dart';
@@ -11,10 +12,12 @@ import 'dart:math';
 import 'dart:ui';
 import 'dart:async';
 
+import 'package:games/core/providers/sound_effects_provider.dart';
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'package:games/features/teams/presentation/pages/teams_management_page.dart';
 import 'package:games/features/settings/presentation/pages/settings_page.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 
 class WheelGamePage extends ConsumerStatefulWidget {
   const WheelGamePage({super.key});
@@ -403,6 +406,99 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
     );
   }
 
+  void _showManualPointDialog() {
+    final teams = ref.read(teamsListProvider).value ?? [];
+    if (teams.isEmpty) {
+      _showError('يرجى إضافة فرق أولاً');
+      return;
+    }
+
+    int? selectedTeamId = teams.isNotEmpty ? teams.first.id : null;
+    final pointsController = TextEditingController();
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('إضافة نقاط يدوياً', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<int>(
+                  value: selectedTeamId,
+                  dropdownColor: const Color(0xFF1E293B),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'اختر الفريق',
+                    labelStyle: TextStyle(color: Colors.white70),
+                  ),
+                  items: teams.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
+                  onChanged: (val) => setState(() => selectedTeamId = val),
+                ),
+                TextField(
+                  controller: pointsController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: Colors.white),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^-?\d*'))],
+                  decoration: const InputDecoration(
+                    labelText: 'عدد النقاط', 
+                    labelStyle: TextStyle(color: Colors.white70),
+                    hintText: 'أدخل الرقم (مثال: 10 أو -5)',
+                    hintStyle: TextStyle(color: Colors.white24, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: reasonController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'السبب', 
+                    labelStyle: TextStyle(color: Colors.white70),
+                    hintText: 'مثال: تفاعل مميز',
+                    hintStyle: TextStyle(color: Colors.white24, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context), 
+              child: const Text('إلغاء', style: TextStyle(color: Colors.white70))
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber, 
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                final points = int.tryParse(pointsController.text) ?? 0;
+                final reason = reasonController.text.isEmpty ? 'تعديل يدوي' : reasonController.text;
+                if (selectedTeamId != null) {
+                  await ref.read(teamsListProvider.notifier).updateScore(
+                    selectedTeamId!, 
+                    points, 
+                    reason: reason,
+                    gameName: 'عجلة الحظ (تعديل مباشر)'
+                  );
+                  if (context.mounted) Navigator.pop(context);
+                } else {
+                  _showError('الرجاء اختيار الفريق');
+                }
+              },
+              child: const Text('إضافة وتعديل', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final teamsAsync = ref.watch(teamsListProvider);
@@ -421,6 +517,11 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
         title: const Text('عجلة الحظ', style: AppDesign.titleStyle),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_task, color: Colors.greenAccent),
+            tooltip: 'تعديل نقاط يدوي',
+            onPressed: _showManualPointDialog,
+          ),
           if (!AppDesign.isSmallScreen(context)) ...[
             IconButton(
               icon: const Icon(Icons.group_add, color: Colors.white70),
@@ -455,7 +556,7 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
         ],
       ),
       endDrawer: AppDesign.isSmallScreen(context) ? _buildMobileDrawer(teamsAsync, currentIndex) : null,
-      body: AppDesign.backgroundWrapper(
+      body: ThemedBackground(
         child: teamsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator(color: Colors.amberAccent)),
           error: (err, stack) => Center(child: Text('خطأ: $err', style: const TextStyle(color: Colors.redAccent))),
@@ -506,7 +607,6 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
                       ),
                     ],
                   ),
-                // Removed global Positioned spin button to move it inside columns for better centering
               ],
             );
           },
@@ -572,25 +672,30 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
   }
 
   Widget _buildCurrentTeamCard(dynamic currentTeam) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 10),
-      padding: EdgeInsets.symmetric(horizontal: AppDesign.isSmallScreen(context) ? 16 : 32, vertical: 10),
-      decoration: AppDesign.glassDecoration,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('الدور على فريق:', style: TextStyle(fontSize: 12, color: Colors.white60)),
-          const SizedBox(height: 4),
-          Text(
-            currentTeam.name,
-            style: TextStyle(
-              fontSize: AppDesign.isSmallScreen(context) ? 24 : 32, 
-              fontWeight: FontWeight.w900, 
-              color: Colors.amberAccent, 
-              shadows: const [Shadow(color: Colors.amberAccent, blurRadius: 10)]
+    return ThemedGameFrame(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: AppDesign.isSmallScreen(context) ? 16 : 32, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('الدور على فريق:', style: TextStyle(fontSize: 12, color: Colors.white60)),
+            const SizedBox(height: 4),
+            Text(
+              currentTeam.name,
+              style: TextStyle(
+                fontSize: AppDesign.isSmallScreen(context) ? 24 : 32, 
+                fontWeight: FontWeight.w900, 
+                color: Colors.amberAccent, 
+                shadows: const [Shadow(color: Colors.amberAccent, blurRadius: 10)]
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -668,19 +773,14 @@ class _WheelGamePageState extends ConsumerState<WheelGamePage> with TickerProvid
     return segmentsAsync.when(
       data: (segments) => Center(
         child: Padding(
-          padding: const EdgeInsets.all(8.0),
+          padding: const EdgeInsets.all(24.0),
           child: AspectRatio(
             aspectRatio: 1,
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 50, spreadRadius: 10)],
-              ),
-              child: SpinningWheelWidget(
+            child: SpinningWheelWidget(
                 key: _wheelKey,
                 segments: segments,
                 onResult: _handleResult,
-              ),
+                primaryColor: ref.watch(currentThemeProvider).value?.primaryColor ?? Colors.blueAccent,
             ),
           ),
         ),
@@ -794,6 +894,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
   Timer? _timer;
   int _remainingTime = 0;
   bool _timerEnabled = false;
+  double? _localFontSize;
+
+  double _getEffectiveFontSize(Map<String, dynamic> settings) {
+    return _localFontSize ?? (settings['question_font_size'] ?? 32.0);
+  }
 
   @override
   void initState() {
@@ -851,10 +956,42 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                      child: Text('سؤال لفريق ${widget.teamName}', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 18)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                          child: Text('سؤال لفريق ${widget.teamName}', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 18)),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () {
+                                final settings = ref.read(generalSettingsProvider).value ?? {};
+                                setState(() {
+                                  _localFontSize = (_getEffectiveFontSize(settings) - 2).clamp(12, 100);
+                                });
+                              },
+                              icon: const Icon(Icons.zoom_out, color: Colors.amberAccent),
+                            ),
+                            Text(
+                              _getEffectiveFontSize(ref.read(generalSettingsProvider).value ?? {}).toInt().toString(),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                final settings = ref.read(generalSettingsProvider).value ?? {};
+                                setState(() {
+                                  _localFontSize = _getEffectiveFontSize(settings) + 2;
+                                });
+                              },
+                              icon: const Icon(Icons.zoom_in, color: Colors.amberAccent),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                     if (_timerEnabled) ...[
                       const SizedBox(height: 16),
@@ -901,7 +1038,12 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                   ],
                   Text(
                     widget.question.text, 
-                    style: TextStyle(fontSize: AppDesign.isSmallScreen(context) ? 24 : 35, fontWeight: FontWeight.bold, color: Colors.white, height: 1.4), 
+                    style: TextStyle(
+                      fontSize: _getEffectiveFontSize(ref.watch(generalSettingsProvider).value ?? {}),
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.4,
+                    ), 
                     textAlign: TextAlign.center
                   ),
                   const SizedBox(height: 30),
@@ -912,7 +1054,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                     const SizedBox(height: 10),
                     Text(
                       widget.question.answer, 
-                      style: TextStyle(color: Colors.greenAccent, fontSize: AppDesign.isSmallScreen(context) ? 22 : 32, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.greenAccent,
+                        fontSize: _getEffectiveFontSize(ref.watch(generalSettingsProvider).value ?? {}) * 0.85,
+                        fontWeight: FontWeight.bold,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 30),
@@ -947,7 +1093,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                                       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                                     ), 
-                                    onPressed: () { widget.onResult(true); Navigator.pop(context); }, 
+                                    onPressed: () { 
+                                      SoundEffectsManager.playCorrect();
+                                      widget.onResult(true); 
+                                      Navigator.pop(context); 
+                                    }, 
                                     child: const Text('إجابة صحيحة', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))
                                   ),
                                 ),
@@ -961,7 +1111,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                                       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                                     ), 
-                                    onPressed: () { widget.onResult(false); Navigator.pop(context); }, 
+                                    onPressed: () { 
+                                      SoundEffectsManager.playIncorrect();
+                                      widget.onResult(false); 
+                                      Navigator.pop(context); 
+                                    }, 
                                     child: const Text('إجابة خاطئة', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))
                                   ),
                                 ),
@@ -990,7 +1144,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                                     padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                                   ), 
-                                  onPressed: () { widget.onResult(true); Navigator.pop(context); }, 
+                                  onPressed: () { 
+                                    SoundEffectsManager.playCorrect();
+                                    widget.onResult(true); 
+                                    Navigator.pop(context); 
+                                  }, 
                                   child: const Text('إجابة صحيحة', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))
                                 ),
                                 const SizedBox(width: 20),
@@ -1001,7 +1159,11 @@ class _QuestionDialogState extends ConsumerState<_QuestionDialog> {
                                     padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                                   ), 
-                                  onPressed: () { widget.onResult(false); Navigator.pop(context); }, 
+                                  onPressed: () { 
+                                    SoundEffectsManager.playIncorrect();
+                                    widget.onResult(false); 
+                                    Navigator.pop(context); 
+                                  }, 
                                   child: const Text('إجابة خاطئة', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold))
                                 ),
                               ]

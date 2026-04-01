@@ -8,12 +8,14 @@ class SpinningWheelWidget extends StatefulWidget {
   final List<WheelSegment> segments;
   final List<int> exhaustedIds;
   final Function(WheelSegment) onResult;
+  final Color primaryColor;
 
   const SpinningWheelWidget({
     super.key,
     required this.segments,
     this.exhaustedIds = const [],
     required this.onResult,
+    this.primaryColor = Colors.blueAccent,
   });
 
   @override
@@ -156,6 +158,7 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
                       widget.exhaustedIds,
                       _angleAnimation.value,
                       _jokerImage,
+                      widget.primaryColor,
                     ),
                   ),
                   Container(
@@ -166,7 +169,7 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.blueAccent.withOpacity(0.3),
+                          color: widget.primaryColor.withOpacity(0.3),
                           blurRadius: 15,
                           spreadRadius: 2,
                         ),
@@ -179,7 +182,7 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
                       child: Padding(
                         padding: const EdgeInsets.all(12.0),
                         child: _isSpinning 
-                          ? const CircularProgressIndicator(strokeWidth: 3, color: Colors.blueAccent)
+                          ? CircularProgressIndicator(strokeWidth: 3, color: widget.primaryColor)
                           : Image.asset('assets/images/logo.png', fit: BoxFit.contain),
                       ),
                     ),
@@ -189,9 +192,9 @@ class SpinningWheelWidgetState extends State<SpinningWheelWidget> with SingleTic
                     child: Icon(
                       Icons.arrow_drop_down_rounded,
                       size: 70,
-                      color: Colors.blueAccent,
+                      color: widget.primaryColor,
                       shadows: [
-                        Shadow(color: Colors.blueAccent.withOpacity(0.6), blurRadius: 15)
+                        Shadow(color: widget.primaryColor.withOpacity(0.6), blurRadius: 15)
                       ],
                     ),
                   ),
@@ -210,8 +213,9 @@ class _WheelPainter extends CustomPainter {
   final List<int> exhaustedIds;
   final double angle;
   final ui.Image? jokerImage;
+  final Color primaryColor;
 
-  _WheelPainter(this.segments, this.exhaustedIds, this.angle, this.jokerImage);
+  _WheelPainter(this.segments, this.exhaustedIds, this.angle, this.jokerImage, this.primaryColor);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -225,10 +229,10 @@ class _WheelPainter extends CustomPainter {
       final isDark = s.isQuestion || s.isSwitch || s.isJoker;
       final paint = Paint()
         ..color = isExhausted
-            ? const Color(0xFF020617).withOpacity(0.95) // Deep Exhausted Black/Navy
+            ? const Color(0xFF020617).withOpacity(0.4) 
             : isDark 
-                ? const Color(0xFF0F172A).withOpacity(0.9) // Deep Glass Navy
-                : const Color(0xFF1E293B).withOpacity(0.85) // Deep Glass Navy Consistent with Game Theme
+                ? primaryColor.withOpacity(0.3)
+                : primaryColor.withOpacity(0.15)
         ..style = PaintingStyle.fill;
         
         
@@ -297,7 +301,8 @@ class _WheelPainter extends CustomPainter {
                 fontSize: iconSize,
                 fontFamily: icon.fontFamily,
                 package: icon.fontPackage,
-                color: segments[i].isQuestion || segments[i].isSwitch || segments[i].isJoker ? Colors.white : Colors.amberAccent,
+                color: Colors.white,
+                shadows: [Shadow(color: primaryColor.withOpacity(0.5), blurRadius: 10)],
               ),
             ),
             textDirection: TextDirection.ltr,
@@ -361,7 +366,7 @@ class _WheelPainter extends CustomPainter {
 
     // Outer glowing border
     final outerGlowPaint = Paint()
-      ..color = Colors.blueAccent.withOpacity(0.3)
+      ..color = primaryColor.withOpacity(0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 10.0
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
@@ -374,7 +379,7 @@ class _WheelPainter extends CustomPainter {
     canvas.drawCircle(center, radius, outerPaint);
 
     final secondaryBorder = Paint()
-      ..color = Colors.blueAccent.withOpacity(0.4)
+      ..color = primaryColor.withOpacity(0.4)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
     canvas.drawCircle(center, radius - 4, secondaryBorder);

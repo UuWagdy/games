@@ -12,6 +12,7 @@ import '../providers/question_providers.dart';
 import '../../domain/entities/question.dart';
 import '../../domain/entities/category.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -25,7 +26,7 @@ class QuestionsManagementPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isSmall = AppDesign.isSmallScreen(context);
 
-    return AppDesign.backgroundWrapper(
+    return ThemedBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(

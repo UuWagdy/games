@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:games/core/design/app_design.dart';
+import 'package:games/core/design/themed_background.dart';
 import 'package:games/core/design/app_themes.dart';
 import 'package:games/features/settings/presentation/providers/settings_providers.dart';
 import 'dart:io';
@@ -36,8 +37,7 @@ class CustomThemeConfigPage extends ConsumerWidget {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          body: AppDesign.backgroundWrapper(
-            theme: AppThemes.getThemeById('custom', customParams: settings),
+          body: ThemedBackground(
             child: SafeArea(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
