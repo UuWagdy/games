@@ -10,6 +10,7 @@ import 'package:games/features/games/snakes_and_ladders/presentation/widgets/sna
 import 'package:games/features/games/bank_al_haz/presentation/pages/bank_al_haz_settings_page.dart';
 import 'package:games/features/games/ludo_quiz/presentation/pages/ludo_settings_page.dart';
 import 'package:games/features/games/spy_game/presentation/pages/spy_settings_page.dart';
+import 'package:games/features/games/hazer_fazer/presentation/pages/hazer_fazer_settings_page.dart';
 import 'package:games/features/settings/presentation/pages/general_settings_page.dart';
 import 'package:games/features/settings/presentation/pages/themes_page.dart';
 import 'package:games/features/settings/presentation/pages/about_page.dart';
@@ -34,7 +35,7 @@ class SettingsPage extends ConsumerWidget {
     final theme = AppThemes.getThemeById(themeId);
 
     return DefaultTabController(
-      length: 13,
+      length: 14,
       initialIndex: initialIndex,
       child: Scaffold(
         extendBodyBehindAppBar: true,
@@ -82,6 +83,7 @@ class SettingsPage extends ConsumerWidget {
               Tab(icon: Icon(Icons.account_balance), text: 'بنك الحظ'),
               Tab(icon: Icon(Icons.casino), text: 'لودو الأسئلة'),
               Tab(icon: Icon(Icons.visibility_off), text: 'لعبة الجاسوس'),
+              Tab(icon: Icon(Icons.extension), text: 'حزر فزر'),
               Tab(icon: Icon(Icons.color_lens), text: 'الأثواب'),
               Tab(icon: Icon(Icons.info_outline), text: 'عن البرنامج'),
             ],
@@ -102,6 +104,7 @@ class SettingsPage extends ConsumerWidget {
                 BankAlHazSettingsPage(isView: true),
                 LudoSettingsPage(isView: true),
                 SpySettingsPage(isView: true),
+                HazerFazerSettingsPage(),
                 ThemesPage(),
                 AboutPage(),
               ],

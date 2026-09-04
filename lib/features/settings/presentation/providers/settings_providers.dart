@@ -2,7 +2,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:games/features/games/bank_al_haz/presentation/providers/bank_al_haz_providers.dart';
 import 'package:games/core/design/app_themes.dart';
-import 'package:games/core/design/app_design.dart';
 
 part 'settings_providers.g.dart';
 
@@ -43,6 +42,12 @@ class GeneralSettings extends _$GeneralSettings {
   static const _customMusicPathKey = 'custom_music_path';
   static const _customMusicEnabledKey = 'custom_music_enabled';
   static const _questionFontSizeKey = 'question_font_size';
+  static const _hazerFazerCategoryIdsKey = 'hazer_fazer_category_ids';
+  static const _hazerFazerTileCountKey = 'hazer_fazer_tile_count';
+  static const _hazerFazerWinPointsKey = 'hazer_fazer_win_points';
+  static const _hazerFazerTeamIdKey = 'hazer_fazer_team_id';
+  static const _hazerFazerGameModeKey = 'hazer_fazer_game_mode';
+  static const _hazerFazerPerTeamViewKey = 'hazer_fazer_per_team_view';
 
   @override
   Future<Map<String, dynamic>> build() async {
@@ -83,6 +88,12 @@ class GeneralSettings extends _$GeneralSettings {
       'custom_music_path': prefs.getString(_customMusicPathKey),
       'custom_music_enabled': prefs.getBool(_customMusicEnabledKey) ?? true,
       'question_font_size': prefs.getDouble(_questionFontSizeKey) ?? 32.0,
+      'hazer_fazer_category_ids': (prefs.getStringList(_hazerFazerCategoryIdsKey) ?? []).map(int.parse).toList(),
+      'hazer_fazer_tile_count': prefs.getInt(_hazerFazerTileCountKey) ?? 9,
+      'hazer_fazer_win_points': prefs.getInt(_hazerFazerWinPointsKey) ?? 15,
+      'hazer_fazer_team_id': prefs.getInt(_hazerFazerTeamIdKey),
+      'hazer_fazer_game_mode': prefs.getString(_hazerFazerGameModeKey) ?? 'shared',
+      'hazer_fazer_per_team_view': prefs.getString(_hazerFazerPerTeamViewKey) ?? 'all',
     };
   }
 
@@ -295,6 +306,46 @@ class GeneralSettings extends _$GeneralSettings {
   Future<void> setQuestionFontSize(double size) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_questionFontSizeKey, size);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setHazerFazerCategoryIds(List<int> values) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_hazerFazerCategoryIdsKey, values.map((e) => e.toString()).toList());
+    ref.invalidateSelf();
+  }
+
+  Future<void> setHazerFazerTileCount(int count) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_hazerFazerTileCountKey, count);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setHazerFazerWinPoints(int points) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_hazerFazerWinPointsKey, points);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setHazerFazerTeamId(int? teamId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (teamId != null) {
+      await prefs.setInt(_hazerFazerTeamIdKey, teamId);
+    } else {
+      await prefs.remove(_hazerFazerTeamIdKey);
+    }
+    ref.invalidateSelf();
+  }
+
+  Future<void> setHazerFazerGameMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_hazerFazerGameModeKey, mode);
+    ref.invalidateSelf();
+  }
+
+  Future<void> setHazerFazerPerTeamView(String viewMode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_hazerFazerPerTeamViewKey, viewMode);
     ref.invalidateSelf();
   }
 }

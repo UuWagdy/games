@@ -14,6 +14,7 @@ import '../../../../features/games/quiz_arena/presentation/pages/quiz_arena_sett
 import '../../../../features/games/ludo_quiz/presentation/pages/ludo_game_page.dart';
 import '../../../../features/games/spy_game/presentation/pages/spy_setup_page.dart';
 import '../../../../features/games/tic_tac_toe/presentation/pages/tic_tac_toe_page.dart';
+import '../../../../features/games/hazer_fazer/presentation/pages/hazer_fazer_page.dart';
 import '../../../../features/settings/presentation/pages/settings_page.dart';
 
 class MainScreen extends ConsumerWidget {
@@ -255,6 +256,13 @@ class MainScreen extends ConsumerWidget {
         'icon': Icons.grid_3x3_rounded,
         'color': Colors.blueAccent,
         'page': const TicTacToePage(),
+      },
+      {
+        'title': 'حزر فزر',
+        'subtitle': 'اكشف المربعات وخمن صاحب الصورة',
+        'icon': Icons.extension_rounded,
+        'color': Colors.amberAccent,
+        'page': const HazerFazerPage(),
       },
     ];
 
